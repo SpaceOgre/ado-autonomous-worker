@@ -39,13 +39,10 @@ public sealed partial class WorkspaceManager(
 
         if (!Directory.Exists(worktreePath))
         {
-            var fetchResult = await commandRunner.RunAsync(
-                "git",
-                ["-C", profile.BaseClonePath, "fetch", "origin", profile.MainBranch],
+            var fetchResult = await RunGitAsync(
                 profile.BaseClonePath,
                 Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-fetch.log"),
-                environmentVariables: null,
-                activityName: null,
+                ["fetch", "origin", profile.MainBranch],
                 cancellationToken);
 
             if (!fetchResult.Success)
@@ -53,28 +50,49 @@ public sealed partial class WorkspaceManager(
                 throw new InvalidOperationException($"Failed to fetch branch '{profile.MainBranch}' for {repoKind}: {fetchResult.StandardError}");
             }
 
-            var addResult = await commandRunner.RunAsync(
-                "git",
-                ["-C", profile.BaseClonePath, "worktree", "add", worktreePath, $"origin/{profile.MainBranch}"],
+            var addLogPath = Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-add.log");
+            var addResult = await RunGitAsync(
                 profile.BaseClonePath,
-                Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-add.log"),
-                environmentVariables: null,
-                activityName: null,
+                addLogPath,
+                ["worktree", "add", worktreePath, $"origin/{profile.MainBranch}"],
                 cancellationToken);
 
             if (!addResult.Success)
             {
-                throw new InvalidOperationException($"Failed to create worktree for {repoKind}: {addResult.StandardError}");
+                logger.LogWarning(
+                    "Worktree add failed for {RepoKind} at {Path}. Attempting prune before retry. Error: {Error}",
+                    repoKind,
+                    worktreePath,
+                    addResult.StandardError.Trim());
+
+                var pruneResult = await RunGitAsync(
+                    profile.BaseClonePath,
+                    Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-prune.log"),
+                    ["worktree", "prune"],
+                    cancellationToken);
+
+                if (!pruneResult.Success)
+                {
+                    throw new InvalidOperationException($"Failed to prune worktrees for {repoKind}: {pruneResult.StandardError}");
+                }
+
+                addResult = await RunGitAsync(
+                    profile.BaseClonePath,
+                    addLogPath,
+                    ["worktree", "add", "-f", worktreePath, $"origin/{profile.MainBranch}"],
+                    cancellationToken);
+
+                if (!addResult.Success)
+                {
+                    throw new InvalidOperationException($"Failed to create worktree for {repoKind}: {addResult.StandardError}");
+                }
             }
         }
 
-        var checkoutResult = await commandRunner.RunAsync(
-            "git",
-            ["-C", worktreePath, "checkout", "-B", branchName],
+        var checkoutResult = await RunGitAsync(
             worktreePath,
             Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log"),
-            environmentVariables: null,
-            activityName: null,
+            ["checkout", "-B", branchName],
             cancellationToken);
 
         if (!checkoutResult.Success)
@@ -82,7 +100,11 @@ public sealed partial class WorkspaceManager(
             throw new InvalidOperationException($"Failed to create branch '{branchName}': {checkoutResult.StandardError}");
         }
 
-        logger.LogInformation("Prepared {RepoKind} worktree at {Path}", repoKind, worktreePath);
+        logger.LogInformation(
+            "Prepared {RepoKind} worktree at {Path} on branch {BranchName}.",
+            repoKind,
+            worktreePath,
+            branchName);
         return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
     }
 
@@ -100,6 +122,22 @@ public sealed partial class WorkspaceManager(
             ["-C", profile.BaseClonePath, "worktree", "remove", "--force", context.WorkingDirectory],
             profile.BaseClonePath,
             Path.Combine(artifactFolder, $"{context.RepoKind.ToString().ToLowerInvariant()}-cleanup.log"),
+            environmentVariables: null,
+            activityName: null,
+            cancellationToken);
+    }
+
+    private Task<CommandResult> RunGitAsync(
+        string workingDirectory,
+        string artifactPath,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        return commandRunner.RunAsync(
+            "git",
+            ["-C", workingDirectory, .. arguments],
+            workingDirectory,
+            artifactPath,
             environmentVariables: null,
             activityName: null,
             cancellationToken);

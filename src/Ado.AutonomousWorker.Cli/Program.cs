@@ -17,7 +17,7 @@ builder.Configuration
     .AddEnvironmentVariables("AdoWorker_");
 
 builder.Logging.ClearProviders();
-builder.Logging.SetMinimumLevel(LogLevel.Information);
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
 builder.Logging.AddSimpleConsole(options =>
@@ -37,6 +37,7 @@ builder.Services.AddSingleton<RunCommand>();
 builder.Services.AddSingleton<RunTaskCommand>();
 builder.Services.AddSingleton<ResumeTaskCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
+builder.Services.AddSingleton<ExecutionLiveDisplay>();
 
 using var host = builder.Build();
 

@@ -61,6 +61,11 @@ public sealed class CliCompletionServiceTests
         public Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<ExecutionEventRecord>>([]);
 
+        public Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken)
+            => Task.FromResult<PlanResult?>(null);
+
         public Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

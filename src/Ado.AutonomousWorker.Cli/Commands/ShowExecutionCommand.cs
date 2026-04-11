@@ -39,6 +39,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
         var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
         var sessions = await stateStore.GetAgentSessionsAsync(execution.ExecutionId, cancellationToken);
+        var plan = await stateStore.GetPlanAsync(execution.ExecutionId, cancellationToken);
 
         var summary = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
         summary.AddRow("Execution Id", execution.ExecutionId);
@@ -68,6 +69,21 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             AnsiConsole.WriteLine();
         }
 
+        if (plan is not null)
+        {
+            var planTable = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
+            planTable.AddRow("Scope", plan.Scope.ToString());
+            planTable.AddRow("Summary", Markup.Escape(plan.Summary));
+            planTable.AddRow("Repositories", FormatList(plan.Repositories));
+            planTable.AddRow("Validation", FormatList(plan.ValidationTargets));
+            planTable.AddRow("Test Intent", FormatList(plan.TestIntent));
+            planTable.AddRow("Risks", FormatList(plan.Risks));
+
+            AnsiConsole.Write(new Rule("Plan"));
+            AnsiConsole.Write(planTable);
+            AnsiConsole.WriteLine();
+        }
+
         if (sessions.Count > 0)
         {
             var sessionsTable = new Table().Border(TableBorder.Rounded).AddColumns("Role", "Provider", "Session Id", "Workdir", "Transcript");
@@ -86,5 +102,12 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         }
 
         return 0;
+    }
+
+    private static string FormatList(IReadOnlyList<string> values)
+    {
+        return values.Count == 0
+            ? "-"
+            : Markup.Escape(string.Join(Environment.NewLine, values));
     }
 }

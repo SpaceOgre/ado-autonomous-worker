@@ -25,5 +25,9 @@ public interface IStateStore
 
     Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken);
 
+    Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken);
+
+    Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken);
+
     Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken);
 }

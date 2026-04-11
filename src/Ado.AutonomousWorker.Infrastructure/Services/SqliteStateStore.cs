@@ -4,6 +4,7 @@ using Ado.AutonomousWorker.Core.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using Ado.AutonomousWorker.Core.Configuration;
+using System.Text.Json;
 
 namespace Ado.AutonomousWorker.Infrastructure.Services;
 
@@ -50,6 +51,15 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
             summary TEXT NOT NULL,
             transcript_path TEXT NOT NULL,
             structured_payload TEXT NULL
+        );
+        CREATE TABLE IF NOT EXISTS execution_plans (
+            execution_id TEXT PRIMARY KEY,
+            scope INTEGER NOT NULL,
+            repositories_json TEXT NOT NULL,
+            validation_targets_json TEXT NOT NULL,
+            test_intent_json TEXT NOT NULL,
+            risks_json TEXT NOT NULL,
+            summary TEXT NOT NULL
         );
         """;
 
@@ -245,6 +255,51 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         return results;
     }
 
+    public async Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        INSERT OR REPLACE INTO execution_plans
+        (execution_id, scope, repositories_json, validation_targets_json, test_intent_json, risks_json, summary)
+        VALUES ($executionId, $scope, $repositories, $validationTargets, $testIntent, $risks, $summary);
+        """;
+        command.Parameters.AddWithValue("$executionId", executionId);
+        command.Parameters.AddWithValue("$scope", (int)planResult.Scope);
+        command.Parameters.AddWithValue("$repositories", SerializeList(planResult.Repositories));
+        command.Parameters.AddWithValue("$validationTargets", SerializeList(planResult.ValidationTargets));
+        command.Parameters.AddWithValue("$testIntent", SerializeList(planResult.TestIntent));
+        command.Parameters.AddWithValue("$risks", SerializeList(planResult.Risks));
+        command.Parameters.AddWithValue("$summary", planResult.Summary);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        SELECT scope, repositories_json, validation_targets_json, test_intent_json, risks_json, summary
+        FROM execution_plans
+        WHERE execution_id = $executionId;
+        """;
+        command.Parameters.AddWithValue("$executionId", executionId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new PlanResult(
+            (WorkItemScope)reader.GetInt32(0),
+            DeserializeList(reader.GetString(1)),
+            DeserializeList(reader.GetString(2)),
+            DeserializeList(reader.GetString(3)),
+            DeserializeList(reader.GetString(4)),
+            reader.GetString(5));
+    }
+
     public async Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -279,5 +334,15 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
             DateTimeOffset.Parse(reader.GetString(5)),
             DateTimeOffset.Parse(reader.GetString(6)),
             reader.IsDBNull(7) ? null : reader.GetString(7));
+    }
+
+    private static string SerializeList(IReadOnlyList<string> values)
+    {
+        return JsonSerializer.Serialize(values);
+    }
+
+    private static IReadOnlyList<string> DeserializeList(string json)
+    {
+        return JsonSerializer.Deserialize<string[]>(json) ?? [];
     }
 }

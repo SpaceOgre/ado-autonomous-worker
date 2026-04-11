@@ -1,10 +1,11 @@
 using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Cli.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator) : AsyncCommand<RunTaskCommand.Settings>
+public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, ExecutionLiveDisplay liveDisplay) : AsyncCommand<RunTaskCommand.Settings>
 {
     public sealed class Settings : CommandSettings
     {
@@ -14,8 +15,12 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator) : AsyncCo
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var executionId = await taskOrchestrator.RunTaskAsync(settings.WorkItemId, cancellationToken);
-        AnsiConsole.MarkupLine($"[green]Execution started and finished.[/] Id: {executionId}");
+        var executionId = await liveDisplay.RunForWorkItemAsync(
+            settings.WorkItemId,
+            token => taskOrchestrator.RunTaskAsync(settings.WorkItemId, token),
+            cancellationToken);
+
+        AnsiConsole.MarkupLine($"[green]Execution finished.[/] Id: {executionId}");
         return 0;
     }
 }

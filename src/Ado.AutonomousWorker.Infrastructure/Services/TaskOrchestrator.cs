@@ -201,6 +201,7 @@ public sealed partial class TaskOrchestrator(
 
         await stateStore.SaveAgentSessionAsync(executionId, startResult.Session, cancellationToken);
         var plan = ParsePlan(startResult.Result.StructuredPayload) ?? BuildFallbackPlan(workItem);
+        await stateStore.SavePlanAsync(executionId, plan, cancellationToken);
         await AppendEventAsync(executionId, TaskPhase.Planning, plan.Summary, cancellationToken);
         logger.LogInformation(
             "Execution {ExecutionId} plan complete: scope {Scope}, repos {Repositories}.",
@@ -227,6 +228,10 @@ public sealed partial class TaskOrchestrator(
             childTask.WorkItemId);
         var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, cancellationToken);
         var artifactDirectory = Path.Combine(storageOptions.Value.ArtifactRoot, executionId, repoKind.ToString().ToLowerInvariant());
+        var workspaceMessage = $"Using {repoKind} worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}'.";
+        logger.LogInformation("Execution {ExecutionId}: {WorkspaceMessage}", executionId, workspaceMessage);
+        await AppendEventAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);
+        await AppendRunLogAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);
 
         await UpdatePhaseAsync(executionId, TaskPhase.Coding, $"Running coding agent for {repoKind}.", cancellationToken);
         var codeRunner = agentRunnerFactory.GetRunner(agentOptions.Value.Code.Provider);
