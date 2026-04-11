@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Ado.AutonomousWorker.Cli\Ado.AutonomousWorker.Cli.csproj" />
     <ProjectReference Include="..\..\src\Ado.AutonomousWorker.Core\Ado.AutonomousWorker.Core.csproj" />
     <ProjectReference Include="..\..\src\Ado.AutonomousWorker.Infrastructure\Ado.AutonomousWorker.Infrastructure.csproj" />
   </ItemGroup>

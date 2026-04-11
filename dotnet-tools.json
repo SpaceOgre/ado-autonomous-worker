@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "ado-worker": {
+      "version": "0.1.0-local",
+      "commands": [
+        "ado-worker"
+      ],
+      "rollForward": false
+    }
+  }
+}

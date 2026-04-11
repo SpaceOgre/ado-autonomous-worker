@@ -27,6 +27,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackAsTool>true</PackAsTool>
+    <PackageId>ado-worker</PackageId>
+    <PackageVersion>0.1.0-local</PackageVersion>
+    <ToolCommandName>ado-worker</ToolCommandName>
   </PropertyGroup>
 
 </Project>

@@ -4,6 +4,7 @@ obj/
 .idea/
 
 .data/
+.artifacts/
 artifacts/
 logs/
 TestResults/
@@ -14,6 +15,7 @@ TestResults/
 *.db-shm
 *.db-wal
 *.log
+*.nupkg
 
 appsettings.local.json
 src/Ado.AutonomousWorker.Cli/appsettings.local.json

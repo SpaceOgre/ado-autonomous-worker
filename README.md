@@ -21,10 +21,14 @@ ado-worker executions
 ado-worker executions --active
 ado-worker execution show --id <execution-id>
 ado-worker execution show --last
+ado-worker completion powershell
 ado-worker run
 ado-worker task run --id 12345
 ado-worker task resume --execution-id <execution-id>
 ```
+
+The commands above assume `ado-worker` is available as a command name.
+Use the local or global installation flow below depending on how you want to run it.
 
 ## Configuration
 
@@ -43,4 +47,100 @@ Set Azure DevOps and provider credentials outside source control.
 ```powershell
 dotnet build src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj
 dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj --no-build
+```
+
+## Which Install Mode
+
+- Local tool: use this when you only need the command inside this repository.
+- Global tool: use this when you want `ado-worker` to work from any folder on your machine.
+
+## Local Tool
+
+Use this when you want the tool to be available only inside this repository.
+
+### Install
+
+Install or refresh the repo-local .NET tool:
+
+```powershell
+.\scripts\install-local-tool.ps1
+```
+
+### Run
+
+Run the local tool from the repository root:
+
+```powershell
+dotnet tool run ado-worker -- queue
+```
+
+If you want a shorter PowerShell command name for the current session:
+
+```powershell
+function ado-worker { dotnet tool run ado-worker -- @args }
+```
+
+Then you can run:
+
+```powershell
+ado-worker queue
+```
+
+### PowerShell Completion
+
+Print the registration script:
+
+```powershell
+dotnet tool run ado-worker -- completion powershell
+```
+
+Load completion in the current shell:
+
+```powershell
+Invoke-Expression (((& { dotnet tool run ado-worker -- completion powershell }) -join "`n"))
+```
+
+Persist the alias and completion in your PowerShell profile:
+
+```powershell
+Add-Content -Path $PROFILE -Value "`nfunction ado-worker { dotnet tool run ado-worker -- @args }"
+Add-Content -Path $PROFILE -Value "`nInvoke-Expression (((& { dotnet tool run ado-worker -- completion powershell }) -join \"`n\"))"
+```
+
+## Global Tool
+
+Use this when you want `ado-worker` to work from any folder on your machine.
+
+### Install
+
+Install or refresh the global tool:
+
+```powershell
+.\scripts\install-local-tool.ps1 -Scope Global
+```
+
+### Run
+
+Run the tool from any folder:
+
+```powershell
+ado-worker queue
+```
+
+If `ado-worker` is not found after install, add this path to `PATH`:
+
+- `$HOME\.dotnet\tools`
+
+### PowerShell Completion
+
+Load completion in the current shell:
+
+```powershell
+Invoke-Expression (((& ado-worker completion powershell) -join "`n"))
+```
+
+Persist it in your PowerShell profile:
+
+```powershell
+Add-Content -Path $PROFILE -Value "`nInvoke-Expression (((& ado-worker completion powershell) -join \"`n\"))"
 ```

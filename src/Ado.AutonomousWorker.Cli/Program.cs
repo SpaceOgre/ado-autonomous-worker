@@ -1,6 +1,7 @@
 using Ado.AutonomousWorker.Infrastructure;
 using Ado.AutonomousWorker.Cli.Commands;
 using Ado.AutonomousWorker.Cli;
+using Ado.AutonomousWorker.Cli.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,11 +28,40 @@ builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();
 builder.Services.AddSingleton<ExecutionsCommand>();
 builder.Services.AddSingleton<ShowExecutionCommand>();
+builder.Services.AddSingleton<PowerShellCompletionCommand>();
 builder.Services.AddSingleton<RunCommand>();
 builder.Services.AddSingleton<RunTaskCommand>();
 builder.Services.AddSingleton<ResumeTaskCommand>();
+builder.Services.AddSingleton<CliCompletionService>();
 
 using var host = builder.Build();
+
+if (args.Length > 0 && string.Equals(args[0], "__complete", StringComparison.Ordinal))
+{
+    var currentWord = string.Empty;
+    for (var index = 1; index < args.Length - 1; index++)
+    {
+        if (string.Equals(args[index], "--current", StringComparison.Ordinal))
+        {
+            currentWord = args[index + 1];
+            break;
+        }
+    }
+
+    var separatorIndex = Array.IndexOf(args, "--");
+    var tokens = separatorIndex >= 0
+        ? args.Skip(separatorIndex + 1).ToArray()
+        : [];
+
+    var completionService = host.Services.GetRequiredService<CliCompletionService>();
+    var suggestions = await completionService.GetSuggestionsAsync(currentWord, tokens, CancellationToken.None);
+    foreach (var suggestion in suggestions)
+    {
+        Console.WriteLine(suggestion);
+    }
+
+    return 0;
+}
 
 var registrar = new TypeRegistrar(host.Services);
 var app = new CommandApp(registrar);
@@ -43,6 +73,10 @@ app.Configure(config =>
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
     config.AddCommand<RunCommand>("run").WithDescription("Process the current queue.");
+    config.AddBranch("completion", completion =>
+    {
+        completion.AddCommand<PowerShellCompletionCommand>("powershell").WithDescription("Print a PowerShell tab-completion registration script.");
+    });
 
     config.AddBranch("execution", execution =>
     {
