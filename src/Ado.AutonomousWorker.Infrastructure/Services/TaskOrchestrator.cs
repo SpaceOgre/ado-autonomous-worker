@@ -35,9 +35,21 @@ public sealed partial class TaskOrchestrator(
             .Take(workerOptions.Value.MaxItemsPerRun)
             .ToArray();
 
+        logger.LogInformation(
+            "Queue loaded: {AiWorkCount} AI-Work, {AiReworkCount} AI-Rework, {SelectedCount} selected.",
+            aiWork.Count,
+            aiRework.Count,
+            queue.Length);
+
         var executions = new List<string>();
         foreach (var item in queue)
         {
+            logger.LogInformation(
+                "Queue item selected: #{WorkItemId} {WorkItemType} '{Title}' ({Kind}).",
+                item.WorkItemId,
+                item.WorkItemType,
+                item.Title,
+                item.Kind);
             executions.Add(await RunTaskAsync(item.WorkItemId, cancellationToken));
         }
 
@@ -62,6 +74,11 @@ public sealed partial class TaskOrchestrator(
 
         await stateStore.SaveExecutionAsync(record, cancellationToken);
         await AppendEventAsync(executionId, TaskPhase.Queued, $"Created execution for work item #{workItem.WorkItemId}.", cancellationToken);
+        logger.LogInformation(
+            "Execution {ExecutionId} created for #{WorkItemId} '{Title}'.",
+            executionId,
+            workItem.WorkItemId,
+            workItem.Title);
         await RunInternalAsync(executionId, workItem, cancellationToken);
         return executionId;
     }
@@ -73,6 +90,11 @@ public sealed partial class TaskOrchestrator(
 
         var workItem = await azureDevOpsClient.GetWorkItemAsync(execution.WorkItemId, cancellationToken);
         await AppendEventAsync(executionId, execution.Phase, "Resuming execution from persisted state.", cancellationToken);
+        logger.LogInformation(
+            "Resuming execution {ExecutionId} for #{WorkItemId} from phase {Phase}.",
+            executionId,
+            execution.WorkItemId,
+            execution.Phase);
         await RunInternalAsync(executionId, workItem, cancellationToken);
     }
 
@@ -130,16 +152,19 @@ public sealed partial class TaskOrchestrator(
         if (!string.Equals(workItem.State, "Active", StringComparison.OrdinalIgnoreCase))
         {
             await azureDevOpsClient.UpdateWorkItemStateAsync(workItem.WorkItemId, "Active", cancellationToken);
+            logger.LogInformation("Activated work item #{WorkItemId}.", workItem.WorkItemId);
         }
 
         if (string.IsNullOrWhiteSpace(workItem.AssignedTo))
         {
             await azureDevOpsClient.AssignWorkItemAsync(workItem.WorkItemId, azureDevOpsOptions.Value.DefaultAssignee, cancellationToken);
+            logger.LogInformation("Assigned work item #{WorkItemId} to {Assignee}.", workItem.WorkItemId, azureDevOpsOptions.Value.DefaultAssignee);
         }
 
         if (workItem.Kind == QueueItemKind.AiWork && !string.IsNullOrWhiteSpace(currentSprint))
         {
             await azureDevOpsClient.UpdateIterationPathAsync(workItem.WorkItemId, currentSprint, cancellationToken);
+            logger.LogInformation("Set iteration for #{WorkItemId} to '{IterationPath}'.", workItem.WorkItemId, currentSprint);
         }
     }
 
@@ -177,6 +202,11 @@ public sealed partial class TaskOrchestrator(
         await stateStore.SaveAgentSessionAsync(executionId, startResult.Session, cancellationToken);
         var plan = ParsePlan(startResult.Result.StructuredPayload) ?? BuildFallbackPlan(workItem);
         await AppendEventAsync(executionId, TaskPhase.Planning, plan.Summary, cancellationToken);
+        logger.LogInformation(
+            "Execution {ExecutionId} plan complete: scope {Scope}, repos {Repositories}.",
+            executionId,
+            plan.Scope,
+            string.Join(", ", plan.Repositories));
         return plan;
     }
 
@@ -190,6 +220,11 @@ public sealed partial class TaskOrchestrator(
     {
         var repoProfile = GetRepositoryProfile(repoKind);
         var slug = SlugRegex().Replace(parent.Title.ToLowerInvariant(), "-").Trim('-');
+        logger.LogInformation(
+            "Execution {ExecutionId}: preparing {RepoKind} repo for child task #{ChildTaskId}.",
+            executionId,
+            repoKind,
+            childTask.WorkItemId);
         var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, cancellationToken);
         var artifactDirectory = Path.Combine(storageOptions.Value.ArtifactRoot, executionId, repoKind.ToString().ToLowerInvariant());
 
@@ -228,10 +263,19 @@ public sealed partial class TaskOrchestrator(
                 Path.Combine(artifactDirectory, "resume"),
                 cancellationToken);
         }
+        else
+        {
+            logger.LogInformation("Execution {ExecutionId}: no accepted review findings for {RepoKind}.", executionId, repoKind);
+        }
 
         await UpdatePhaseAsync(executionId, TaskPhase.Validating, $"Running validation for {repoKind}.", cancellationToken);
         foreach (var validationCommand in repoProfile.ValidationCommands)
         {
+            logger.LogInformation(
+                "Execution {ExecutionId}: running validation for {RepoKind}: {Command}",
+                executionId,
+                repoKind,
+                validationCommand);
             var validationResult = await commandRunner.RunPowerShellAsync(
                 validationCommand,
                 workspace.WorkingDirectory,
@@ -242,6 +286,8 @@ public sealed partial class TaskOrchestrator(
             {
                 throw new InvalidOperationException($"Validation failed for {repoKind}: {validationResult.StandardError}");
             }
+
+            logger.LogInformation("Execution {ExecutionId}: validation passed for {RepoKind}: {Command}", executionId, repoKind, validationCommand);
         }
 
         await UpdatePhaseAsync(executionId, TaskPhase.Publishing, $"Creating commit and PR for {repoKind}.", cancellationToken);
@@ -249,13 +295,21 @@ public sealed partial class TaskOrchestrator(
         await RunGitAllowingNoChangesAsync(workspace.WorkingDirectory, artifactDirectory, "git-commit.log", ["commit", "-m", $"#{childTask.WorkItemId}: {parent.Title}"], cancellationToken);
         await RunGitAsync(workspace.WorkingDirectory, artifactDirectory, "git-push.log", ["push", "-u", "origin", workspace.BranchName], cancellationToken);
 
-        return await azureDevOpsClient.CreateDraftPullRequestAsync(
+        var pullRequest = await azureDevOpsClient.CreateDraftPullRequestAsync(
             repoProfile.AzureDevOpsRepository,
             workspace.BranchName,
             repoProfile.MainBranch,
             $"#{childTask.WorkItemId}: {parent.Title}",
             $"Resolved: #{childTask.WorkItemId}",
             cancellationToken);
+
+        logger.LogInformation(
+            "Execution {ExecutionId}: created draft PR #{PullRequestId} for {RepoKind}.",
+            executionId,
+            pullRequest.PullRequestId,
+            repoKind);
+
+        return pullRequest;
     }
 
     private async Task<ChildTaskRecord> CreateChildTaskAsync(WorkItemDetails parent, RepoKind repoKind, CancellationToken cancellationToken)
@@ -267,6 +321,12 @@ public sealed partial class TaskOrchestrator(
             parent.IterationPath,
             azureDevOpsOptions.Value.DefaultAssignee,
             cancellationToken);
+
+        logger.LogInformation(
+            "Created child task #{ChildTaskId} for parent #{ParentWorkItemId} in {RepoKind}.",
+            childTaskId,
+            parent.WorkItemId,
+            repoKind);
 
         return new ChildTaskRecord(childTaskId, repoKind, $"{repoKind} - {parent.Title}", "Active");
     }
@@ -310,6 +370,7 @@ public sealed partial class TaskOrchestrator(
         await stateStore.UpdatePhaseAsync(executionId, phase, cancellationToken);
         await AppendEventAsync(executionId, phase, message, cancellationToken);
         await AppendRunLogAsync(executionId, phase, message, cancellationToken);
+        logger.LogInformation("Execution {ExecutionId} [{Phase}] {Message}", executionId, phase, message);
     }
 
     private async Task AppendEventAsync(string executionId, TaskPhase phase, string message, CancellationToken cancellationToken)

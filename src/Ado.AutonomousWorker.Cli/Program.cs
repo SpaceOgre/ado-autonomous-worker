@@ -17,9 +17,13 @@ builder.Configuration
     .AddEnvironmentVariables("AdoWorker_");
 
 builder.Logging.ClearProviders();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
 builder.Logging.AddSimpleConsole(options =>
 {
     options.TimestampFormat = "HH:mm:ss ";
+    options.SingleLine = true;
 });
 
 builder.Services.AddAutonomousWorker(builder.Configuration);

@@ -1,5 +1,6 @@
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Services;
@@ -8,6 +9,7 @@ public sealed class DoctorService(
     IAzureDevOpsClient azureDevOpsClient,
     IStateStore stateStore,
     IWorkspaceManager workspaceManager,
+    ProcessCommandRunner commandRunner,
     IOptions<AgentOptions> agentOptions,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions)
@@ -33,11 +35,13 @@ public sealed class DoctorService(
             "Backend Repo",
             Directory.Exists(repositoryOptions.Value.Backend.BaseClonePath),
             repositoryOptions.Value.Backend.BaseClonePath));
+        checks.Add(await CheckRepoBranchAsync("Backend Branch", repositoryOptions.Value.Backend, cancellationToken));
 
         checks.Add(new DoctorCheckResult(
             "Frontend Repo",
             Directory.Exists(repositoryOptions.Value.Frontend.BaseClonePath),
             repositoryOptions.Value.Frontend.BaseClonePath));
+        checks.Add(await CheckRepoBranchAsync("Frontend Branch", repositoryOptions.Value.Frontend, cancellationToken));
 
         try
         {
@@ -50,6 +54,39 @@ public sealed class DoctorService(
         }
 
         return checks;
+    }
+
+    private async Task<DoctorCheckResult> CheckRepoBranchAsync(string name, RepositoryProfile profile, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(profile.BaseClonePath))
+        {
+            return new DoctorCheckResult(name, false, $"Base clone path not found: {profile.BaseClonePath}");
+        }
+
+        var fetchResult = await commandRunner.RunAsync(
+            "git",
+            ["-C", profile.BaseClonePath, "fetch", "origin", profile.MainBranch],
+            profile.BaseClonePath,
+            Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-fetch.log"),
+            environmentVariables: null,
+            cancellationToken);
+
+        if (!fetchResult.Success)
+        {
+            return new DoctorCheckResult(name, false, $"Fetch failed for origin/{profile.MainBranch}: {fetchResult.StandardError.Trim()}");
+        }
+
+        var verifyResult = await commandRunner.RunAsync(
+            "git",
+            ["-C", profile.BaseClonePath, "show-ref", "--verify", "--quiet", $"refs/remotes/origin/{profile.MainBranch}"],
+            profile.BaseClonePath,
+            Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-branch.log"),
+            environmentVariables: null,
+            cancellationToken);
+
+        return verifyResult.Success
+            ? new DoctorCheckResult(name, true, $"origin/{profile.MainBranch}")
+            : new DoctorCheckResult(name, false, $"Missing remote branch origin/{profile.MainBranch}");
     }
 
     private static DoctorCheckResult CheckCommand(string name, string commandPath)

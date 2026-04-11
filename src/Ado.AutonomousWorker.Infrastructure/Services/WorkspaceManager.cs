@@ -39,13 +39,18 @@ public sealed partial class WorkspaceManager(
 
         if (!Directory.Exists(worktreePath))
         {
-            await commandRunner.RunAsync(
+            var fetchResult = await commandRunner.RunAsync(
                 "git",
                 ["-C", profile.BaseClonePath, "fetch", "origin", profile.MainBranch],
                 profile.BaseClonePath,
                 Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-fetch.log"),
                 environmentVariables: null,
                 cancellationToken);
+
+            if (!fetchResult.Success)
+            {
+                throw new InvalidOperationException($"Failed to fetch branch '{profile.MainBranch}' for {repoKind}: {fetchResult.StandardError}");
+            }
 
             var addResult = await commandRunner.RunAsync(
                 "git",
