@@ -69,6 +69,7 @@ public sealed class DoctorService(
             profile.BaseClonePath,
             Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-fetch.log"),
             environmentVariables: null,
+            activityName: null,
             cancellationToken);
 
         if (!fetchResult.Success)
@@ -82,6 +83,7 @@ public sealed class DoctorService(
             profile.BaseClonePath,
             Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-branch.log"),
             environmentVariables: null,
+            activityName: null,
             cancellationToken);
 
         return verifyResult.Success

@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using Ado.AutonomousWorker.Core.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Ado.AutonomousWorker.Infrastructure.Execution;
 
-public sealed class ProcessCommandRunner
+public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
 {
     public async Task<CommandResult> RunAsync(
         string fileName,
@@ -11,6 +12,7 @@ public sealed class ProcessCommandRunner
         string workingDirectory,
         string artifactPath,
         IReadOnlyDictionary<string, string?>? environmentVariables,
+        string? activityName,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
@@ -44,11 +46,28 @@ public sealed class ProcessCommandRunner
             }
         }
 
+        var stopwatch = Stopwatch.StartNew();
+        if (!string.IsNullOrWhiteSpace(activityName))
+        {
+            logger.LogInformation("{Activity} started.", activityName);
+        }
+
         process.Start();
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var waitForExitTask = process.WaitForExitAsync(cancellationToken);
+        var heartbeatInterval = TimeSpan.FromSeconds(15);
 
-        await process.WaitForExitAsync(cancellationToken);
+        while (!waitForExitTask.IsCompleted)
+        {
+            await Task.WhenAny(waitForExitTask, Task.Delay(heartbeatInterval, cancellationToken));
+            if (!waitForExitTask.IsCompleted && !string.IsNullOrWhiteSpace(activityName))
+            {
+                logger.LogInformation("{Activity} still running after {ElapsedSeconds}s.", activityName, (int)stopwatch.Elapsed.TotalSeconds);
+            }
+        }
+
+        await waitForExitTask;
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
 
@@ -64,6 +83,15 @@ public sealed class ProcessCommandRunner
         """;
 
         await File.WriteAllTextAsync(artifactPath, transcript, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(activityName))
+        {
+            logger.LogInformation(
+                "{Activity} finished with exit code {ExitCode} after {ElapsedSeconds}s.",
+                activityName,
+                process.ExitCode,
+                (int)stopwatch.Elapsed.TotalSeconds);
+        }
+
         return new CommandResult($"{fileName} {string.Join(" ", arguments)}", process.ExitCode, stdout, stderr);
     }
 
@@ -79,6 +107,7 @@ public sealed class ProcessCommandRunner
             workingDirectory,
             artifactPath,
             environmentVariables: null,
+            activityName: $"PowerShell: {script}",
             cancellationToken);
     }
 }

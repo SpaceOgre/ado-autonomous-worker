@@ -30,6 +30,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             workingDirectory,
             transcriptPath,
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
+            activityName: $"Claude {role}",
             cancellationToken);
 
         var payload = commandResult.StandardOutput;
@@ -55,6 +56,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             session.WorkingDirectory,
             transcriptPath,
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
+            activityName: $"Claude {session.Role} resume",
             cancellationToken);
 
         return new AgentRunResult(commandResult.Success, commandResult.StandardOutput.Trim(), transcriptPath, commandResult.StandardOutput, null);

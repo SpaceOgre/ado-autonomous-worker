@@ -339,6 +339,7 @@ public sealed partial class TaskOrchestrator(
             workingDirectory,
             Path.Combine(artifactDirectory, artifactName),
             environmentVariables: null,
+            activityName: null,
             cancellationToken);
 
         if (!result.Success)
@@ -355,6 +356,7 @@ public sealed partial class TaskOrchestrator(
             workingDirectory,
             Path.Combine(artifactDirectory, artifactName),
             environmentVariables: null,
+            activityName: null,
             cancellationToken);
 
         if (!result.Success &&

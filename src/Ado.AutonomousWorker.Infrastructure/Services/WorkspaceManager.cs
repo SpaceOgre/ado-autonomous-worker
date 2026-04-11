@@ -45,6 +45,7 @@ public sealed partial class WorkspaceManager(
                 profile.BaseClonePath,
                 Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-fetch.log"),
                 environmentVariables: null,
+                activityName: null,
                 cancellationToken);
 
             if (!fetchResult.Success)
@@ -58,6 +59,7 @@ public sealed partial class WorkspaceManager(
                 profile.BaseClonePath,
                 Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-add.log"),
                 environmentVariables: null,
+                activityName: null,
                 cancellationToken);
 
             if (!addResult.Success)
@@ -72,6 +74,7 @@ public sealed partial class WorkspaceManager(
             worktreePath,
             Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log"),
             environmentVariables: null,
+            activityName: null,
             cancellationToken);
 
         if (!checkoutResult.Success)
@@ -98,6 +101,7 @@ public sealed partial class WorkspaceManager(
             profile.BaseClonePath,
             Path.Combine(artifactFolder, $"{context.RepoKind.ToString().ToLowerInvariant()}-cleanup.log"),
             environmentVariables: null,
+            activityName: null,
             cancellationToken);
     }
 

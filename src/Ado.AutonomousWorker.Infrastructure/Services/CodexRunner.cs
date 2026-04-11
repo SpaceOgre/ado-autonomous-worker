@@ -57,6 +57,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             workingDirectory,
             transcriptPath,
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
+            activityName: $"Codex {role}",
             cancellationToken);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
@@ -99,6 +100,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             session.WorkingDirectory,
             transcriptPath,
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
+            activityName: $"Codex {session.Role} resume",
             cancellationToken);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
