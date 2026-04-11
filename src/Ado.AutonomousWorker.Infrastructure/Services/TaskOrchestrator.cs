@@ -152,7 +152,7 @@ public sealed partial class TaskOrchestrator(
         var prompt = $$"""
         Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
 
-        Work item: #{{workItem.WorkItemId}} {{workItem.Title}}
+        Work item: #{{workItem.WorkItemId}} {{FormatWorkItemLabel(workItem.WorkItemType)}} {{workItem.Title}}
         State: {{workItem.State}}
         Assigned to: {{workItem.AssignedTo}}
         Iteration: {{workItem.IterationPath}}
@@ -385,7 +385,7 @@ public sealed partial class TaskOrchestrator(
         return $$"""
         Implement the Azure DevOps task in this repository.
 
-        Parent story: #{{parent.WorkItemId}} {{parent.Title}}
+        Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Child task: #{{childTask.WorkItemId}} {{childTask.Title}}
         Repo: {{repoKind}}
         Plan summary: {{plan.Summary}}
@@ -404,7 +404,7 @@ public sealed partial class TaskOrchestrator(
         Review the current repository changes for correctness, regressions, security issues, and missing tests.
         Return JSON that matches the supplied schema exactly.
 
-        Parent story: #{{parent.WorkItemId}} {{parent.Title}}
+        Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Child task: #{{childTask.WorkItemId}} {{childTask.Title}}
         Repo: {{repoKind}}
         """;
@@ -434,6 +434,17 @@ public sealed partial class TaskOrchestrator(
     private static string NormalizeFileName(string value)
     {
         return SlugRegex().Replace(value.ToLowerInvariant(), "-").Trim('-');
+    }
+
+    private static string FormatWorkItemLabel(WorkItemType workItemType)
+    {
+        return workItemType switch
+        {
+            WorkItemType.UserStory => "User Story",
+            WorkItemType.Bug => "Bug",
+            WorkItemType.Task => "Task",
+            _ => "Work Item",
+        };
     }
 
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.IgnoreCase)]

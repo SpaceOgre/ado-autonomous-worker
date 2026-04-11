@@ -13,11 +13,13 @@ public sealed partial class RulesEngine : IRulesEngine
     {
         var ordered = aiReworkItems
             .OrderBy(item => item.StackRank)
-            .Select(item => new QueueItem(item.WorkItemId, item.Title, QueueItemKind.AiRework, item.StackRank, item.State, item.AssignedTo))
+            .ThenBy(item => item.Priority ?? int.MaxValue)
+            .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiRework, item.StackRank, item.Priority, item.State, item.AssignedTo))
             .Concat(
                 aiWorkItems
                     .OrderBy(item => item.StackRank)
-                    .Select(item => new QueueItem(item.WorkItemId, item.Title, QueueItemKind.AiWork, item.StackRank, item.State, item.AssignedTo)))
+                    .ThenBy(item => item.Priority ?? int.MaxValue)
+                    .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiWork, item.StackRank, item.Priority, item.State, item.AssignedTo)))
             .GroupBy(item => item.WorkItemId)
             .Select(group => group.First())
             .ToList();

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
@@ -44,7 +45,7 @@ public sealed class AzureDevOpsClient(
         var query = $"""
         SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank]
         FROM WorkItems
-        WHERE [System.WorkItemType] = 'User Story'
+        WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
           AND [System.Tags] CONTAINS 'AI-Work'
           AND NOT [System.Tags] CONTAINS 'AI-Failed'
           AND [System.State] = 'New'
@@ -61,7 +62,7 @@ public sealed class AzureDevOpsClient(
         var query = $"""
         SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank]
         FROM WorkItems
-        WHERE [System.WorkItemType] = 'User Story'
+        WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
           AND [System.Tags] CONTAINS 'AI-Rework'
           AND NOT [System.Tags] CONTAINS 'AI-Failed'
           AND [System.State] <> 'Closed'
@@ -109,6 +110,7 @@ public sealed class AzureDevOpsClient(
         return new WorkItemDetails
         {
             WorkItemId = workItemId,
+            WorkItemType = ParseWorkItemType(fields.TryGetProperty("System.WorkItemType", out var workItemTypeElement) ? workItemTypeElement.GetString() : null),
             Title = fields.GetProperty("System.Title").GetString() ?? string.Empty,
             State = fields.GetProperty("System.State").GetString() ?? string.Empty,
             AssignedTo = TryReadIdentityString(fields, "System.AssignedTo"),
@@ -236,7 +238,7 @@ public sealed class AzureDevOpsClient(
             new
             {
                 ids,
-                fields = new[] { "System.Id", "System.Title", "System.State", "System.AssignedTo", "Microsoft.VSTS.Common.StackRank" },
+                fields = new[] { "System.Id", "System.WorkItemType", "System.Title", "System.State", "System.AssignedTo", "Microsoft.VSTS.Common.StackRank" },
             },
             cancellationToken);
 
@@ -248,10 +250,11 @@ public sealed class AzureDevOpsClient(
             var fields = item.GetProperty("fields");
             items.Add(new WorkItemSummary(
                 fields.GetProperty("System.Id").GetInt32(),
+                ParseWorkItemType(fields.TryGetProperty("System.WorkItemType", out var typeElement) ? typeElement.GetString() : null),
                 fields.GetProperty("System.Title").GetString() ?? string.Empty,
                 fields.GetProperty("System.State").GetString() ?? string.Empty,
                 TryReadIdentityString(fields, "System.AssignedTo"),
-                fields.TryGetProperty("Microsoft.VSTS.Common.StackRank", out var rankElement) && rankElement.TryGetDouble(out var stackRank) ? stackRank : double.MaxValue));
+                fields.TryGetProperty("Microsoft.VSTS.Common.StackRank", out var rankElement) ? ParseStackRank(rankElement) : double.MaxValue));
         }
 
         return items;
@@ -342,5 +345,26 @@ public sealed class AzureDevOpsClient(
         return string.IsNullOrWhiteSpace(tags)
             ? []
             : tags.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static WorkItemType ParseWorkItemType(string? workItemType)
+    {
+        return workItemType?.Trim() switch
+        {
+            "User Story" => WorkItemType.UserStory,
+            "Bug" => WorkItemType.Bug,
+            "Task" => WorkItemType.Task,
+            _ => WorkItemType.Unknown,
+        };
+    }
+
+    private static double ParseStackRank(JsonElement rankElement)
+    {
+        return rankElement.ValueKind switch
+        {
+            JsonValueKind.Number when rankElement.TryGetDouble(out var number) => number,
+            JsonValueKind.String when double.TryParse(rankElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) => parsed,
+            _ => double.MaxValue,
+        };
     }
 }

@@ -12,13 +12,21 @@ public sealed class RulesEngineTests
     public void OrderQueue_PrioritizesReworkBeforeAiWork()
     {
         var ordered = _rulesEngine.OrderQueue(
-            [new WorkItemSummary(2, "AI Work", "New", null, 10)],
-            [new WorkItemSummary(1, "Rework", "Active", "daniel.nordstrom@consid.se", 50)]);
+            [new WorkItemSummary(2, WorkItemType.Bug, "AI Work", "New", null, 10)],
+            [new WorkItemSummary(1, WorkItemType.UserStory, "Rework", "Active", "daniel.nordstrom@consid.se", 50)]);
 
         Assert.Collection(
             ordered,
-            first => Assert.Equal(QueueItemKind.AiRework, first.Kind),
-            second => Assert.Equal(QueueItemKind.AiWork, second.Kind));
+            first =>
+            {
+                Assert.Equal(QueueItemKind.AiRework, first.Kind);
+                Assert.Equal(WorkItemType.UserStory, first.WorkItemType);
+            },
+            second =>
+            {
+                Assert.Equal(QueueItemKind.AiWork, second.Kind);
+                Assert.Equal(WorkItemType.Bug, second.WorkItemType);
+            });
     }
 
     [Fact]

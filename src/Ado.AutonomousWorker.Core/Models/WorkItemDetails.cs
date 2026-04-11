@@ -6,6 +6,8 @@ public sealed record WorkItemDetails
 {
     public int WorkItemId { get; init; }
 
+    public WorkItemType WorkItemType { get; init; } = WorkItemType.Unknown;
+
     public string Title { get; init; } = string.Empty;
 
     public string State { get; init; } = string.Empty;
