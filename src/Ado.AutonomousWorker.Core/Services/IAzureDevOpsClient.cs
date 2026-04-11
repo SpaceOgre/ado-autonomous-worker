@@ -22,7 +22,7 @@ public interface IAzureDevOpsClient
 
     Task<int> CreateChildTaskAsync(int parentWorkItemId, string title, IReadOnlyCollection<string> tags, string iterationPath, string assignee, CancellationToken cancellationToken);
 
-    Task<PullRequestInfo> CreateDraftPullRequestAsync(string repositoryName, string sourceBranch, string title, string description, CancellationToken cancellationToken);
+    Task<PullRequestInfo> CreateDraftPullRequestAsync(string repositoryName, string sourceBranch, string targetBranch, string title, string description, CancellationToken cancellationToken);
 
     Task LinkPullRequestAsync(int workItemId, PullRequestInfo pullRequest, CancellationToken cancellationToken);
 

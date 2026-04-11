@@ -6,10 +6,10 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 
 public sealed class BootstrapCommand(IStateStore stateStore, IWorkspaceManager workspaceManager) : AsyncCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        await stateStore.InitializeAsync(CancellationToken.None);
-        await workspaceManager.PrepareAsync(CancellationToken.None);
+        await stateStore.InitializeAsync(cancellationToken);
+        await workspaceManager.PrepareAsync(cancellationToken);
         AnsiConsole.MarkupLine("[green]Bootstrap complete.[/]");
         return 0;
     }

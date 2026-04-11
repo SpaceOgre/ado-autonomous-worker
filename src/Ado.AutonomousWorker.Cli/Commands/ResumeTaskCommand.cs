@@ -12,9 +12,9 @@ public sealed class ResumeTaskCommand(ITaskOrchestrator taskOrchestrator) : Asyn
         public required string ExecutionId { get; init; }
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        await taskOrchestrator.ResumeTaskAsync(settings.ExecutionId, CancellationToken.None);
+        await taskOrchestrator.ResumeTaskAsync(settings.ExecutionId, cancellationToken);
         AnsiConsole.MarkupLine($"[green]Execution resumed.[/] Id: {settings.ExecutionId}");
         return 0;
     }

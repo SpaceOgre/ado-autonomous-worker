@@ -6,9 +6,9 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 
 public sealed class DoctorCommand(DoctorService doctorService) : AsyncCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var results = await doctorService.RunAsync(CancellationToken.None);
+        var results = await doctorService.RunAsync(cancellationToken);
         var table = new Table().Border(TableBorder.Rounded).AddColumns("Check", "Status", "Detail");
 
         foreach (var result in results)

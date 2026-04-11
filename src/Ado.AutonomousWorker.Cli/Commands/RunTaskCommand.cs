@@ -12,9 +12,9 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator) : AsyncCo
         public required int WorkItemId { get; init; }
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var executionId = await taskOrchestrator.RunTaskAsync(settings.WorkItemId, CancellationToken.None);
+        var executionId = await taskOrchestrator.RunTaskAsync(settings.WorkItemId, cancellationToken);
         AnsiConsole.MarkupLine($"[green]Execution started and finished.[/] Id: {executionId}");
         return 0;
     }

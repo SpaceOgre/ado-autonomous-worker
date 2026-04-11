@@ -6,11 +6,11 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 
 public sealed class RunCommand(ITaskOrchestrator taskOrchestrator) : AsyncCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var executionIds = await AnsiConsole.Status()
             .Spinner(Spinner.Known.Star)
-            .StartAsync("Processing queue...", _ => taskOrchestrator.RunQueueAsync(CancellationToken.None));
+            .StartAsync("Processing queue...", _ => taskOrchestrator.RunQueueAsync(cancellationToken));
 
         AnsiConsole.MarkupLine($"[green]Completed queue run.[/] Executions: {string.Join(", ", executionIds)}");
         return 0;

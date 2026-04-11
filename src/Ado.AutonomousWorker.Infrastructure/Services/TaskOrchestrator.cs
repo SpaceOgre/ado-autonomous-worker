@@ -252,6 +252,7 @@ public sealed partial class TaskOrchestrator(
         return await azureDevOpsClient.CreateDraftPullRequestAsync(
             repoProfile.AzureDevOpsRepository,
             workspace.BranchName,
+            repoProfile.MainBranch,
             $"#{childTask.WorkItemId}: {parent.Title}",
             $"Resolved: #{childTask.WorkItemId}",
             cancellationToken);
