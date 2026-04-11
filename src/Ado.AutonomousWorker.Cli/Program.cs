@@ -36,6 +36,7 @@ builder.Services.AddSingleton<PowerShellCompletionCommand>();
 builder.Services.AddSingleton<RunCommand>();
 builder.Services.AddSingleton<RunTaskCommand>();
 builder.Services.AddSingleton<ResumeTaskCommand>();
+builder.Services.AddSingleton<VersionCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 
@@ -78,6 +79,7 @@ app.Configure(config =>
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
     config.AddCommand<RunCommand>("run").WithDescription("Process the current queue.");
+    config.AddCommand<VersionCommand>("version").WithDescription("Show the installed ado-worker version and runtime information.");
     config.AddBranch("completion", completion =>
     {
         completion.AddCommand<PowerShellCompletionCommand>("powershell").WithDescription("Print a PowerShell tab-completion registration script.");

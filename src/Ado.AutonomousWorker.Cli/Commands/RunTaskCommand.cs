@@ -1,5 +1,6 @@
 using Ado.AutonomousWorker.Core.Services;
 using Ado.AutonomousWorker.Cli.Services;
+using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -9,6 +10,7 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
 {
     public sealed class Settings : CommandSettings
     {
+        [Description("The Azure DevOps work item id to execute immediately.")]
         [CommandOption("--id <WORK_ITEM_ID>")]
         public required int WorkItemId { get; init; }
     }

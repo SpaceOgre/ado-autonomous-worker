@@ -1,4 +1,5 @@
 using Ado.AutonomousWorker.Core.Services;
+using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -8,9 +9,11 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 {
     public sealed class Settings : CommandSettings
     {
+        [Description("Show a specific local execution by its execution id.")]
         [CommandOption("--id <EXECUTION_ID>")]
         public string? ExecutionId { get; init; }
 
+        [Description("Show the most recently updated local execution.")]
         [CommandOption("--last")]
         public bool Last { get; init; }
     }

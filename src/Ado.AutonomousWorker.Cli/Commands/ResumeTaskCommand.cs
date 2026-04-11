@@ -1,5 +1,6 @@
 using Ado.AutonomousWorker.Core.Services;
 using Ado.AutonomousWorker.Cli.Services;
+using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -9,6 +10,7 @@ public sealed class ResumeTaskCommand(ITaskOrchestrator taskOrchestrator, Execut
 {
     public sealed class Settings : CommandSettings
     {
+        [Description("The local execution id to resume from persisted state.")]
         [CommandOption("--execution-id <EXECUTION_ID>")]
         public required string ExecutionId { get; init; }
     }

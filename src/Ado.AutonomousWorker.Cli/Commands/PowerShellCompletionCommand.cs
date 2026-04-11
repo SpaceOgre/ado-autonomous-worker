@@ -1,4 +1,5 @@
 using Ado.AutonomousWorker.Cli.Services;
+using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -8,6 +9,7 @@ public sealed class PowerShellCompletionCommand(CliCompletionService completionS
 {
     public sealed class Settings : CommandSettings
     {
+        [Description("The command name to generate completion for. Defaults to 'ado-worker'.")]
         [CommandOption("--command-name <COMMAND_NAME>")]
         public string CommandName { get; init; } = "ado-worker";
     }

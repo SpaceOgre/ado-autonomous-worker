@@ -1,4 +1,5 @@
 using Ado.AutonomousWorker.Core.Services;
+using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -8,6 +9,7 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
 {
     public sealed class Settings : CommandSettings
     {
+        [Description("Show only executions that are still in progress and not completed, failed, or skipped.")]
         [CommandOption("--active")]
         public bool ActiveOnly { get; init; }
     }

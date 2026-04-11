@@ -19,6 +19,7 @@ ado-worker doctor
 ado-worker queue
 ado-worker executions
 ado-worker executions --active
+ado-worker version
 ado-worker execution show --id <execution-id>
 ado-worker execution show --last
 ado-worker completion powershell
