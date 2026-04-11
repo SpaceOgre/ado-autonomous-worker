@@ -1,0 +1,90 @@
+using Ado.AutonomousWorker.Core.Services;
+using Spectre.Console;
+using Spectre.Console.Cli;
+
+namespace Ado.AutonomousWorker.Cli.Commands;
+
+public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<ShowExecutionCommand.Settings>
+{
+    public sealed class Settings : CommandSettings
+    {
+        [CommandOption("--id <EXECUTION_ID>")]
+        public string? ExecutionId { get; init; }
+
+        [CommandOption("--last")]
+        public bool Last { get; init; }
+    }
+
+    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        await stateStore.InitializeAsync(cancellationToken);
+
+        var hasExecutionId = !string.IsNullOrWhiteSpace(settings.ExecutionId);
+        if (settings.Last == hasExecutionId)
+        {
+            AnsiConsole.MarkupLine("[red]Specify exactly one of:[/] [yellow]--id <execution-id>[/] or [yellow]--last[/]");
+            return 1;
+        }
+
+        var execution = settings.Last
+            ? (await stateStore.ListExecutionsAsync(cancellationToken)).FirstOrDefault()
+            : await stateStore.GetExecutionAsync(settings.ExecutionId!, cancellationToken);
+
+        if (execution is null)
+        {
+            var requestedExecution = settings.Last ? "<latest>" : settings.ExecutionId!;
+            AnsiConsole.MarkupLine($"[red]Execution not found:[/] {Markup.Escape(requestedExecution)}");
+            return 1;
+        }
+
+        var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
+        var sessions = await stateStore.GetAgentSessionsAsync(execution.ExecutionId, cancellationToken);
+
+        var summary = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
+        summary.AddRow("Execution Id", execution.ExecutionId);
+        summary.AddRow("Work Item", execution.WorkItemId.ToString());
+        summary.AddRow("Title", Markup.Escape(execution.Title));
+        summary.AddRow("Kind", execution.Kind.ToString());
+        summary.AddRow("Phase", execution.Phase.ToString());
+        summary.AddRow("Created", execution.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+        summary.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+
+        AnsiConsole.Write(summary);
+        AnsiConsole.WriteLine();
+
+        var eventsTable = new Table().Border(TableBorder.Rounded).AddColumns("Timestamp", "Phase", "Message");
+        foreach (var executionEvent in events)
+        {
+            eventsTable.AddRow(
+                executionEvent.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                executionEvent.Phase.ToString(),
+                Markup.Escape(executionEvent.Message));
+        }
+
+        if (events.Count > 0)
+        {
+            AnsiConsole.Write(new Rule("Events"));
+            AnsiConsole.Write(eventsTable);
+            AnsiConsole.WriteLine();
+        }
+
+        if (sessions.Count > 0)
+        {
+            var sessionsTable = new Table().Border(TableBorder.Rounded).AddColumns("Role", "Provider", "Session Id", "Workdir", "Transcript");
+            foreach (var session in sessions)
+            {
+                sessionsTable.AddRow(
+                    session.Role.ToString(),
+                    session.Provider.ToString(),
+                    session.SessionId,
+                    Markup.Escape(session.WorkingDirectory),
+                    Markup.Escape(session.TranscriptPath));
+            }
+
+            AnsiConsole.Write(new Rule("Agent Sessions"));
+            AnsiConsole.Write(sessionsTable);
+        }
+
+        return 0;
+    }
+}

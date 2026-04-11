@@ -98,6 +98,26 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         return ReadExecution(reader);
     }
 
+    public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        SELECT execution_id, work_item_id, title, kind, phase, created_at, updated_at, plan_provider_session_id
+        FROM executions
+        ORDER BY updated_at DESC;
+        """;
+
+        var results = new List<TaskExecutionRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadExecution(reader));
+        }
+
+        return results;
+    }
+
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -194,6 +214,32 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
                 reader.GetString(3),
                 reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5)));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        SELECT execution_id, timestamp, phase, message
+        FROM events
+        WHERE execution_id = $executionId
+        ORDER BY id;
+        """;
+        command.Parameters.AddWithValue("$executionId", executionId);
+
+        var results = new List<ExecutionEventRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ExecutionEventRecord(
+                reader.GetString(0),
+                DateTimeOffset.Parse(reader.GetString(1)),
+                (TaskPhase)reader.GetInt32(2),
+                reader.GetString(3)));
         }
 
         return results;

@@ -25,6 +25,8 @@ builder.Services.AddAutonomousWorker(builder.Configuration);
 builder.Services.AddSingleton<BootstrapCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();
+builder.Services.AddSingleton<ExecutionsCommand>();
+builder.Services.AddSingleton<ShowExecutionCommand>();
 builder.Services.AddSingleton<RunCommand>();
 builder.Services.AddSingleton<RunTaskCommand>();
 builder.Services.AddSingleton<ResumeTaskCommand>();
@@ -39,7 +41,13 @@ app.Configure(config =>
     config.AddCommand<BootstrapCommand>("bootstrap").WithDescription("Initialize storage and workspace directories.");
     config.AddCommand<DoctorCommand>("doctor").WithDescription("Verify configuration, repos, CLI tools, and Azure DevOps access.");
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
+    config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
     config.AddCommand<RunCommand>("run").WithDescription("Process the current queue.");
+
+    config.AddBranch("execution", execution =>
+    {
+        execution.AddCommand<ShowExecutionCommand>("show").WithDescription("Show one local execution with events and agent sessions.");
+    });
 
     config.AddBranch("task", task =>
     {

@@ -17,6 +17,10 @@ A `.NET 10` console application for automating repetitive Azure DevOps work arou
 ado-worker bootstrap
 ado-worker doctor
 ado-worker queue
+ado-worker executions
+ado-worker executions --active
+ado-worker execution show --id <execution-id>
+ado-worker execution show --last
 ado-worker run
 ado-worker task run --id 12345
 ado-worker task resume --execution-id <execution-id>

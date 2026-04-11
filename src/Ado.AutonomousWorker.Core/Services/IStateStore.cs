@@ -11,6 +11,8 @@ public interface IStateStore
 
     Task<TaskExecutionRecord?> GetExecutionAsync(string executionId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken);
 
     Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken);
@@ -20,6 +22,8 @@ public interface IStateStore
     Task SaveAgentSessionAsync(string executionId, AgentSessionHandle session, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<AgentSessionHandle>> GetAgentSessionsAsync(string executionId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken);
 
     Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken);
 }
