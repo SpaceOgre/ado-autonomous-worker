@@ -1,6 +1,6 @@
 using Ado.AutonomousWorker.Core.Services;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Queue;
 
 public sealed class QueueInspector(IAzureDevOpsClient azureDevOpsClient, IRulesEngine rulesEngine)
 {

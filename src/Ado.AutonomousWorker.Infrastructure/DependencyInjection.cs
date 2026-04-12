@@ -1,7 +1,13 @@
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Infrastructure.Agents;
+using Ado.AutonomousWorker.Infrastructure.AzureDevOps;
+using Ado.AutonomousWorker.Infrastructure.Diagnostics;
 using Ado.AutonomousWorker.Infrastructure.Execution;
-using Ado.AutonomousWorker.Infrastructure.Services;
+using Ado.AutonomousWorker.Infrastructure.Orchestration;
+using Ado.AutonomousWorker.Infrastructure.Queue;
+using Ado.AutonomousWorker.Infrastructure.State;
+using Ado.AutonomousWorker.Infrastructure.Workspaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -23,6 +29,9 @@ public static class DependencyInjection
         services.AddSingleton<IStateStore, SqliteStateStore>();
         services.AddSingleton<IWorkspaceManager, WorkspaceManager>();
         services.AddSingleton<IAgentRunnerFactory, AgentRunnerFactory>();
+        services.AddSingleton<ExecutionJournal>();
+        services.AddSingleton<TaskPlanningService>();
+        services.AddSingleton<RepositoryWorkflowService>();
         services.AddSingleton<ITaskOrchestrator, TaskOrchestrator>();
         services.AddSingleton<QueueInspector>();
         services.AddSingleton<DoctorService>();

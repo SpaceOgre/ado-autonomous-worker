@@ -20,11 +20,12 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         int? timeoutSeconds = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
+        var resolvedFileName = CommandPathResolver.ResolveOrOriginal(fileName);
 
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
         {
-            FileName = fileName,
+            FileName = resolvedFileName,
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -107,7 +108,7 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         var stderr = stderrBuilder.ToString();
 
         var transcript = $$"""
-        Command: {{fileName}} {{string.Join(" ", arguments)}}
+        Command: {{resolvedFileName}} {{string.Join(" ", arguments)}}
         ExitCode: {{process.ExitCode}}
 
         STDOUT
@@ -127,7 +128,7 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
                 (int)stopwatch.Elapsed.TotalSeconds);
         }
 
-        return new CommandResult($"{fileName} {string.Join(" ", arguments)}", process.ExitCode, stdout, stderr);
+        return new CommandResult($"{resolvedFileName} {string.Join(" ", arguments)}", process.ExitCode, stdout, stderr);
     }
 
     public Task<CommandResult> RunPowerShellAsync(

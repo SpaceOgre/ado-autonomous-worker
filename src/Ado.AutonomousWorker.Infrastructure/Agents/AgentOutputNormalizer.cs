@@ -2,7 +2,7 @@ using System.Text.Json;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Agents;
 
 public static class AgentOutputNormalizer
 {

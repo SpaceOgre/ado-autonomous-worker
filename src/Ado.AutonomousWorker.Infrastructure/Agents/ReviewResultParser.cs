@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Ado.AutonomousWorker.Core.Models;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Agents;
 
 internal static class ReviewResultParser
 {

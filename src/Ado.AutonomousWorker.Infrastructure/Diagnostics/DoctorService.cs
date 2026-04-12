@@ -2,9 +2,11 @@ using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Services;
 using Ado.AutonomousWorker.Infrastructure.Execution;
+using Ado.AutonomousWorker.Infrastructure.Workspaces;
+using Ado.AutonomousWorker.Infrastructure.State;
 using Microsoft.Extensions.Options;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Diagnostics;
 
 public sealed class DoctorService(
     IAzureDevOpsClient azureDevOpsClient,
@@ -98,27 +100,8 @@ public sealed class DoctorService(
     {
         var defaultCommand = config.Provider == AgentProvider.Claude ? "claude" : "codex";
         var commandPath = string.IsNullOrWhiteSpace(config.CommandPath) ? defaultCommand : config.CommandPath;
-        var exists = File.Exists(commandPath) || CommandExistsOnPath(commandPath);
-        return new DoctorCheckResult(name, exists, commandPath);
-    }
-
-    private static bool CommandExistsOnPath(string command)
-    {
-        var path = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
-
-        foreach (var folder in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = Path.Combine(folder, command);
-            if (File.Exists(candidate) || File.Exists(candidate + ".exe") || File.Exists(candidate + ".cmd"))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        var resolvedPath = CommandPathResolver.ResolveOrOriginal(commandPath);
+        var exists = CommandPathResolver.Exists(commandPath);
+        return new DoctorCheckResult(name, exists, resolvedPath);
     }
 }

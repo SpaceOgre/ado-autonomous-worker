@@ -2,7 +2,7 @@ using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Agents;
 
 public sealed class AgentRunnerFactory(IServiceProvider serviceProvider) : IAgentRunnerFactory
 {

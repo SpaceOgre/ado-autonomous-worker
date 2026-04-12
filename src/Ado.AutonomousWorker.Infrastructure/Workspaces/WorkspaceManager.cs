@@ -7,7 +7,7 @@ using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Workspaces;
 
 public sealed partial class WorkspaceManager(
     IOptions<RepositoryOptions> repositoryOptions,

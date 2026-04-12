@@ -4,7 +4,7 @@ using Ado.AutonomousWorker.Core.Models;
 using Ado.AutonomousWorker.Core.Services;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.Agents;
 
 public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRunner
 {

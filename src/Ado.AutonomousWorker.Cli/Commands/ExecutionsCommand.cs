@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Cli.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -36,8 +37,8 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
             table.AddRow(
                 execution.ExecutionId,
                 execution.WorkItemId.ToString(),
-                execution.Kind.ToString(),
-                execution.Phase.ToString(),
+                CliStyle.QueueKind(execution.Kind),
+                CliStyle.Phase(execution.Phase),
                 execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
                 Markup.Escape(execution.Title));
         }

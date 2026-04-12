@@ -9,7 +9,7 @@ using Ado.AutonomousWorker.Core.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.AzureDevOps;
 
 public sealed class AzureDevOpsClient(
     HttpClient httpClient,

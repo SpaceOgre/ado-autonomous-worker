@@ -82,12 +82,7 @@ public sealed class TaskOrchestratorBehaviorTests : IDisposable
 
     private static async Task<string> InvokeApplyPromptTemplate(AgentRoleConfig config, string prompt, CancellationToken cancellationToken)
     {
-        var method = typeof(Ado.AutonomousWorker.Infrastructure.Services.TaskOrchestrator)
-            .GetMethod("ApplyPromptTemplateAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?? throw new InvalidOperationException("ApplyPromptTemplateAsync method not found via reflection.");
-
-        var task = (Task<string>)method.Invoke(null, [config, prompt, cancellationToken])!;
-        return await task;
+        return await Ado.AutonomousWorker.Infrastructure.Orchestration.PromptTemplateLoader.ApplyAsync(config, prompt, cancellationToken);
     }
 
     public void Dispose()

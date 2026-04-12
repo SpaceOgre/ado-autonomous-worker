@@ -1,4 +1,5 @@
-using Ado.AutonomousWorker.Infrastructure.Services;
+using Ado.AutonomousWorker.Cli.Services;
+using Ado.AutonomousWorker.Infrastructure.Diagnostics;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -15,8 +16,8 @@ public sealed class DoctorCommand(DoctorService doctorService) : AsyncCommand
         {
             table.AddRow(
                 result.Name,
-                result.Success ? "[green]OK[/]" : "[red]Fail[/]",
-                result.Detail);
+                CliStyle.DoctorStatus(result.Success),
+                Markup.Escape(result.Detail));
         }
 
         AnsiConsole.Write(table);

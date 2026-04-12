@@ -6,7 +6,7 @@ using Ado.AutonomousWorker.Core.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 
-namespace Ado.AutonomousWorker.Infrastructure.Services;
+namespace Ado.AutonomousWorker.Infrastructure.State;
 
 public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : IStateStore
 {

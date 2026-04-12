@@ -25,8 +25,21 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
         Func<CancellationToken, Task<string>> operation,
         CancellationToken cancellationToken)
     {
-        return RunAsync(
+        return RunForWorkItemAsync(
             $"Work item #{workItemId}",
+            workItemId,
+            operation,
+            cancellationToken);
+    }
+
+    public Task<string> RunForWorkItemAsync(
+        string title,
+        int workItemId,
+        Func<CancellationToken, Task<string>> operation,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            title,
             operation,
             async token =>
             {
@@ -143,8 +156,8 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
         var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
         table.AddRow("Execution", execution.ExecutionId);
         table.AddRow("Work Item", execution.WorkItemId.ToString());
-        table.AddRow("Kind", execution.Kind.ToString());
-        table.AddRow("Phase", FormatPhase(execution.Phase));
+        table.AddRow("Kind", CliStyle.QueueKind(execution.Kind));
+        table.AddRow("Phase", CliStyle.Phase(execution.Phase));
         table.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         table.AddRow("Title", Markup.Escape(execution.Title));
         return table;
@@ -173,7 +186,7 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
         {
             table.AddRow(
                 executionEvent.Timestamp.ToLocalTime().ToString("HH:mm:ss"),
-                FormatPhase(executionEvent.Phase),
+                CliStyle.Phase(executionEvent.Phase),
                 Markup.Escape(executionEvent.Message));
         }
 
@@ -211,8 +224,8 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
         foreach (var session in recentSessions)
         {
             table.AddRow(
-                session.Role.ToString(),
-                session.Provider.ToString(),
+                CliStyle.Role(session.Role),
+                CliStyle.Provider(session.Provider),
                 Markup.Escape(ShortenPath(session.WorkingDirectory)),
                 Markup.Escape(ShortenPath(session.TranscriptPath)));
         }
@@ -241,8 +254,8 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
                 .TakeLast(20)
                 .Select(chunk => chunk.Content));
 
-        table.AddRow("Role", latestChunk.Role.ToString());
-        table.AddRow("Provider", latestChunk.Provider.ToString());
+        table.AddRow("Role", CliStyle.Role(latestChunk.Role));
+        table.AddRow("Provider", CliStyle.Provider(latestChunk.Provider));
         table.AddRow("Workdir", Markup.Escape(ShortenPath(latestChunk.WorkingDirectory)));
         table.AddRow("Updated", latestChunk.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         table.AddRow("Excerpt", Markup.Escape(excerpt));
@@ -285,16 +298,4 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
         return Array.IndexOf(OrderedPhases, phase) < Array.IndexOf(OrderedPhases, currentPhase);
     }
 
-    private static string FormatPhase(TaskPhase phase)
-    {
-        var color = phase switch
-        {
-            TaskPhase.Completed => "green",
-            TaskPhase.Failed => "red",
-            TaskPhase.Skipped => "yellow",
-            _ => "deepskyblue1",
-        };
-
-        return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
-    }
 }
