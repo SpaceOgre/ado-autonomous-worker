@@ -197,6 +197,7 @@ public sealed partial class TaskOrchestrator(
             Directory.GetCurrentDirectory(),
             artifactDirectory,
             AgentOutputSchemas.Plan,
+            CreateOutputObserver(executionId),
             cancellationToken);
 
         await stateStore.SaveAgentSessionAsync(executionId, startResult.Session, cancellationToken);
@@ -242,6 +243,7 @@ public sealed partial class TaskOrchestrator(
             workspace.WorkingDirectory,
             Path.Combine(artifactDirectory, "code"),
             outputSchema: null,
+            CreateOutputObserver(executionId),
             cancellationToken);
 
         await stateStore.SaveAgentSessionAsync(executionId, codeStart.Session, cancellationToken);
@@ -254,6 +256,7 @@ public sealed partial class TaskOrchestrator(
             workspace.WorkingDirectory,
             Path.Combine(artifactDirectory, "review"),
             AgentOutputSchemas.Review,
+            CreateOutputObserver(executionId),
             cancellationToken);
 
         await stateStore.SaveReviewResultAsync(executionId, review, cancellationToken);
@@ -266,6 +269,7 @@ public sealed partial class TaskOrchestrator(
                 agentOptions.Value.Code,
                 BuildReviewResumePrompt(acceptedFindings),
                 Path.Combine(artifactDirectory, "resume"),
+                CreateOutputObserver(executionId),
                 cancellationToken);
         }
         else
@@ -345,6 +349,7 @@ public sealed partial class TaskOrchestrator(
             Path.Combine(artifactDirectory, artifactName),
             environmentVariables: null,
             activityName: null,
+            outputCallback: null,
             cancellationToken);
 
         if (!result.Success)
@@ -362,6 +367,7 @@ public sealed partial class TaskOrchestrator(
             Path.Combine(artifactDirectory, artifactName),
             environmentVariables: null,
             activityName: null,
+            outputCallback: null,
             cancellationToken);
 
         if (!result.Success &&
@@ -390,6 +396,11 @@ public sealed partial class TaskOrchestrator(
         Directory.CreateDirectory(storageOptions.Value.LogRoot);
         var path = Path.Combine(storageOptions.Value.LogRoot, $"{executionId}.log.md");
         await File.AppendAllTextAsync(path, $"- {DateTimeOffset.UtcNow:O} [{phase}] {message}{Environment.NewLine}", cancellationToken);
+    }
+
+    private Func<AgentOutputChunk, CancellationToken, Task> CreateOutputObserver(string executionId)
+    {
+        return (chunk, cancellationToken) => stateStore.AppendAgentOutputChunkAsync(executionId, chunk, cancellationToken);
     }
 
     private static PlanResult? ParsePlan(string? payload)

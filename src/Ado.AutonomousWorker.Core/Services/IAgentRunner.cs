@@ -15,6 +15,7 @@ public interface IAgentRunner
         string workingDirectory,
         string artifactDirectory,
         string? outputSchema,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken);
 
     Task<AgentRunResult> ResumeSessionAsync(
@@ -22,6 +23,7 @@ public interface IAgentRunner
         AgentRoleConfig config,
         string prompt,
         string artifactDirectory,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken);
 
     Task<ReviewResult> RunReviewAsync(
@@ -30,5 +32,6 @@ public interface IAgentRunner
         string workingDirectory,
         string artifactDirectory,
         string? outputSchema,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken);
 }

@@ -61,6 +61,18 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
             risks_json TEXT NOT NULL,
             summary TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS agent_output_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            provider INTEGER NOT NULL,
+            role INTEGER NOT NULL,
+            workdir TEXT NOT NULL,
+            stream INTEGER NOT NULL,
+            sequence INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            content TEXT NOT NULL
+        );
         """;
 
         await using var command = connection.CreateCommand();
@@ -255,6 +267,75 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         return results;
     }
 
+    public async Task AppendAgentOutputChunkAsync(string executionId, AgentOutputChunk chunk, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+            INSERT INTO agent_output_chunks
+            (execution_id, session_id, provider, role, workdir, stream, sequence, timestamp, content)
+            VALUES ($executionId, $sessionId, $provider, $role, $workdir, $stream, $sequence, $timestamp, $content);
+            """;
+            command.Parameters.AddWithValue("$executionId", executionId);
+            command.Parameters.AddWithValue("$sessionId", chunk.SessionId);
+            command.Parameters.AddWithValue("$provider", (int)chunk.Provider);
+            command.Parameters.AddWithValue("$role", (int)chunk.Role);
+            command.Parameters.AddWithValue("$workdir", chunk.WorkingDirectory);
+            command.Parameters.AddWithValue("$stream", (int)chunk.Stream);
+            command.Parameters.AddWithValue("$sequence", chunk.Sequence);
+            command.Parameters.AddWithValue("$timestamp", chunk.Timestamp.ToString("O"));
+            command.Parameters.AddWithValue("$content", Truncate(chunk.Content, 500));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var trimCommand = connection.CreateCommand();
+        trimCommand.CommandText = """
+        DELETE FROM agent_output_chunks
+        WHERE id IN (
+            SELECT id
+            FROM agent_output_chunks
+            WHERE execution_id = $executionId
+              AND session_id = $sessionId
+            ORDER BY sequence DESC
+            LIMIT -1 OFFSET 200
+        );
+        """;
+        trimCommand.Parameters.AddWithValue("$executionId", executionId);
+        trimCommand.Parameters.AddWithValue("$sessionId", chunk.SessionId);
+        await trimCommand.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(string executionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        SELECT session_id, provider, role, workdir, stream, sequence, timestamp, content
+        FROM agent_output_chunks
+        WHERE execution_id = $executionId
+        ORDER BY timestamp, id;
+        """;
+        command.Parameters.AddWithValue("$executionId", executionId);
+
+        var results = new List<AgentOutputChunk>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new AgentOutputChunk(
+                reader.GetString(0),
+                (AgentProvider)reader.GetInt32(1),
+                (AgentRole)reader.GetInt32(2),
+                reader.GetString(3),
+                (AgentOutputStream)reader.GetInt32(4),
+                reader.GetInt64(5),
+                DateTimeOffset.Parse(reader.GetString(6)),
+                reader.GetString(7)));
+        }
+
+        return results;
+    }
+
     public async Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -344,5 +425,12 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
     private static IReadOnlyList<string> DeserializeList(string json)
     {
         return JsonSerializer.Deserialize<string[]>(json) ?? [];
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        return value.Length <= maxLength
+            ? value
+            : value[..maxLength];
     }
 }

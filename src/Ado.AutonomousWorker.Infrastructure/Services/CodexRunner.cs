@@ -18,6 +18,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         string workingDirectory,
         string artifactDirectory,
         string? outputSchema,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(artifactDirectory);
@@ -25,6 +26,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         var transcriptPath = Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex.jsonl.log");
         var outputPath = Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex.last.txt");
         var schemaPath = outputSchema is null ? null : Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex-schema.json");
+        var session = new AgentSessionHandle(sessionId, Provider, role, workingDirectory, transcriptPath, ProviderSessionId: null);
 
         if (schemaPath is not null)
         {
@@ -58,11 +60,12 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             transcriptPath,
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
             activityName: $"Codex {role}",
+            outputCallback: CreateOutputObserver(session, outputCallback),
             cancellationToken);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
         var providerSessionId = TryReadCodexSessionId(commandResult.StandardOutput);
-        var session = new AgentSessionHandle(sessionId, Provider, role, workingDirectory, transcriptPath, providerSessionId);
+        session = session with { ProviderSessionId = providerSessionId };
         var result = new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload);
         return new AgentSessionStartResult(session, result);
     }
@@ -72,6 +75,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         AgentRoleConfig config,
         string prompt,
         string artifactDirectory,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(artifactDirectory);
@@ -101,6 +105,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             transcriptPath,
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
             activityName: $"Codex {session.Role} resume",
+            outputCallback: CreateOutputObserver(session, outputCallback),
             cancellationToken);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
@@ -113,6 +118,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         string workingDirectory,
         string artifactDirectory,
         string? outputSchema,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         var startResult = await StartSessionAsync(
@@ -122,6 +128,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             workingDirectory,
             artifactDirectory,
             outputSchema,
+            outputCallback,
             cancellationToken);
 
         return ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath);
@@ -184,5 +191,35 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         }
 
         return environment;
+    }
+
+    private static Func<ProcessOutputLine, CancellationToken, Task>? CreateOutputObserver(
+        AgentSessionHandle session,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback)
+    {
+        if (outputCallback is null)
+        {
+            return null;
+        }
+
+        long sequence = 0;
+        return async (line, cancellationToken) =>
+        {
+            var chunks = AgentOutputNormalizer.NormalizeCodexLine(line);
+            foreach (var chunk in chunks)
+            {
+                await outputCallback(
+                    new AgentOutputChunk(
+                        session.SessionId,
+                        session.Provider,
+                        session.Role,
+                        session.WorkingDirectory,
+                        line.Stream,
+                        Interlocked.Increment(ref sequence),
+                        DateTimeOffset.UtcNow,
+                        chunk),
+                    cancellationToken);
+            }
+        };
     }
 }

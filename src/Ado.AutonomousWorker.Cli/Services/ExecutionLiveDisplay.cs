@@ -98,6 +98,7 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
 
         var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
         var sessions = await stateStore.GetAgentSessionsAsync(execution.ExecutionId, cancellationToken);
+        var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
         var plan = await stateStore.GetPlanAsync(execution.ExecutionId, cancellationToken);
 
         var body = new Rows(
@@ -111,6 +112,8 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
             CreatePlanTable(plan),
             new Rule("Agent Sessions"),
             CreateSessionsTable(sessions),
+            new Rule("Agent Output"),
+            CreateAgentOutputTable(agentOutput),
         ]);
 
         return new Panel(body)
@@ -214,6 +217,35 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
                 Markup.Escape(ShortenPath(session.TranscriptPath)));
         }
 
+        return table;
+    }
+
+    private static Table CreateAgentOutputTable(IReadOnlyList<AgentOutputChunk> chunks)
+    {
+        var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
+        if (chunks.Count == 0)
+        {
+            table.AddRow("Output", "[grey]Waiting for agent output...[/]");
+            return table;
+        }
+
+        var activeSession = chunks
+            .GroupBy(chunk => chunk.SessionId)
+            .OrderByDescending(group => group.Max(item => item.Timestamp))
+            .First();
+
+        var latestChunk = activeSession.Last();
+        var excerpt = string.Join(
+            Environment.NewLine,
+            activeSession
+                .TakeLast(20)
+                .Select(chunk => chunk.Content));
+
+        table.AddRow("Role", latestChunk.Role.ToString());
+        table.AddRow("Provider", latestChunk.Provider.ToString());
+        table.AddRow("Workdir", Markup.Escape(ShortenPath(latestChunk.WorkingDirectory)));
+        table.AddRow("Updated", latestChunk.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+        table.AddRow("Excerpt", Markup.Escape(excerpt));
         return table;
     }
 

@@ -17,11 +17,13 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         string workingDirectory,
         string artifactDirectory,
         string? outputSchema,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(artifactDirectory);
         var sessionId = Guid.NewGuid().ToString();
         var transcriptPath = Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-claude.log");
+        var session = new AgentSessionHandle(sessionId, Provider, role, workingDirectory, transcriptPath, sessionId);
 
         var args = BuildArguments(config, prompt, outputSchema, sessionId, isResume: false);
         var commandResult = await commandRunner.RunAsync(
@@ -31,10 +33,10 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             transcriptPath,
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
             activityName: $"Claude {role}",
+            outputCallback: CreateOutputObserver(session, outputSchema is not null, outputCallback),
             cancellationToken);
 
         var payload = commandResult.StandardOutput;
-        var session = new AgentSessionHandle(sessionId, Provider, role, workingDirectory, transcriptPath, sessionId);
         var result = new AgentRunResult(commandResult.Success, payload.Trim(), transcriptPath, commandResult.StandardOutput, outputSchema is null ? null : payload);
         return new AgentSessionStartResult(session, result);
     }
@@ -44,6 +46,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         AgentRoleConfig config,
         string prompt,
         string artifactDirectory,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(artifactDirectory);
@@ -57,6 +60,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             transcriptPath,
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
             activityName: $"Claude {session.Role} resume",
+            outputCallback: CreateOutputObserver(session, structuredOutput: false, outputCallback),
             cancellationToken);
 
         return new AgentRunResult(commandResult.Success, commandResult.StandardOutput.Trim(), transcriptPath, commandResult.StandardOutput, null);
@@ -68,6 +72,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         string workingDirectory,
         string artifactDirectory,
         string? outputSchema,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         var startResult = await StartSessionAsync(
@@ -77,6 +82,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             workingDirectory,
             artifactDirectory,
             outputSchema,
+            outputCallback,
             cancellationToken);
 
         return ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath);
@@ -154,5 +160,36 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         }
 
         return environment;
+    }
+
+    private static Func<ProcessOutputLine, CancellationToken, Task>? CreateOutputObserver(
+        AgentSessionHandle session,
+        bool structuredOutput,
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback)
+    {
+        if (outputCallback is null)
+        {
+            return null;
+        }
+
+        long sequence = 0;
+        return async (line, cancellationToken) =>
+        {
+            var chunks = AgentOutputNormalizer.NormalizeClaudeLine(line, structuredOutput);
+            foreach (var chunk in chunks)
+            {
+                await outputCallback(
+                    new AgentOutputChunk(
+                        session.SessionId,
+                        session.Provider,
+                        session.Role,
+                        session.WorkingDirectory,
+                        line.Stream,
+                        Interlocked.Increment(ref sequence),
+                        DateTimeOffset.UtcNow,
+                        chunk),
+                    cancellationToken);
+            }
+        };
     }
 }

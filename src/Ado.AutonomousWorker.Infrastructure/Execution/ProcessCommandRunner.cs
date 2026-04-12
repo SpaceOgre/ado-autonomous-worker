@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -13,6 +15,7 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         string artifactPath,
         IReadOnlyDictionary<string, string?>? environmentVariables,
         string? activityName,
+        Func<ProcessOutputLine, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
@@ -53,8 +56,10 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         }
 
         process.Start();
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+        var stdoutTask = PumpOutputAsync(process.StandardOutput, AgentOutputStream.Stdout, stdoutBuilder, outputCallback, cancellationToken);
+        var stderrTask = PumpOutputAsync(process.StandardError, AgentOutputStream.Stderr, stderrBuilder, outputCallback, cancellationToken);
         var waitForExitTask = process.WaitForExitAsync(cancellationToken);
         var heartbeatInterval = TimeSpan.FromSeconds(15);
 
@@ -68,8 +73,9 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         }
 
         await waitForExitTask;
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
+        await Task.WhenAll(stdoutTask, stderrTask);
+        var stdout = stdoutBuilder.ToString();
+        var stderr = stderrBuilder.ToString();
 
         var transcript = $$"""
         Command: {{fileName}} {{string.Join(" ", arguments)}}
@@ -108,6 +114,30 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             artifactPath,
             environmentVariables: null,
             activityName: $"PowerShell: {script}",
+            outputCallback: null,
             cancellationToken);
+    }
+
+    private static async Task PumpOutputAsync(
+        StreamReader reader,
+        AgentOutputStream stream,
+        StringBuilder builder,
+        Func<ProcessOutputLine, CancellationToken, Task>? outputCallback,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var line = await reader.ReadLineAsync().WaitAsync(cancellationToken);
+            if (line is null)
+            {
+                break;
+            }
+
+            builder.AppendLine(line);
+            if (outputCallback is not null)
+            {
+                await outputCallback(new ProcessOutputLine(stream, line), cancellationToken);
+            }
+        }
     }
 }

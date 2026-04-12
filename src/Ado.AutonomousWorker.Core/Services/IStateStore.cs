@@ -25,6 +25,10 @@ public interface IStateStore
 
     Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken);
 
+    Task AppendAgentOutputChunkAsync(string executionId, AgentOutputChunk chunk, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(string executionId, CancellationToken cancellationToken);
+
     Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken);
 
     Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken);

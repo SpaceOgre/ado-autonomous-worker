@@ -61,6 +61,11 @@ public sealed class CliCompletionServiceTests
         public Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<ExecutionEventRecord>>([]);
 
+        public Task AppendAgentOutputChunkAsync(string executionId, AgentOutputChunk chunk, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(string executionId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AgentOutputChunk>>([]);
+
         public Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken)

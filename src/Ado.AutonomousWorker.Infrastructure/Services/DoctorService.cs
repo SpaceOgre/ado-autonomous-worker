@@ -70,6 +70,7 @@ public sealed class DoctorService(
             Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-fetch.log"),
             environmentVariables: null,
             activityName: null,
+            outputCallback: null,
             cancellationToken);
 
         if (!fetchResult.Success)
@@ -84,6 +85,7 @@ public sealed class DoctorService(
             Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-branch.log"),
             environmentVariables: null,
             activityName: null,
+            outputCallback: null,
             cancellationToken);
 
         return verifyResult.Success

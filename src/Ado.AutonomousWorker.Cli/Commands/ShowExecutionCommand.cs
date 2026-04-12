@@ -42,6 +42,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
         var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
         var sessions = await stateStore.GetAgentSessionsAsync(execution.ExecutionId, cancellationToken);
+        var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
         var plan = await stateStore.GetPlanAsync(execution.ExecutionId, cancellationToken);
 
         var summary = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
@@ -102,6 +103,27 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
             AnsiConsole.Write(new Rule("Agent Sessions"));
             AnsiConsole.Write(sessionsTable);
+            AnsiConsole.WriteLine();
+        }
+
+        if (agentOutput.Count > 0)
+        {
+            var outputTable = new Table().Border(TableBorder.Rounded).AddColumns("Session", "Role", "Provider", "Updated", "Excerpt");
+            foreach (var sessionOutput in agentOutput
+                         .GroupBy(chunk => chunk.SessionId)
+                         .OrderByDescending(group => group.Max(item => item.Timestamp)))
+            {
+                var latest = sessionOutput.Last();
+                outputTable.AddRow(
+                    Markup.Escape(sessionOutput.Key),
+                    latest.Role.ToString(),
+                    latest.Provider.ToString(),
+                    latest.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                    Markup.Escape(string.Join(Environment.NewLine, sessionOutput.TakeLast(20).Select(chunk => chunk.Content))));
+            }
+
+            AnsiConsole.Write(new Rule("Agent Output"));
+            AnsiConsole.Write(outputTable);
         }
 
         return 0;

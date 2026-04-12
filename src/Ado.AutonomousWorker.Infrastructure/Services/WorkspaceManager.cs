@@ -124,6 +124,7 @@ public sealed partial class WorkspaceManager(
             Path.Combine(artifactFolder, $"{context.RepoKind.ToString().ToLowerInvariant()}-cleanup.log"),
             environmentVariables: null,
             activityName: null,
+            outputCallback: null,
             cancellationToken);
     }
 
@@ -140,6 +141,7 @@ public sealed partial class WorkspaceManager(
             artifactPath,
             environmentVariables: null,
             activityName: null,
+            outputCallback: null,
             cancellationToken);
     }
 
