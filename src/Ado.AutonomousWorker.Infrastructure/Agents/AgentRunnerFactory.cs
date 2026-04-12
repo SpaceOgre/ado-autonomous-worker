@@ -1,5 +1,5 @@
-using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Abstractions;
+using Ado.AutonomousWorker.Core.Enums;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Ado.AutonomousWorker.Infrastructure.Agents;

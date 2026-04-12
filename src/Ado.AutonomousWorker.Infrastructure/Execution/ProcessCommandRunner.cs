@@ -16,7 +16,8 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         IReadOnlyDictionary<string, string?>? environmentVariables,
         string? activityName,
         Func<ProcessOutputLine, CancellationToken, Task>? outputCallback,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? timeoutSeconds = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
         var resolvedFileName = CommandPathResolver.ResolveOrOriginal(fileName);
@@ -50,6 +51,16 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             }
         }
 
+        using var timeoutCts = timeoutSeconds.HasValue
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : null;
+
+        if (timeoutSeconds.HasValue && timeoutCts is not null)
+        {
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds.Value));
+        }
+
+        var effectiveCancellationToken = timeoutCts?.Token ?? cancellationToken;
         var stopwatch = Stopwatch.StartNew();
         if (!string.IsNullOrWhiteSpace(activityName))
         {
@@ -59,21 +70,38 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         process.Start();
         var stdoutBuilder = new StringBuilder();
         var stderrBuilder = new StringBuilder();
-        var stdoutTask = PumpOutputAsync(process.StandardOutput, AgentOutputStream.Stdout, stdoutBuilder, outputCallback, cancellationToken);
-        var stderrTask = PumpOutputAsync(process.StandardError, AgentOutputStream.Stderr, stderrBuilder, outputCallback, cancellationToken);
-        var waitForExitTask = process.WaitForExitAsync(cancellationToken);
+        var stdoutTask = PumpOutputAsync(process.StandardOutput, AgentOutputStream.Stdout, stdoutBuilder, outputCallback, effectiveCancellationToken);
+        var stderrTask = PumpOutputAsync(process.StandardError, AgentOutputStream.Stderr, stderrBuilder, outputCallback, effectiveCancellationToken);
+        var waitForExitTask = process.WaitForExitAsync(effectiveCancellationToken);
         var heartbeatInterval = TimeSpan.FromSeconds(15);
 
         while (!waitForExitTask.IsCompleted)
         {
-            await Task.WhenAny(waitForExitTask, Task.Delay(heartbeatInterval, cancellationToken));
+            await Task.WhenAny(waitForExitTask, Task.Delay(heartbeatInterval, effectiveCancellationToken));
             if (!waitForExitTask.IsCompleted && !string.IsNullOrWhiteSpace(activityName))
             {
                 logger.LogInformation("{Activity} still running after {ElapsedSeconds}s.", activityName, (int)stopwatch.Elapsed.TotalSeconds);
             }
         }
 
-        await waitForExitTask;
+        try
+        {
+            await waitForExitTask;
+        }
+        catch (OperationCanceledException) when (IsTimeoutCancellation(timeoutCts, cancellationToken))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (Exception killException)
+            {
+                logger.LogWarning(killException, "Failed to terminate timed out process for {Activity}.", activityName ?? fileName);
+            }
+
+            throw new TimeoutException($"'{activityName ?? fileName}' exceeded the configured timeout of {timeoutSeconds} seconds.");
+        }
+
         await Task.WhenAll(stdoutTask, stderrTask);
         var stdout = stdoutBuilder.ToString();
         var stderr = stderrBuilder.ToString();
@@ -117,6 +145,13 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             activityName: $"PowerShell: {script}",
             outputCallback: null,
             cancellationToken);
+    }
+
+    private static bool IsTimeoutCancellation(CancellationTokenSource? timeoutCts, CancellationToken outerCancellationToken)
+    {
+        return timeoutCts is not null &&
+               timeoutCts.IsCancellationRequested &&
+               !outerCancellationToken.IsCancellationRequested;
     }
 
     private static async Task PumpOutputAsync(

@@ -1,8 +1,7 @@
-using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Abstractions;
+using Ado.AutonomousWorker.Core.Configuration;
+using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Infrastructure.Execution;
-using Ado.AutonomousWorker.Infrastructure.Workspaces;
-using Ado.AutonomousWorker.Infrastructure.State;
 using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Diagnostics;
@@ -29,9 +28,9 @@ public sealed class DoctorService(
         await workspaceManager.PrepareAsync(cancellationToken);
 
         checks.Add(new DoctorCheckResult("Storage", true, storage.DataRoot));
-        checks.Add(CheckCommand("Plan Agent", agentOptions.Value.Plan.CommandPath));
-        checks.Add(CheckCommand("Code Agent", agentOptions.Value.Code.CommandPath));
-        checks.Add(CheckCommand("Review Agent", agentOptions.Value.Review.CommandPath));
+        checks.Add(CheckAgentCommand("Plan Agent", agentOptions.Value.Plan));
+        checks.Add(CheckAgentCommand("Code Agent", agentOptions.Value.Code));
+        checks.Add(CheckAgentCommand("Review Agent", agentOptions.Value.Review));
 
         checks.Add(new DoctorCheckResult(
             "Backend Repo",
@@ -95,13 +94,10 @@ public sealed class DoctorService(
             : new DoctorCheckResult(name, false, $"Missing remote branch origin/{profile.MainBranch}");
     }
 
-    private static DoctorCheckResult CheckCommand(string name, string commandPath)
+    private static DoctorCheckResult CheckAgentCommand(string name, AgentRoleConfig config)
     {
-        if (string.IsNullOrWhiteSpace(commandPath))
-        {
-            return new DoctorCheckResult(name, false, "No command path configured");
-        }
-
+        var defaultCommand = config.Provider == AgentProvider.Claude ? "claude" : "codex";
+        var commandPath = string.IsNullOrWhiteSpace(config.CommandPath) ? defaultCommand : config.CommandPath;
         var resolvedPath = CommandPathResolver.ResolveOrOriginal(commandPath);
         var exists = CommandPathResolver.Exists(commandPath);
         return new DoctorCheckResult(name, exists, resolvedPath);

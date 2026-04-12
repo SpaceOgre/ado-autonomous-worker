@@ -1,7 +1,7 @@
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 
 namespace Ado.AutonomousWorker.Infrastructure.Agents;
@@ -34,7 +34,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
             activityName: $"Claude {role}",
             outputCallback: CreateOutputObserver(session, outputSchema is not null, outputCallback),
-            cancellationToken);
+            cancellationToken,
+            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var payload = commandResult.StandardOutput;
         var result = new AgentRunResult(commandResult.Success, payload.Trim(), transcriptPath, commandResult.StandardOutput, outputSchema is null ? null : payload);
@@ -61,7 +62,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
             activityName: $"Claude {session.Role} resume",
             outputCallback: CreateOutputObserver(session, structuredOutput: false, outputCallback),
-            cancellationToken);
+            cancellationToken,
+            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         return new AgentRunResult(commandResult.Success, commandResult.StandardOutput.Trim(), transcriptPath, commandResult.StandardOutput, null);
     }

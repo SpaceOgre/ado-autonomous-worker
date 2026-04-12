@@ -79,7 +79,7 @@ app.Configure(config =>
     config.AddCommand<DoctorCommand>("doctor").WithDescription("Verify configuration, repos, CLI tools, and Azure DevOps access.");
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
-    config.AddCommand<RunCommand>("run").WithDescription("Process the current queue.");
+    config.AddCommand<RunCommand>("run").WithDescription("Process the current queue and stop on the first failure.");
     config.AddCommand<VersionCommand>("version").WithDescription("Show the installed ado-worker version and runtime information.");
     config.AddBranch("completion", completion =>
     {

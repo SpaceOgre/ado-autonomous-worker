@@ -1,11 +1,9 @@
 using System.Text.RegularExpressions;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Abstractions;
-using Ado.AutonomousWorker.Infrastructure.Agents;
 using Ado.AutonomousWorker.Infrastructure.Execution;
-using Ado.AutonomousWorker.Infrastructure.Workspaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -22,6 +20,7 @@ internal sealed partial class RepositoryWorkflowService(
     IOptions<AgentOptions> agentOptions,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
+    IOptions<WorkerOptions> workerOptions,
     ILogger<RepositoryWorkflowService> logger)
 {
     public async Task<IReadOnlyList<RepositoryExecution>> PrepareAsync(
@@ -76,7 +75,10 @@ internal sealed partial class RepositoryWorkflowService(
         var codeStart = await codeRunner.StartSessionAsync(
             AgentRole.Code,
             agentOptions.Value.Code,
-            BuildCodePrompt(parent, repositoryExecutions, plan, agentWorkingDirectory),
+            await PromptTemplateLoader.ApplyAsync(
+                agentOptions.Value.Code,
+                BuildCodePrompt(parent, repositoryExecutions, plan, agentWorkingDirectory),
+                cancellationToken),
             agentWorkingDirectory,
             Path.Combine(implementationArtifactRoot, "code"),
             outputSchema: null,
@@ -89,7 +91,10 @@ internal sealed partial class RepositoryWorkflowService(
         var reviewRunner = agentRunnerFactory.GetRunner(agentOptions.Value.Review.Provider);
         var review = await reviewRunner.RunReviewAsync(
             agentOptions.Value.Review,
-            BuildReviewPrompt(parent, repositoryExecutions, agentWorkingDirectory),
+            await PromptTemplateLoader.ApplyAsync(
+                agentOptions.Value.Review,
+                BuildReviewPrompt(parent, repositoryExecutions, agentWorkingDirectory),
+                cancellationToken),
             agentWorkingDirectory,
             Path.Combine(implementationArtifactRoot, "review"),
             AgentOutputSchemas.Review,
@@ -178,6 +183,12 @@ internal sealed partial class RepositoryWorkflowService(
             executionId,
             pullRequest.PullRequestId,
             repoKind);
+
+        if (workerOptions.Value.CleanupWorktreesAfterSuccess)
+        {
+            await workspaceManager.CleanupAsync(workspace, cancellationToken);
+            logger.LogInformation("Execution {ExecutionId}: cleaned up worktree for {RepoKind}.", executionId, repoKind);
+        }
 
         return pullRequest;
     }
@@ -281,6 +292,12 @@ internal sealed partial class RepositoryWorkflowService(
         Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Agent working directory: {{agentWorkingDirectory}}
         Plan summary: {{plan.Summary}}
+
+        Description:
+        {{parent.Description}}
+
+        Acceptance Criteria:
+        {{parent.AcceptanceCriteria}}
 
         Repositories:
         {{repositorySummary}}

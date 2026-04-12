@@ -1,8 +1,8 @@
 using System.Text.Json;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 
 namespace Ado.AutonomousWorker.Infrastructure.Agents;
@@ -61,7 +61,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
             activityName: $"Codex {role}",
             outputCallback: CreateOutputObserver(session, outputCallback),
-            cancellationToken);
+            cancellationToken,
+            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
         var providerSessionId = TryReadCodexSessionId(commandResult.StandardOutput);
@@ -106,7 +107,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
             activityName: $"Codex {session.Role} resume",
             outputCallback: CreateOutputObserver(session, outputCallback),
-            cancellationToken);
+            cancellationToken,
+            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
         return new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload);

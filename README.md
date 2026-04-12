@@ -31,6 +31,8 @@ ado-worker task resume --execution-id <execution-id>
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
 
+`ado-worker run` is intentionally fail-fast. If one queued work item fails, the command stops immediately so you can inspect and fix the issue before spending more agent tokens on the remaining backlog items.
+
 ## Configuration
 
 Base configuration lives in:

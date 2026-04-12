@@ -1,9 +1,8 @@
 using System.Text.Json;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Abstractions;
-using Ado.AutonomousWorker.Infrastructure.Agents;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -25,7 +24,7 @@ internal sealed class TaskPlanningService(
         var runner = agentRunnerFactory.GetRunner(config.Provider);
         var artifactDirectory = Path.Combine(storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId), "plan");
 
-        var prompt = $$"""
+        var rawPrompt = $$"""
         Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
 
         Work item: #{{workItem.WorkItemId}} {{FormatWorkItemLabel(workItem.WorkItemType)}} {{workItem.Title}}
@@ -40,6 +39,8 @@ internal sealed class TaskPlanningService(
         Acceptance Criteria:
         {{workItem.AcceptanceCriteria}}
         """;
+
+        var prompt = await PromptTemplateLoader.ApplyAsync(config, rawPrompt, cancellationToken);
 
         var startResult = await runner.StartSessionAsync(
             AgentRole.Plan,

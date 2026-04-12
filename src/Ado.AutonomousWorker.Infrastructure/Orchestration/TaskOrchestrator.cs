@@ -1,8 +1,7 @@
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Abstractions;
-using Ado.AutonomousWorker.Infrastructure.Workspaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -84,6 +83,8 @@ internal sealed class TaskOrchestrator(
 
     public async Task ResumeTaskAsync(string executionId, CancellationToken cancellationToken)
     {
+        await PrepareRuntimeAsync(cancellationToken);
+
         var execution = await stateStore.GetExecutionAsync(executionId, cancellationToken)
             ?? throw new InvalidOperationException($"Execution '{executionId}' was not found.");
 

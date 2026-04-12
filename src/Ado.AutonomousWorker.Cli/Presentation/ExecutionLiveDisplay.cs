@@ -1,6 +1,6 @@
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Abstractions;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 

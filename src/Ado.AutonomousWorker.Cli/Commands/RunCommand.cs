@@ -1,6 +1,6 @@
 using Ado.AutonomousWorker.Cli.Presentation;
-using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Abstractions;
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Infrastructure.Queue;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
