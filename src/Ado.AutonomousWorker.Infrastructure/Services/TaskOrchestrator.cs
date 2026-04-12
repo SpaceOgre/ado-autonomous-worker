@@ -79,7 +79,7 @@ public sealed partial class TaskOrchestrator(
             executionId,
             workItem.WorkItemId,
             workItem.Title);
-        await RunInternalAsync(executionId, workItem, cancellationToken);
+        await RunInternalAsync(executionId, workItem, isExplicitResume: false, cancellationToken);
         return executionId;
     }
 
@@ -95,14 +95,15 @@ public sealed partial class TaskOrchestrator(
             executionId,
             execution.WorkItemId,
             execution.Phase);
-        await RunInternalAsync(executionId, workItem, cancellationToken);
+        await RunInternalAsync(executionId, workItem, isExplicitResume: true, cancellationToken);
     }
 
-    private async Task RunInternalAsync(string executionId, WorkItemDetails workItem, CancellationToken cancellationToken)
+    private async Task RunInternalAsync(string executionId, WorkItemDetails workItem, bool isExplicitResume, CancellationToken cancellationToken)
     {
         try
         {
-            if (!rulesEngine.IsEligible(workItem, azureDevOpsOptions.Value.DefaultAssignee))
+            if (!isExplicitResume &&
+                !rulesEngine.IsEligible(workItem, azureDevOpsOptions.Value.DefaultAssignee))
             {
                 await UpdatePhaseAsync(executionId, TaskPhase.Skipped, "Work item is no longer eligible for automation.", cancellationToken);
                 return;

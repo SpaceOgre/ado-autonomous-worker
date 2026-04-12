@@ -32,6 +32,17 @@ public sealed class CliCompletionServiceTests
         Assert.Equal(["exec-123", "exec-456"], suggestions);
     }
 
+    [Fact]
+    public async Task GetSuggestionsAsync_SuggestsLastForTaskResume()
+    {
+        var service = new CliCompletionService(new FakeStateStore());
+
+        var suggestions = await service.GetSuggestionsAsync("--", ["task", "resume"], CancellationToken.None);
+
+        Assert.Contains("--execution-id", suggestions);
+        Assert.Contains("--last", suggestions);
+    }
+
     private sealed class FakeStateStore(IReadOnlyList<TaskExecutionRecord>? executions = null) : IStateStore
     {
         private readonly IReadOnlyList<TaskExecutionRecord> _executions = executions ?? [];

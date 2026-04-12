@@ -97,7 +97,7 @@ public sealed class CliCompletionService(IStateStore stateStore)
         {
             1 => ["resume", "run"],
             2 when tokens[1] == "run" => ["--id"],
-            2 when tokens[1] == "resume" => ["--execution-id"],
+            2 when tokens[1] == "resume" => ["--execution-id", "--last"],
             _ => [],
         };
     }
