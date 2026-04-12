@@ -1,4 +1,5 @@
 using Ado.AutonomousWorker.Infrastructure.Services;
+using Ado.AutonomousWorker.Cli.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -15,11 +16,11 @@ public sealed class QueueCommand(QueueInspector queueInspector) : AsyncCommand
         {
             table.AddRow(
                 item.WorkItemId.ToString(),
-                item.WorkItemType.ToString(),
-                item.Title,
-                item.Kind.ToString(),
-                item.State,
-                item.AssignedTo ?? string.Empty,
+                CliStyle.WorkItemTypeLabel(item.WorkItemType),
+                Markup.Escape(item.Title),
+                CliStyle.QueueKind(item.Kind),
+                CliStyle.WorkItemState(item.State),
+                string.IsNullOrWhiteSpace(item.AssignedTo) ? "[grey]-[/]" : Markup.Escape(item.AssignedTo),
                 FormatStackRank(item.StackRank),
                 FormatPriority(item.Priority));
         }
@@ -37,6 +38,6 @@ public sealed class QueueCommand(QueueInspector queueInspector) : AsyncCommand
 
     private static string FormatPriority(int? priority)
     {
-        return priority?.ToString() ?? "-";
+        return CliStyle.Priority(priority);
     }
 }

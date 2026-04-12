@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Cli.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -49,8 +50,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         summary.AddRow("Execution Id", execution.ExecutionId);
         summary.AddRow("Work Item", execution.WorkItemId.ToString());
         summary.AddRow("Title", Markup.Escape(execution.Title));
-        summary.AddRow("Kind", execution.Kind.ToString());
-        summary.AddRow("Phase", execution.Phase.ToString());
+        summary.AddRow("Kind", CliStyle.QueueKind(execution.Kind));
+        summary.AddRow("Phase", CliStyle.Phase(execution.Phase));
         summary.AddRow("Created", execution.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         summary.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
 
@@ -62,7 +63,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         {
             eventsTable.AddRow(
                 executionEvent.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
-                executionEvent.Phase.ToString(),
+                CliStyle.Phase(executionEvent.Phase),
                 Markup.Escape(executionEvent.Message));
         }
 
@@ -94,8 +95,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             foreach (var session in sessions)
             {
                 sessionsTable.AddRow(
-                    session.Role.ToString(),
-                    session.Provider.ToString(),
+                    CliStyle.Role(session.Role),
+                    CliStyle.Provider(session.Provider),
                     session.SessionId,
                     Markup.Escape(session.WorkingDirectory),
                     Markup.Escape(session.TranscriptPath));
@@ -116,8 +117,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                 var latest = sessionOutput.Last();
                 outputTable.AddRow(
                     Markup.Escape(sessionOutput.Key),
-                    latest.Role.ToString(),
-                    latest.Provider.ToString(),
+                    CliStyle.Role(latest.Role),
+                    CliStyle.Provider(latest.Provider),
                     latest.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
                     Markup.Escape(string.Join(Environment.NewLine, sessionOutput.TakeLast(20).Select(chunk => chunk.Content))));
             }
