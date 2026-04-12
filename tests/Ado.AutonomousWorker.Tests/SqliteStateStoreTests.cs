@@ -1,7 +1,7 @@
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Infrastructure.Services;
+using Ado.AutonomousWorker.Infrastructure.State;
 using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Tests;

@@ -1,6 +1,6 @@
 using Ado.AutonomousWorker.Core.Enums;
+using Ado.AutonomousWorker.Infrastructure.Agents;
 using Ado.AutonomousWorker.Infrastructure.Execution;
-using Ado.AutonomousWorker.Infrastructure.Services;
 
 namespace Ado.AutonomousWorker.Tests;
 

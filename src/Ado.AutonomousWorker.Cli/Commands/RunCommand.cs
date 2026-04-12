@@ -1,7 +1,7 @@
 using Ado.AutonomousWorker.Cli.Services;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Services;
-using Ado.AutonomousWorker.Infrastructure.Services;
+using Ado.AutonomousWorker.Infrastructure.Queue;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Cli;
