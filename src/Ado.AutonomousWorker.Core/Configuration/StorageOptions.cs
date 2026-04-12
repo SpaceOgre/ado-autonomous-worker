@@ -10,6 +10,21 @@ public sealed class StorageOptions
 
     public string ArtifactRoot { get; set; } = ".data\\artifacts";
 
+    public string GetWorkItemArtifactRoot(int workItemId)
+    {
+        return Path.Combine(ArtifactRoot, workItemId.ToString());
+    }
+
+    public string GetExecutionArtifactRoot(int workItemId, string executionId)
+    {
+        return Path.Combine(GetWorkItemArtifactRoot(workItemId), "executions", executionId);
+    }
+
+    public string GetTaskArtifactRoot(int workItemId, int childTaskId)
+    {
+        return Path.Combine(GetWorkItemArtifactRoot(workItemId), "tasks", childTaskId.ToString());
+    }
+
     public void NormalizePaths()
     {
         var defaultRoot = Path.Combine(

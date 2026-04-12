@@ -29,7 +29,7 @@ public sealed partial class WorkspaceManager(
         var safeSlug = UnsafeCharactersRegex().Replace(slug.ToLowerInvariant(), "-").Trim('-');
         var branchName = $"feature/{childTaskId}_{safeSlug}";
         var worktreePath = Path.Combine(profile.WorktreeRoot, $"{parentWorkItemId}-{childTaskId}-{repoKind.ToString().ToLowerInvariant()}");
-        var artifactFolder = Path.Combine(storageOptions.Value.ArtifactRoot, parentWorkItemId.ToString(), childTaskId.ToString());
+        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(parentWorkItemId, childTaskId);
         Directory.CreateDirectory(artifactFolder);
 
         if (!Directory.Exists(profile.BaseClonePath))
@@ -116,7 +116,7 @@ public sealed partial class WorkspaceManager(
             return;
         }
 
-        var artifactFolder = Path.Combine(storageOptions.Value.ArtifactRoot, context.ParentWorkItemId.ToString(), context.ChildTaskId.ToString());
+        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(context.ParentWorkItemId, context.ChildTaskId);
         await commandRunner.RunAsync(
             "git",
             ["-C", profile.BaseClonePath, "worktree", "remove", "--force", context.WorkingDirectory],

@@ -173,7 +173,7 @@ public sealed partial class TaskOrchestrator(
     {
         var config = agentOptions.Value.Plan;
         var runner = agentRunnerFactory.GetRunner(config.Provider);
-        var artifactDirectory = Path.Combine(storageOptions.Value.ArtifactRoot, executionId, "plan");
+        var artifactDirectory = Path.Combine(storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId), "plan");
 
         var prompt = $$"""
         Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
@@ -229,7 +229,9 @@ public sealed partial class TaskOrchestrator(
             repoKind,
             childTask.WorkItemId);
         var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, cancellationToken);
-        var artifactDirectory = Path.Combine(storageOptions.Value.ArtifactRoot, executionId, repoKind.ToString().ToLowerInvariant());
+        var artifactDirectory = Path.Combine(
+            storageOptions.Value.GetExecutionArtifactRoot(parent.WorkItemId, executionId),
+            repoKind.ToString().ToLowerInvariant());
         var workspaceMessage = $"Using {repoKind} worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}'.";
         logger.LogInformation("Execution {ExecutionId}: {WorkspaceMessage}", executionId, workspaceMessage);
         await AppendEventAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);

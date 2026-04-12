@@ -40,4 +40,21 @@ public sealed class StorageOptionsTests
         Assert.Equal(Path.GetFullPath(Path.Combine(root, "custom-logs")), options.LogRoot);
         Assert.Equal(Path.GetFullPath(Path.Combine(root, "custom-artifacts")), options.ArtifactRoot);
     }
+
+    [Fact]
+    public void ArtifactHelpers_GroupByWorkItemThenExecutionOrTask()
+    {
+        var options = new StorageOptions
+        {
+            ArtifactRoot = Path.Combine(Path.GetTempPath(), "ado-worker-artifacts"),
+        };
+
+        var workItemRoot = options.GetWorkItemArtifactRoot(28639);
+        var executionRoot = options.GetExecutionArtifactRoot(28639, "de2f6ffd2c034cef9a4abfe1a4bcd84d");
+        var taskRoot = options.GetTaskArtifactRoot(28639, 28883);
+
+        Assert.Equal(Path.Combine(options.ArtifactRoot, "28639"), workItemRoot);
+        Assert.Equal(Path.Combine(options.ArtifactRoot, "28639", "executions", "de2f6ffd2c034cef9a4abfe1a4bcd84d"), executionRoot);
+        Assert.Equal(Path.Combine(options.ArtifactRoot, "28639", "tasks", "28883"), taskRoot);
+    }
 }
