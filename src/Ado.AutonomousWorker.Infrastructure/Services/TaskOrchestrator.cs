@@ -125,13 +125,18 @@ public sealed partial class TaskOrchestrator(
             await UpdatePhaseAsync(executionId, TaskPhase.Planning, "Running planning agent.", cancellationToken);
             var plan = await RunPlanAsync(executionId, workItem, cancellationToken);
 
-            foreach (var repoKind in MapScopeToRepos(plan.Scope))
-            {
-                var childTask = workItem.ChildTasks.FirstOrDefault(task => task.RepoKind == repoKind) ??
-                                await CreateChildTaskAsync(workItem, repoKind, cancellationToken);
+            var repositoryExecutions = await PrepareRepositoryExecutionsAsync(
+                executionId,
+                workItem,
+                MapScopeToRepos(plan.Scope),
+                cancellationToken);
 
-                var pr = await ProcessRepositoryAsync(executionId, workItem, childTask, plan, repoKind, cancellationToken);
-                await azureDevOpsClient.LinkPullRequestAsync(childTask.WorkItemId, pr, cancellationToken);
+            await RunImplementationAsync(executionId, workItem, repositoryExecutions, plan, cancellationToken);
+
+            foreach (var repositoryExecution in repositoryExecutions)
+            {
+                var pr = await ValidateAndPublishRepositoryAsync(executionId, workItem, repositoryExecution, cancellationToken);
+                await azureDevOpsClient.LinkPullRequestAsync(repositoryExecution.ChildTask.WorkItemId, pr, cancellationToken);
             }
 
             await azureDevOpsClient.UpdateTagsAsync(workItem.WorkItemId, rulesEngine.BuildCompletionTags(workItem), cancellationToken);
@@ -213,51 +218,75 @@ public sealed partial class TaskOrchestrator(
         return plan;
     }
 
-    private async Task<PullRequestInfo> ProcessRepositoryAsync(
+    private async Task<IReadOnlyList<RepositoryExecution>> PrepareRepositoryExecutionsAsync(
         string executionId,
         WorkItemDetails parent,
-        ChildTaskRecord childTask,
-        PlanResult plan,
-        RepoKind repoKind,
+        IReadOnlyList<RepoKind> repoKinds,
         CancellationToken cancellationToken)
     {
-        var repoProfile = GetRepositoryProfile(repoKind);
         var slug = SlugRegex().Replace(parent.Title.ToLowerInvariant(), "-").Trim('-');
-        logger.LogInformation(
-            "Execution {ExecutionId}: preparing {RepoKind} repo for child task #{ChildTaskId}.",
-            executionId,
-            repoKind,
-            childTask.WorkItemId);
-        var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, cancellationToken);
-        var artifactDirectory = Path.Combine(
-            storageOptions.Value.GetExecutionArtifactRoot(parent.WorkItemId, executionId),
-            repoKind.ToString().ToLowerInvariant());
-        var workspaceMessage = $"Using {repoKind} worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}'.";
-        logger.LogInformation("Execution {ExecutionId}: {WorkspaceMessage}", executionId, workspaceMessage);
-        await AppendEventAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);
-        await AppendRunLogAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);
+        var executionArtifactRoot = storageOptions.Value.GetExecutionArtifactRoot(parent.WorkItemId, executionId);
+        var repositoryExecutions = new List<RepositoryExecution>();
 
-        await UpdatePhaseAsync(executionId, TaskPhase.Coding, $"Running coding agent for {repoKind}.", cancellationToken);
+        foreach (var repoKind in repoKinds)
+        {
+            var childTask = parent.ChildTasks.FirstOrDefault(task => task.RepoKind == repoKind) ??
+                            await CreateChildTaskAsync(parent, repoKind, cancellationToken);
+            var repoProfile = GetRepositoryProfile(repoKind);
+            logger.LogInformation(
+                "Execution {ExecutionId}: preparing {RepoKind} repo for child task #{ChildTaskId}.",
+                executionId,
+                repoKind,
+                childTask.WorkItemId);
+
+            var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, cancellationToken);
+            var artifactDirectory = Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant());
+            var workspaceMessage =
+                $"Using {repoKind} worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}' for child task #{childTask.WorkItemId}.";
+            logger.LogInformation("Execution {ExecutionId}: {WorkspaceMessage}", executionId, workspaceMessage);
+            await AppendEventAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);
+            await AppendRunLogAsync(executionId, TaskPhase.Coding, workspaceMessage, cancellationToken);
+
+            repositoryExecutions.Add(new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory));
+        }
+
+        return repositoryExecutions;
+    }
+
+    private async Task RunImplementationAsync(
+        string executionId,
+        WorkItemDetails parent,
+        IReadOnlyList<RepositoryExecution> repositoryExecutions,
+        PlanResult plan,
+        CancellationToken cancellationToken)
+    {
+        var scopeLabel = FormatRepoKinds(repositoryExecutions.Select(item => item.RepoKind));
+        var agentWorkingDirectory = DetermineAgentWorkingDirectory(repositoryExecutions.Select(item => item.Workspace.WorkingDirectory));
+        var implementationArtifactRoot = Path.Combine(
+            storageOptions.Value.GetExecutionArtifactRoot(parent.WorkItemId, executionId),
+            "implementation");
+
+        await UpdatePhaseAsync(executionId, TaskPhase.Coding, $"Running coding agent for {scopeLabel}.", cancellationToken);
         var codeRunner = agentRunnerFactory.GetRunner(agentOptions.Value.Code.Provider);
         var codeStart = await codeRunner.StartSessionAsync(
             AgentRole.Code,
             agentOptions.Value.Code,
-            BuildCodePrompt(parent, childTask, repoKind, plan),
-            workspace.WorkingDirectory,
-            Path.Combine(artifactDirectory, "code"),
+            BuildCodePrompt(parent, repositoryExecutions, plan, agentWorkingDirectory),
+            agentWorkingDirectory,
+            Path.Combine(implementationArtifactRoot, "code"),
             outputSchema: null,
             CreateOutputObserver(executionId),
             cancellationToken);
 
         await stateStore.SaveAgentSessionAsync(executionId, codeStart.Session, cancellationToken);
 
-        await UpdatePhaseAsync(executionId, TaskPhase.Reviewing, $"Running review agent for {repoKind}.", cancellationToken);
+        await UpdatePhaseAsync(executionId, TaskPhase.Reviewing, $"Running review agent for {scopeLabel}.", cancellationToken);
         var reviewRunner = agentRunnerFactory.GetRunner(agentOptions.Value.Review.Provider);
         var review = await reviewRunner.RunReviewAsync(
             agentOptions.Value.Review,
-            BuildReviewPrompt(parent, childTask, repoKind),
-            workspace.WorkingDirectory,
-            Path.Combine(artifactDirectory, "review"),
+            BuildReviewPrompt(parent, repositoryExecutions, agentWorkingDirectory),
+            agentWorkingDirectory,
+            Path.Combine(implementationArtifactRoot, "review"),
             AgentOutputSchemas.Review,
             CreateOutputObserver(executionId),
             cancellationToken);
@@ -266,19 +295,38 @@ public sealed partial class TaskOrchestrator(
         var acceptedFindings = review.Findings.Where(ShouldAcceptFinding).ToArray();
         if (acceptedFindings.Length > 0)
         {
-            await UpdatePhaseAsync(executionId, TaskPhase.ApplyingReview, $"Resuming coding agent for {repoKind} with {acceptedFindings.Length} accepted findings.", cancellationToken);
+            await UpdatePhaseAsync(
+                executionId,
+                TaskPhase.ApplyingReview,
+                $"Resuming coding agent for {scopeLabel} with {acceptedFindings.Length} accepted findings.",
+                cancellationToken);
             await codeRunner.ResumeSessionAsync(
                 codeStart.Session,
                 agentOptions.Value.Code,
                 BuildReviewResumePrompt(acceptedFindings),
-                Path.Combine(artifactDirectory, "resume"),
+                Path.Combine(implementationArtifactRoot, "resume"),
                 CreateOutputObserver(executionId),
                 cancellationToken);
+            return;
         }
-        else
-        {
-            logger.LogInformation("Execution {ExecutionId}: no accepted review findings for {RepoKind}.", executionId, repoKind);
-        }
+
+        logger.LogInformation(
+            "Execution {ExecutionId}: no accepted review findings for {ScopeLabel}.",
+            executionId,
+            scopeLabel);
+    }
+
+    private async Task<PullRequestInfo> ValidateAndPublishRepositoryAsync(
+        string executionId,
+        WorkItemDetails parent,
+        RepositoryExecution repositoryExecution,
+        CancellationToken cancellationToken)
+    {
+        var childTask = repositoryExecution.ChildTask;
+        var repoKind = repositoryExecution.RepoKind;
+        var repoProfile = repositoryExecution.Profile;
+        var workspace = repositoryExecution.Workspace;
+        var artifactDirectory = repositoryExecution.ArtifactDirectory;
 
         await UpdatePhaseAsync(executionId, TaskPhase.Validating, $"Running validation for {repoKind}.", cancellationToken);
         foreach (var validationCommand in repoProfile.ValidationCommands)
@@ -304,7 +352,12 @@ public sealed partial class TaskOrchestrator(
 
         await UpdatePhaseAsync(executionId, TaskPhase.Publishing, $"Creating commit and PR for {repoKind}.", cancellationToken);
         await RunGitAsync(workspace.WorkingDirectory, artifactDirectory, "git-add.log", ["add", "-A"], cancellationToken);
-        await RunGitAllowingNoChangesAsync(workspace.WorkingDirectory, artifactDirectory, "git-commit.log", ["commit", "-m", $"#{childTask.WorkItemId}: {parent.Title}"], cancellationToken);
+        await RunGitAllowingNoChangesAsync(
+            workspace.WorkingDirectory,
+            artifactDirectory,
+            "git-commit.log",
+            ["commit", "-m", $"#{childTask.WorkItemId}: {parent.Title}"],
+            cancellationToken);
         await RunGitAsync(workspace.WorkingDirectory, artifactDirectory, "git-push.log", ["push", "-u", "origin", workspace.BranchName], cancellationToken);
 
         var pullRequest = await azureDevOpsClient.CreateDraftPullRequestAsync(
@@ -463,33 +516,48 @@ public sealed partial class TaskOrchestrator(
         return text.Contains("bug") || text.Contains("security") || text.Contains("correctness") || text.Contains("missing test");
     }
 
-    private static string BuildCodePrompt(WorkItemDetails parent, ChildTaskRecord childTask, RepoKind repoKind, PlanResult plan)
+    private static string BuildCodePrompt(
+        WorkItemDetails parent,
+        IReadOnlyList<RepositoryExecution> repositoryExecutions,
+        PlanResult plan,
+        string agentWorkingDirectory)
     {
+        var repositorySummary = BuildRepositorySummary(repositoryExecutions, agentWorkingDirectory);
         return $$"""
-        Implement the Azure DevOps task in this repository.
+        Implement this Azure DevOps work item across the listed repositories as one coordinated change.
 
         Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
-        Child task: #{{childTask.WorkItemId}} {{childTask.Title}}
-        Repo: {{repoKind}}
+        Agent working directory: {{agentWorkingDirectory}}
         Plan summary: {{plan.Summary}}
 
+        Repositories:
+        {{repositorySummary}}
+
         Requirements:
-        - Stay within this repository.
-        - Implement the requested behavior.
+        - Treat the listed repositories as one implementation scope.
+        - Only modify files under the listed repository paths.
+        - Coordinate backend and frontend changes together when more than one repository is listed.
+        - Keep each repository on its prepared branch.
         - Update or add tests when relevant.
-        - Leave the repository in a reviewable state.
+        - Leave every listed repository in a reviewable state for validation and PR creation.
         """;
     }
 
-    private static string BuildReviewPrompt(WorkItemDetails parent, ChildTaskRecord childTask, RepoKind repoKind)
+    private static string BuildReviewPrompt(
+        WorkItemDetails parent,
+        IReadOnlyList<RepositoryExecution> repositoryExecutions,
+        string agentWorkingDirectory)
     {
+        var repositorySummary = BuildRepositorySummary(repositoryExecutions, agentWorkingDirectory);
         return $$"""
-        Review the current repository changes for correctness, regressions, security issues, and missing tests.
+        Review the coordinated changes across the listed repositories for correctness, regressions, integration mismatches, security issues, and missing tests.
         Return JSON that matches the supplied schema exactly.
 
         Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
-        Child task: #{{childTask.WorkItemId}} {{childTask.Title}}
-        Repo: {{repoKind}}
+        Agent working directory: {{agentWorkingDirectory}}
+
+        Repositories:
+        {{repositorySummary}}
         """;
     }
 
@@ -514,6 +582,94 @@ public sealed partial class TaskOrchestrator(
         _ => [RepoKind.Backend, RepoKind.Frontend],
     };
 
+    private static string BuildRepositorySummary(IReadOnlyList<RepositoryExecution> repositoryExecutions, string agentWorkingDirectory)
+    {
+        return string.Join(
+            $"{Environment.NewLine}{Environment.NewLine}",
+            repositoryExecutions.Select(repositoryExecution =>
+            {
+                var workspacePath = repositoryExecution.Workspace.WorkingDirectory;
+                var relativePath = Path.GetRelativePath(agentWorkingDirectory, workspacePath);
+                var validation = repositoryExecution.Profile.ValidationCommands.Count == 0
+                    ? "None"
+                    : string.Join(" | ", repositoryExecution.Profile.ValidationCommands);
+
+                return $$"""
+                [{{repositoryExecution.RepoKind}}]
+                Child task: #{{repositoryExecution.ChildTask.WorkItemId}} {{repositoryExecution.ChildTask.Title}}
+                Branch: {{repositoryExecution.Workspace.BranchName}}
+                Relative path: {{relativePath}}
+                Full path: {{workspacePath}}
+                Validation: {{validation}}
+                """;
+            }));
+    }
+
+    private static string DetermineAgentWorkingDirectory(IEnumerable<string> workingDirectories)
+    {
+        var directories = workingDirectories
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (directories.Length == 0)
+        {
+            throw new InvalidOperationException("At least one working directory is required.");
+        }
+
+        if (directories.Length == 1)
+        {
+            return directories[0];
+        }
+
+        var commonPath = directories[0];
+        foreach (var directory in directories.Skip(1))
+        {
+            commonPath = GetCommonPath(commonPath, directory);
+            if (string.IsNullOrWhiteSpace(commonPath))
+            {
+                return Directory.GetCurrentDirectory();
+            }
+        }
+
+        return commonPath;
+    }
+
+    private static string GetCommonPath(string left, string right)
+    {
+        var leftRoot = Path.GetPathRoot(left) ?? string.Empty;
+        var rightRoot = Path.GetPathRoot(right) ?? string.Empty;
+        if (!string.Equals(leftRoot, rightRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        var leftSegments = left[leftRoot.Length..]
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        var rightSegments = right[rightRoot.Length..]
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        var sharedSegmentCount = 0;
+        while (sharedSegmentCount < leftSegments.Length &&
+               sharedSegmentCount < rightSegments.Length &&
+               string.Equals(leftSegments[sharedSegmentCount], rightSegments[sharedSegmentCount], StringComparison.OrdinalIgnoreCase))
+        {
+            sharedSegmentCount++;
+        }
+
+        var commonPath = leftRoot;
+        for (var i = 0; i < sharedSegmentCount; i++)
+        {
+            commonPath = Path.Combine(commonPath, leftSegments[i]);
+        }
+
+        return commonPath;
+    }
+
+    private static string FormatRepoKinds(IEnumerable<RepoKind> repoKinds)
+    {
+        return string.Join(" + ", repoKinds.Distinct().Select(repoKind => repoKind.ToString()));
+    }
+
     private static string NormalizeFileName(string value)
     {
         return SlugRegex().Replace(value.ToLowerInvariant(), "-").Trim('-');
@@ -532,4 +688,13 @@ public sealed partial class TaskOrchestrator(
 
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.IgnoreCase)]
     private static partial Regex SlugRegex();
+
+    private sealed record RepositoryExecution(
+        ChildTaskRecord ChildTask,
+        RepositoryProfile Profile,
+        RepoExecutionContext Workspace,
+        string ArtifactDirectory)
+    {
+        public RepoKind RepoKind => Workspace.RepoKind;
+    }
 }
