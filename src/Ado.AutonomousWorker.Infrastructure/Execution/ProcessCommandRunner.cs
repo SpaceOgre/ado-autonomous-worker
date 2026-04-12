@@ -16,7 +16,8 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         IReadOnlyDictionary<string, string?>? environmentVariables,
         string? activityName,
         Func<ProcessOutputLine, CancellationToken, Task>? outputCallback,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? timeoutSeconds = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
 
@@ -49,6 +50,17 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             }
         }
 
+        using var timeoutCts = timeoutSeconds.HasValue
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : null;
+
+        if (timeoutSeconds.HasValue && timeoutCts is not null)
+        {
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds.Value));
+        }
+
+        var effectiveToken = timeoutCts?.Token ?? cancellationToken;
+
         var stopwatch = Stopwatch.StartNew();
         if (!string.IsNullOrWhiteSpace(activityName))
         {
@@ -58,21 +70,38 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         process.Start();
         var stdoutBuilder = new StringBuilder();
         var stderrBuilder = new StringBuilder();
-        var stdoutTask = PumpOutputAsync(process.StandardOutput, AgentOutputStream.Stdout, stdoutBuilder, outputCallback, cancellationToken);
-        var stderrTask = PumpOutputAsync(process.StandardError, AgentOutputStream.Stderr, stderrBuilder, outputCallback, cancellationToken);
-        var waitForExitTask = process.WaitForExitAsync(cancellationToken);
+        var stdoutTask = PumpOutputAsync(process.StandardOutput, AgentOutputStream.Stdout, stdoutBuilder, outputCallback, effectiveToken);
+        var stderrTask = PumpOutputAsync(process.StandardError, AgentOutputStream.Stderr, stderrBuilder, outputCallback, effectiveToken);
+        var waitForExitTask = process.WaitForExitAsync(effectiveToken);
         var heartbeatInterval = TimeSpan.FromSeconds(15);
 
         while (!waitForExitTask.IsCompleted)
         {
-            await Task.WhenAny(waitForExitTask, Task.Delay(heartbeatInterval, cancellationToken));
+            await Task.WhenAny(waitForExitTask, Task.Delay(heartbeatInterval, effectiveToken));
             if (!waitForExitTask.IsCompleted && !string.IsNullOrWhiteSpace(activityName))
             {
                 logger.LogInformation("{Activity} still running after {ElapsedSeconds}s.", activityName, (int)stopwatch.Elapsed.TotalSeconds);
             }
         }
 
-        await waitForExitTask;
+        try
+        {
+            await waitForExitTask;
+        }
+        catch (OperationCanceledException) when (IsTimeoutCancellation(timeoutCts, cancellationToken))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (Exception killEx)
+            {
+                logger.LogWarning(killEx, "Failed to kill timed-out process for {Activity}.", activityName);
+            }
+
+            throw new TimeoutException($"'{activityName ?? fileName}' exceeded the configured timeout of {timeoutSeconds} seconds.");
+        }
+
         await Task.WhenAll(stdoutTask, stderrTask);
         var stdout = stdoutBuilder.ToString();
         var stderr = stderrBuilder.ToString();
@@ -139,5 +168,10 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
                 await outputCallback(new ProcessOutputLine(stream, line), cancellationToken);
             }
         }
+    }
+
+    private static bool IsTimeoutCancellation(CancellationTokenSource? timeoutCts, CancellationToken outerToken)
+    {
+        return timeoutCts is not null && timeoutCts.IsCancellationRequested && !outerToken.IsCancellationRequested;
     }
 }

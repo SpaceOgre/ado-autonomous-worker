@@ -1,4 +1,5 @@
 using Ado.AutonomousWorker.Core.Configuration;
+using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Services;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Options;
@@ -27,9 +28,9 @@ public sealed class DoctorService(
         await workspaceManager.PrepareAsync(cancellationToken);
 
         checks.Add(new DoctorCheckResult("Storage", true, storage.DataRoot));
-        checks.Add(CheckCommand("Plan Agent", agentOptions.Value.Plan.CommandPath));
-        checks.Add(CheckCommand("Code Agent", agentOptions.Value.Code.CommandPath));
-        checks.Add(CheckCommand("Review Agent", agentOptions.Value.Review.CommandPath));
+        checks.Add(CheckAgentCommand("Plan Agent", agentOptions.Value.Plan));
+        checks.Add(CheckAgentCommand("Code Agent", agentOptions.Value.Code));
+        checks.Add(CheckAgentCommand("Review Agent", agentOptions.Value.Review));
 
         checks.Add(new DoctorCheckResult(
             "Backend Repo",
@@ -93,13 +94,10 @@ public sealed class DoctorService(
             : new DoctorCheckResult(name, false, $"Missing remote branch origin/{profile.MainBranch}");
     }
 
-    private static DoctorCheckResult CheckCommand(string name, string commandPath)
+    private static DoctorCheckResult CheckAgentCommand(string name, AgentRoleConfig config)
     {
-        if (string.IsNullOrWhiteSpace(commandPath))
-        {
-            return new DoctorCheckResult(name, false, "No command path configured");
-        }
-
+        var defaultCommand = config.Provider == AgentProvider.Claude ? "claude" : "codex";
+        var commandPath = string.IsNullOrWhiteSpace(config.CommandPath) ? defaultCommand : config.CommandPath;
         var exists = File.Exists(commandPath) || CommandExistsOnPath(commandPath);
         return new DoctorCheckResult(name, exists, commandPath);
     }

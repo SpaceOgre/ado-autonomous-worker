@@ -44,13 +44,25 @@ public sealed partial class TaskOrchestrator(
         var executions = new List<string>();
         foreach (var item in queue)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             logger.LogInformation(
                 "Queue item selected: #{WorkItemId} {WorkItemType} '{Title}' ({Kind}).",
                 item.WorkItemId,
                 item.WorkItemType,
                 item.Title,
                 item.Kind);
-            executions.Add(await RunTaskAsync(item.WorkItemId, cancellationToken));
+            try
+            {
+                executions.Add(await RunTaskAsync(item.WorkItemId, cancellationToken));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(
+                    ex,
+                    "Queue item #{WorkItemId} '{Title}' failed; continuing with remaining items.",
+                    item.WorkItemId,
+                    item.Title);
+            }
         }
 
         return executions;
@@ -85,6 +97,9 @@ public sealed partial class TaskOrchestrator(
 
     public async Task ResumeTaskAsync(string executionId, CancellationToken cancellationToken)
     {
+        await stateStore.InitializeAsync(cancellationToken);
+        await workspaceManager.PrepareAsync(cancellationToken);
+
         var execution = await stateStore.GetExecutionAsync(executionId, cancellationToken)
             ?? throw new InvalidOperationException($"Execution '{executionId}' was not found.");
 
@@ -175,7 +190,7 @@ public sealed partial class TaskOrchestrator(
         var runner = agentRunnerFactory.GetRunner(config.Provider);
         var artifactDirectory = Path.Combine(storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId), "plan");
 
-        var prompt = $$"""
+        var rawPrompt = $$"""
         Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
 
         Work item: #{{workItem.WorkItemId}} {{FormatWorkItemLabel(workItem.WorkItemType)}} {{workItem.Title}}
@@ -190,6 +205,8 @@ public sealed partial class TaskOrchestrator(
         Acceptance Criteria:
         {{workItem.AcceptanceCriteria}}
         """;
+
+        var prompt = await ApplyPromptTemplateAsync(config, rawPrompt, cancellationToken);
 
         var startResult = await runner.StartSessionAsync(
             AgentRole.Plan,
@@ -242,7 +259,7 @@ public sealed partial class TaskOrchestrator(
         var codeStart = await codeRunner.StartSessionAsync(
             AgentRole.Code,
             agentOptions.Value.Code,
-            BuildCodePrompt(parent, childTask, repoKind, plan),
+            await ApplyPromptTemplateAsync(agentOptions.Value.Code, BuildCodePrompt(parent, childTask, repoKind, plan), cancellationToken),
             workspace.WorkingDirectory,
             Path.Combine(artifactDirectory, "code"),
             outputSchema: null,
@@ -255,7 +272,7 @@ public sealed partial class TaskOrchestrator(
         var reviewRunner = agentRunnerFactory.GetRunner(agentOptions.Value.Review.Provider);
         var review = await reviewRunner.RunReviewAsync(
             agentOptions.Value.Review,
-            BuildReviewPrompt(parent, childTask, repoKind),
+            await ApplyPromptTemplateAsync(agentOptions.Value.Review, BuildReviewPrompt(parent, childTask, repoKind), cancellationToken),
             workspace.WorkingDirectory,
             Path.Combine(artifactDirectory, "review"),
             AgentOutputSchemas.Review,
@@ -320,6 +337,12 @@ public sealed partial class TaskOrchestrator(
             executionId,
             pullRequest.PullRequestId,
             repoKind);
+
+        if (workerOptions.Value.CleanupWorktreesAfterSuccess)
+        {
+            await workspaceManager.CleanupAsync(workspace, cancellationToken);
+            logger.LogInformation("Execution {ExecutionId}: cleaned up worktree for {RepoKind}.", executionId, repoKind);
+        }
 
         return pullRequest;
     }
@@ -401,6 +424,17 @@ public sealed partial class TaskOrchestrator(
         await File.AppendAllTextAsync(path, $"- {DateTimeOffset.UtcNow:O} [{phase}] {message}{Environment.NewLine}", cancellationToken);
     }
 
+    private static async Task<string> ApplyPromptTemplateAsync(AgentRoleConfig config, string prompt, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(config.PromptTemplatePath) || !File.Exists(config.PromptTemplatePath))
+        {
+            return prompt;
+        }
+
+        var template = await File.ReadAllTextAsync(config.PromptTemplatePath, cancellationToken);
+        return $"{template.TrimEnd()}{Environment.NewLine}{Environment.NewLine}{prompt}";
+    }
+
     private Func<AgentOutputChunk, CancellationToken, Task> CreateOutputObserver(string executionId)
     {
         return (chunk, cancellationToken) => stateStore.AppendAgentOutputChunkAsync(executionId, chunk, cancellationToken);
@@ -472,6 +506,12 @@ public sealed partial class TaskOrchestrator(
         Child task: #{{childTask.WorkItemId}} {{childTask.Title}}
         Repo: {{repoKind}}
         Plan summary: {{plan.Summary}}
+
+        Description:
+        {{parent.Description}}
+
+        Acceptance Criteria:
+        {{parent.AcceptanceCriteria}}
 
         Requirements:
         - Stay within this repository.
