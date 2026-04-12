@@ -33,7 +33,7 @@ dotnet_style_prefer_simplified_interpolation = true:suggestion
 
 csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
-csharp_style_var_elsewhere = false:suggestion
+csharp_style_var_elsewhere = true:suggestion
 csharp_style_namespace_declarations = file_scoped:suggestion
 csharp_style_prefer_switch_expression = true:suggestion
 csharp_style_prefer_pattern_matching = true:suggestion
@@ -57,6 +57,8 @@ csharp_indent_switch_labels = true
 csharp_indent_labels = flush_left
 
 dotnet_diagnostic.IDE0005.severity = warning
+dotnet_diagnostic.IDE0007.severity = warning
+dotnet_diagnostic.IDE0008.severity = warning
 dotnet_diagnostic.IDE0055.severity = warning
 
 # CA1873: Avoid potentially expensive logging
