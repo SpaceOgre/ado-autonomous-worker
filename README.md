@@ -43,6 +43,12 @@ Local machine overrides should go in:
 
 Set Azure DevOps and provider credentials outside source control.
 
+Execution state, logs, artifacts, and the local SQLite database are stored under:
+
+- `%LocalAppData%\Ado.AutonomousWorker`
+
+You can still override the storage paths in `appsettings.local.json` with absolute paths if needed.
+
 ## Development
 
 ```powershell
