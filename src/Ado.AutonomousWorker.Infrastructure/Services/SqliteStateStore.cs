@@ -1,10 +1,10 @@
+using System.Text.Json;
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 using Ado.AutonomousWorker.Core.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
-using Ado.AutonomousWorker.Core.Configuration;
-using System.Text.Json;
 
 namespace Ado.AutonomousWorker.Infrastructure.Services;
 

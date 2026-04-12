@@ -1,5 +1,4 @@
 using Ado.AutonomousWorker.Core.Configuration;
-using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Services;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 using Ado.AutonomousWorker.Infrastructure.Services;

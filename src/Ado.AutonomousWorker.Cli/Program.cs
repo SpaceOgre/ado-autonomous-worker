@@ -1,7 +1,7 @@
-using Ado.AutonomousWorker.Infrastructure;
-using Ado.AutonomousWorker.Cli.Commands;
 using Ado.AutonomousWorker.Cli;
+using Ado.AutonomousWorker.Cli.Commands;
 using Ado.AutonomousWorker.Cli.Services;
+using Ado.AutonomousWorker.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

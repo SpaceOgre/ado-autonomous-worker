@@ -1,5 +1,5 @@
-using Ado.AutonomousWorker.Cli.Services;
 using System.ComponentModel;
+using Ado.AutonomousWorker.Cli.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
