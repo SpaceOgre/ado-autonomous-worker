@@ -1,7 +1,7 @@
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 
 namespace Ado.AutonomousWorker.Infrastructure.Agents;

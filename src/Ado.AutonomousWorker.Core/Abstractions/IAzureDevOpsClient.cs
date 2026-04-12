@@ -1,6 +1,6 @@
 using Ado.AutonomousWorker.Core.Models;
 
-namespace Ado.AutonomousWorker.Core.Services;
+namespace Ado.AutonomousWorker.Core.Abstractions;
 
 public interface IAzureDevOpsClient
 {

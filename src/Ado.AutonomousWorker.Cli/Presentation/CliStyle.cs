@@ -1,7 +1,7 @@
 using Ado.AutonomousWorker.Core.Enums;
 using Spectre.Console;
 
-namespace Ado.AutonomousWorker.Cli.Services;
+namespace Ado.AutonomousWorker.Cli.Presentation;
 
 public static class CliStyle
 {

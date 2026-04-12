@@ -1,6 +1,7 @@
 using Ado.AutonomousWorker.Cli;
 using Ado.AutonomousWorker.Cli.Commands;
-using Ado.AutonomousWorker.Cli.Services;
+using Ado.AutonomousWorker.Cli.Completion;
+using Ado.AutonomousWorker.Cli.Presentation;
 using Ado.AutonomousWorker.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

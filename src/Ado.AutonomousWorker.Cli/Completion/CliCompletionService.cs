@@ -1,6 +1,6 @@
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Core.Abstractions;
 
-namespace Ado.AutonomousWorker.Cli.Services;
+namespace Ado.AutonomousWorker.Cli.Completion;
 
 public sealed class CliCompletionService(IStateStore stateStore)
 {

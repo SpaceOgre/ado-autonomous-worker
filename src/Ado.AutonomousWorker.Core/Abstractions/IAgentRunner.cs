@@ -2,7 +2,7 @@ using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 
-namespace Ado.AutonomousWorker.Core.Services;
+namespace Ado.AutonomousWorker.Core.Abstractions;
 
 public interface IAgentRunner
 {

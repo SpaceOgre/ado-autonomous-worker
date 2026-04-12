@@ -1,4 +1,4 @@
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Spectre.Console;
 using Spectre.Console.Cli;
 

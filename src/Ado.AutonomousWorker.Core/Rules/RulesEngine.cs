@@ -1,8 +1,9 @@
 using System.Text.RegularExpressions;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 
-namespace Ado.AutonomousWorker.Core.Services;
+namespace Ado.AutonomousWorker.Core.Rules;
 
 public sealed partial class RulesEngine : IRulesEngine
 {

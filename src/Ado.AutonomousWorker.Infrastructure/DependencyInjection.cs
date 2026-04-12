@@ -1,5 +1,6 @@
 using Ado.AutonomousWorker.Core.Configuration;
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Core.Abstractions;
+using Ado.AutonomousWorker.Core.Rules;
 using Ado.AutonomousWorker.Infrastructure.Agents;
 using Ado.AutonomousWorker.Infrastructure.AzureDevOps;
 using Ado.AutonomousWorker.Infrastructure.Diagnostics;

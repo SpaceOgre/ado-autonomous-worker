@@ -1,4 +1,4 @@
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Core.Abstractions;
 
 namespace Ado.AutonomousWorker.Infrastructure.Queue;
 

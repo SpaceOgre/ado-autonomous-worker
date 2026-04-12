@@ -1,10 +1,10 @@
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace Ado.AutonomousWorker.Cli.Services;
+namespace Ado.AutonomousWorker.Cli.Presentation;
 
 public sealed class ExecutionLiveDisplay(IStateStore stateStore)
 {

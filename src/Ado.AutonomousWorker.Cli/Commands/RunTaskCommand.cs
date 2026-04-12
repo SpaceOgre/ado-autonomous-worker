@@ -1,6 +1,6 @@
 using System.ComponentModel;
-using Ado.AutonomousWorker.Cli.Services;
-using Ado.AutonomousWorker.Core.Services;
+using Ado.AutonomousWorker.Cli.Presentation;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
