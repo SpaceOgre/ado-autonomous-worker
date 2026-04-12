@@ -25,8 +25,21 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
         Func<CancellationToken, Task<string>> operation,
         CancellationToken cancellationToken)
     {
-        return RunAsync(
+        return RunForWorkItemAsync(
             $"Work item #{workItemId}",
+            workItemId,
+            operation,
+            cancellationToken);
+    }
+
+    public Task<string> RunForWorkItemAsync(
+        string title,
+        int workItemId,
+        Func<CancellationToken, Task<string>> operation,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            title,
             operation,
             async token =>
             {
