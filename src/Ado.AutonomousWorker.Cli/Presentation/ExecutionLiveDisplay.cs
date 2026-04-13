@@ -97,8 +97,7 @@ public sealed class ExecutionLiveDisplay(
 
         await AnsiConsole.Live(CreateWaitingView(title, tick, startedAt, useUnicode))
             .AutoClear(false)
-            .Overflow(VerticalOverflow.Ellipsis)
-            .Cropping(VerticalOverflowCropping.Top)
+            .Overflow(VerticalOverflow.Visible)
             .StartAsync(async context =>
             {
                 while (!operationTask.IsCompleted)
@@ -131,25 +130,15 @@ public sealed class ExecutionLiveDisplay(
         }
 
         var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
-        var sessions = await stateStore.GetAgentSessionsAsync(execution.ExecutionId, cancellationToken);
         var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
-        var plan = await stateStore.GetPlanAsync(execution.ExecutionId, cancellationToken);
 
         var body = new Rows(
         [
-            CreateSummaryTable(execution, agentOptions.Value),
-            new Rule("Activity"),
-            CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions.Value),
-            new Rule("Progress"),
-            CreatePhaseMarkup(execution.Phase, execution.Status),
+            CreateCompactHeader(execution, tick, startedAt, useUnicode, agentOptions.Value),
             new Rule("Recent Events"),
             CreateEventsTable(events),
-            new Rule("Plan"),
-            CreatePlanTable(plan),
-            new Rule("Agent Sessions"),
-            CreateSessionsTable(sessions, agentOutput, execution.Phase, agentOptions.Value),
             new Rule("Agent Output"),
-            CreateAgentOutputTable(agentOutput, execution.Phase, tick, useUnicode),
+            CreateAgentOutputMarkup(agentOutput, execution.Phase, tick, useUnicode),
         ]);
 
         return new Panel(body)
@@ -161,33 +150,49 @@ public sealed class ExecutionLiveDisplay(
 
     private static IRenderable CreateWaitingView(string title, int tick, DateTimeOffset startedAt, bool useUnicode)
     {
-        var body = new Rows(
-        [
-            CreateWaitingMarkup(tick, startedAt, useUnicode),
-            new Markup("[grey]The execution record will appear here as soon as it is persisted.[/]"),
-        ]);
+        var elapsed = DateTimeOffset.UtcNow - startedAt;
+        var elapsedText = elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");
+        var spinner = GetSpinnerFrame(tick, useUnicode);
 
-        return new Panel(body)
+        return new Panel(new Markup($"[deepskyblue1]{Markup.Escape(spinner)}[/] Waiting for execution state... [grey](elapsed {elapsedText})[/]"))
         {
             Header = new PanelHeader(title),
             Border = BoxBorder.Rounded,
         };
     }
 
-    private static Table CreateSummaryTable(TaskExecutionRecord execution, AgentOptions agentOptions)
+    // Compact 4-line header replacing the old 13-line summary table + separate activity + progress sections.
+    private static IRenderable CreateCompactHeader(
+        TaskExecutionRecord execution,
+        int tick,
+        DateTimeOffset startedAt,
+        bool useUnicode,
+        AgentOptions agentOptions)
     {
-        var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
-        table.AddRow("Execution", execution.ExecutionId);
-        table.AddRow("Work Item", execution.WorkItemId.ToString());
-        table.AddRow("Kind", CliStyle.QueueKind(execution.Kind));
-        table.AddRow("Phase", CliStyle.Phase(execution.Phase));
-        table.AddRow("Status", CliStyle.Status(execution.Status));
-        table.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
-        table.AddRow("Title", Markup.Escape(execution.Title));
-        table.AddRow("Plan Agent", Markup.Escape(FormatAgent(agentOptions.Plan)));
-        table.AddRow("Code Agent", Markup.Escape(FormatAgent(agentOptions.Code)));
-        table.AddRow("Review Agent", Markup.Escape(FormatAgent(agentOptions.Review)));
-        return table;
+        var shortId = execution.ExecutionId.Length > 8
+            ? execution.ExecutionId[..8] + "…"
+            : execution.ExecutionId;
+
+        return new Rows(
+        [
+            // Title + work item identity
+            new Markup(
+                $"[bold]{Markup.Escape(execution.Title)}[/]  " +
+                $"[grey]#{execution.WorkItemId} · {CliStyle.QueueKind(execution.Kind)}[/]"),
+
+            // Execution ID + agent configuration
+            new Markup(
+                $"[grey]Exec[/] {Markup.Escape(shortId)}  " +
+                $"[grey]Plan[/] {Markup.Escape(FormatAgent(agentOptions.Plan))}  " +
+                $"[grey]Code[/] {Markup.Escape(FormatAgent(agentOptions.Code))}  " +
+                $"[grey]Review[/] {Markup.Escape(FormatAgent(agentOptions.Review))}"),
+
+            // Activity status line with spinner / outcome icon
+            CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions),
+
+            // Phase pipeline
+            CreatePhaseMarkup(execution.Phase, execution.Status),
+        ]);
     }
 
     private static IRenderable CreatePhaseMarkup(TaskPhase currentPhase, ExecutionStatus status)
@@ -228,20 +233,10 @@ public sealed class ExecutionLiveDisplay(
         return new Markup($"[{color}]{Markup.Escape(prefix)}[/] {Markup.Escape(message)}{agentSuffix} [grey](elapsed {elapsedText})[/]");
     }
 
-    private static IRenderable CreateWaitingMarkup(int tick, DateTimeOffset startedAt, bool useUnicode)
-    {
-        var elapsed = DateTimeOffset.UtcNow - startedAt;
-        var elapsedText = elapsed.TotalHours >= 1
-            ? elapsed.ToString(@"hh\:mm\:ss")
-            : elapsed.ToString(@"mm\:ss");
-
-        return new Markup($"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] Waiting for execution state... [grey](elapsed {elapsedText})[/]");
-    }
-
     private static Table CreateEventsTable(IReadOnlyList<ExecutionEventRecord> events)
     {
         var table = new Table().Border(TableBorder.Rounded).AddColumns("Time", "Phase", "Message");
-        var recentEvents = events.TakeLast(6).ToArray();
+        var recentEvents = events.TakeLast(8).ToArray();
         if (recentEvents.Length == 0)
         {
             table.AddRow("-", "-", "[grey]No events recorded yet.[/]");
@@ -259,95 +254,21 @@ public sealed class ExecutionLiveDisplay(
         return table;
     }
 
-    private static Table CreatePlanTable(PlanResult? plan)
-    {
-        var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
-        if (plan is null)
-        {
-            table.AddRow("Plan", "[grey]-[/]");
-            return table;
-        }
-
-        table.AddRow("Scope", plan.Scope.ToString());
-        table.AddRow("Summary", Markup.Escape(plan.Summary));
-        table.AddRow("Repositories", FormatList(plan.Repositories));
-        table.AddRow("Validation", FormatList(plan.ValidationTargets));
-        table.AddRow("Tests", FormatList(plan.TestIntent));
-        table.AddRow("Risks", FormatList(plan.Risks));
-        return table;
-    }
-
-    private static Table CreateSessionsTable(
-        IReadOnlyList<AgentSessionHandle> sessions,
+    // Plain markup lines — no table overhead. One header line (role/provider/workdir/time)
+    // followed by the most recent output chunks.
+    private static IRenderable CreateAgentOutputMarkup(
         IReadOnlyList<AgentOutputChunk> chunks,
-        TaskPhase currentPhase,
-        AgentOptions agentOptions)
+        TaskPhase phase,
+        int tick,
+        bool useUnicode)
     {
-        var table = new Table().Border(TableBorder.Rounded).AddColumns("Role", "Provider", "Workdir", "Transcript");
-        var recentSessions = sessions.TakeLast(4).ToArray();
-        if (recentSessions.Length == 0 && chunks.Count > 0)
-        {
-            recentSessions = chunks
-                .GroupBy(chunk => chunk.SessionId)
-                .OrderByDescending(group => group.Max(item => item.Timestamp))
-                .Take(4)
-                .Select(group =>
-                {
-                    var latest = group.Last();
-                    return new AgentSessionHandle(
-                        latest.SessionId,
-                        latest.Provider,
-                        latest.Role,
-                        latest.WorkingDirectory,
-                        "Live output only");
-                })
-                .ToArray();
-        }
-
-        if (recentSessions.Length == 0)
-        {
-            var activeRole = GetRoleForPhase(currentPhase);
-            var activeConfig = GetConfigForPhase(currentPhase, agentOptions);
-            if (activeRole is not null && activeConfig is not null)
-            {
-                table.AddRow(
-                    CliStyle.Role(activeRole.Value),
-                    CliStyle.Provider(activeConfig.Provider),
-                    "[grey]Waiting for session...[/]",
-                    "[grey]-[/]");
-            }
-            else
-            {
-                table.AddRow("-", "-", "[grey]-[/]", "[grey]-[/]");
-            }
-
-            return table;
-        }
-
-        foreach (var session in recentSessions)
-        {
-            table.AddRow(
-                CliStyle.Role(session.Role),
-                CliStyle.Provider(session.Provider),
-                Markup.Escape(ShortenPath(session.WorkingDirectory)),
-                Markup.Escape(ShortenPath(session.TranscriptPath)));
-        }
-
-        return table;
-    }
-
-    private static Table CreateAgentOutputTable(IReadOnlyList<AgentOutputChunk> chunks, TaskPhase phase, int tick, bool useUnicode)
-    {
-        var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
         if (chunks.Count == 0)
         {
             var spinner = GetSpinnerFrame(tick, useUnicode);
             var waitingText = phase is TaskPhase.Publishing
-                ? "[grey]No agent output captured.[/]"
-                : $"[grey]{Markup.Escape(spinner)} Waiting for agent output...[/]";
-
-            table.AddRow("Output", waitingText);
-            return table;
+                ? "No agent output captured."
+                : $"{spinner} Waiting for agent output...";
+            return new Markup($"[grey]{Markup.Escape(waitingText)}[/]");
         }
 
         var activeSession = chunks
@@ -356,25 +277,19 @@ public sealed class ExecutionLiveDisplay(
             .First();
 
         var latestChunk = activeSession.Last();
-        var excerpt = string.Join(
-            Environment.NewLine,
-            activeSession
-                .TakeLast(20)
-                .Select(chunk => chunk.Content));
+        var lines = new List<IRenderable>
+        {
+            new Markup(
+                $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}  " +
+                $"[grey]{Markup.Escape(ShortenPath(latestChunk.WorkingDirectory))} · {latestChunk.Timestamp.ToLocalTime():HH:mm:ss}[/]"),
+        };
 
-        table.AddRow("Role", CliStyle.Role(latestChunk.Role));
-        table.AddRow("Provider", CliStyle.Provider(latestChunk.Provider));
-        table.AddRow("Workdir", Markup.Escape(ShortenPath(latestChunk.WorkingDirectory)));
-        table.AddRow("Updated", latestChunk.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
-        table.AddRow("Excerpt", Markup.Escape(excerpt));
-        return table;
-    }
+        foreach (var chunk in activeSession.TakeLast(5))
+        {
+            lines.Add(new Markup($"[grey]{Markup.Escape(chunk.Content)}[/]"));
+        }
 
-    private static string FormatList(IReadOnlyList<string> values)
-    {
-        return values.Count == 0
-            ? "[grey]-[/]"
-            : Markup.Escape(string.Join(Environment.NewLine, values));
+        return new Rows(lines);
     }
 
     private static string ShortenPath(string path)
@@ -435,22 +350,9 @@ public sealed class ExecutionLiveDisplay(
         };
     }
 
-    private static AgentRole? GetRoleForPhase(TaskPhase phase)
-    {
-        return phase switch
-        {
-            TaskPhase.Planning => AgentRole.Plan,
-            TaskPhase.Coding => AgentRole.Code,
-            TaskPhase.Reviewing => AgentRole.Review,
-            TaskPhase.ApplyingReview => AgentRole.Code,
-            _ => null,
-        };
-    }
-
     private static string GetSpinnerFrame(int tick, bool useUnicode)
     {
         var frames = useUnicode ? UnicodeSpinnerFrames : AsciiSpinnerFrames;
         return frames[Math.Abs(tick) % frames.Length];
     }
-
 }

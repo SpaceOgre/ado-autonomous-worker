@@ -91,6 +91,7 @@ internal sealed class TaskOrchestrator(
         var workItem = await azureDevOpsClient.GetWorkItemAsync(execution.WorkItemId, cancellationToken);
         var startPhase = ResolveResumePhase(execution);
 
+        await stateStore.UpdateStatusAsync(executionId, ExecutionStatus.Running, cancellationToken);
         await executionJournal.AppendEventAsync(
             executionId,
             execution.Phase,
