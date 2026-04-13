@@ -194,6 +194,7 @@ public sealed class AzureDevOpsClient(
             ? null
             : $"vstfs:///Git/PullRequestId/{projectId}%2f{repoId}%2f{prId}";
 
+        await AddPullRequestLabelAsync(repositoryName, prId, "AI-Generated", cancellationToken);
         return new PullRequestInfo(prId, title, url, artifactUri);
     }
 
@@ -340,6 +341,16 @@ public sealed class AzureDevOpsClient(
         {
             Content = new StringContent(JsonSerializer.Serialize(document), Encoding.UTF8, "application/json-patch+json"),
         };
+    }
+
+    private async Task AddPullRequestLabelAsync(string repositoryName, int pullRequestId, string labelName, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/labels?api-version={ApiVersion}",
+            new { name = labelName },
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
     }
 
     private static object PatchField(string path, object value) => new { op = "add", path, value };
