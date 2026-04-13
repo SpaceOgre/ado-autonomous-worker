@@ -1,13 +1,20 @@
 using Ado.AutonomousWorker.Core.Abstractions;
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
+using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
 namespace Ado.AutonomousWorker.Cli.Presentation;
 
-public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleService terminalTitleService)
+public sealed class ExecutionLiveDisplay(
+    IStateStore stateStore,
+    TerminalTitleService terminalTitleService,
+    IOptions<AgentOptions> agentOptions)
 {
+    private static readonly string[] UnicodeSpinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    private static readonly string[] AsciiSpinnerFrames = ["-", "\\", "|", "/"];
     private static readonly TaskPhase[] OrderedPhases =
     [
         TaskPhase.Queued,
@@ -78,6 +85,7 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
 
         using var titleScope = terminalTitleService.BeginScope();
         var useUnicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var startedAt = DateTimeOffset.UtcNow;
         var tick = 0;
 
         terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildWaitingTitle(title, tick++, useUnicode));
@@ -88,7 +96,7 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
             return await operationTask;
         }
 
-        await AnsiConsole.Live(CreateWaitingView(title))
+        await AnsiConsole.Live(CreateWaitingView(title, tick, startedAt, useUnicode))
             .AutoClear(false)
             .Overflow(VerticalOverflow.Ellipsis)
             .Cropping(VerticalOverflowCropping.Top)
@@ -98,23 +106,29 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
                 {
                     var execution = await executionResolver(cancellationToken);
                     terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildExecutionTitle(title, execution, tick++, useUnicode));
-                    context.UpdateTarget(await BuildViewAsync(title, execution, cancellationToken));
+                    context.UpdateTarget(await BuildViewAsync(title, execution, tick, startedAt, useUnicode, cancellationToken));
                     await Task.Delay(TimeSpan.FromMilliseconds(750), cancellationToken);
                 }
 
                 var finalExecution = await executionResolver(cancellationToken);
                 terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildExecutionTitle(title, finalExecution, tick, useUnicode));
-                context.UpdateTarget(await BuildViewAsync(title, finalExecution, cancellationToken));
+                context.UpdateTarget(await BuildViewAsync(title, finalExecution, tick, startedAt, useUnicode, cancellationToken));
             });
 
         return await operationTask;
     }
 
-    private async Task<IRenderable> BuildViewAsync(string title, TaskExecutionRecord? execution, CancellationToken cancellationToken)
+    private async Task<IRenderable> BuildViewAsync(
+        string title,
+        TaskExecutionRecord? execution,
+        int tick,
+        DateTimeOffset startedAt,
+        bool useUnicode,
+        CancellationToken cancellationToken)
     {
         if (execution is null)
         {
-            return CreateWaitingView(title);
+            return CreateWaitingView(title, tick, startedAt, useUnicode);
         }
 
         var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
@@ -124,7 +138,9 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
 
         var body = new Rows(
         [
-            CreateSummaryTable(execution),
+            CreateSummaryTable(execution, agentOptions.Value),
+            new Rule("Activity"),
+            CreateActivityMarkup(execution.Phase, tick, startedAt, useUnicode, agentOptions.Value),
             new Rule("Progress"),
             CreatePhaseMarkup(execution.Phase),
             new Rule("Recent Events"),
@@ -132,9 +148,9 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
             new Rule("Plan"),
             CreatePlanTable(plan),
             new Rule("Agent Sessions"),
-            CreateSessionsTable(sessions),
+            CreateSessionsTable(sessions, agentOutput, execution.Phase, agentOptions.Value),
             new Rule("Agent Output"),
-            CreateAgentOutputTable(agentOutput),
+            CreateAgentOutputTable(agentOutput, execution.Phase, tick, useUnicode),
         ]);
 
         return new Panel(body)
@@ -144,11 +160,11 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
         };
     }
 
-    private static IRenderable CreateWaitingView(string title)
+    private static IRenderable CreateWaitingView(string title, int tick, DateTimeOffset startedAt, bool useUnicode)
     {
         var body = new Rows(
         [
-            new Markup("[grey]Waiting for execution state...[/]"),
+            CreateWaitingMarkup(tick, startedAt, useUnicode),
             new Markup("[grey]The execution record will appear here as soon as it is persisted.[/]"),
         ]);
 
@@ -159,7 +175,7 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
         };
     }
 
-    private static Table CreateSummaryTable(TaskExecutionRecord execution)
+    private static Table CreateSummaryTable(TaskExecutionRecord execution, AgentOptions agentOptions)
     {
         var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
         table.AddRow("Execution", execution.ExecutionId);
@@ -168,6 +184,9 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
         table.AddRow("Phase", CliStyle.Phase(execution.Phase));
         table.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         table.AddRow("Title", Markup.Escape(execution.Title));
+        table.AddRow("Plan Agent", Markup.Escape(FormatAgent(agentOptions.Plan)));
+        table.AddRow("Code Agent", Markup.Escape(FormatAgent(agentOptions.Code)));
+        table.AddRow("Review Agent", Markup.Escape(FormatAgent(agentOptions.Review)));
         return table;
     }
 
@@ -178,6 +197,44 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
             .ToArray();
 
         return new Markup(string.Join(" [grey]->[/] ", entries));
+    }
+
+    private static IRenderable CreateActivityMarkup(
+        TaskPhase phase,
+        int tick,
+        DateTimeOffset startedAt,
+        bool useUnicode,
+        AgentOptions agentOptions)
+    {
+        var elapsed = DateTimeOffset.UtcNow - startedAt;
+        var elapsedText = elapsed.TotalHours >= 1
+            ? elapsed.ToString(@"hh\:mm\:ss")
+            : elapsed.ToString(@"mm\:ss");
+
+        var (prefix, color, message) = phase switch
+        {
+            TaskPhase.Completed => (useUnicode ? "✓" : "*", "green", "Execution completed."),
+            TaskPhase.Failed => (useUnicode ? "✗" : "!", "red", "Execution failed."),
+            TaskPhase.Skipped => (useUnicode ? "↷" : "~", "yellow", "Execution skipped."),
+            _ => (GetSpinnerFrame(tick, useUnicode), "deepskyblue1", $"{phase} in progress..."),
+        };
+
+        var agentText = GetAgentForPhase(phase, agentOptions);
+        var agentSuffix = string.IsNullOrWhiteSpace(agentText)
+            ? string.Empty
+            : $" [grey](via {Markup.Escape(agentText)})[/]";
+
+        return new Markup($"[{color}]{Markup.Escape(prefix)}[/] {Markup.Escape(message)}{agentSuffix} [grey](elapsed {elapsedText})[/]");
+    }
+
+    private static IRenderable CreateWaitingMarkup(int tick, DateTimeOffset startedAt, bool useUnicode)
+    {
+        var elapsed = DateTimeOffset.UtcNow - startedAt;
+        var elapsedText = elapsed.TotalHours >= 1
+            ? elapsed.ToString(@"hh\:mm\:ss")
+            : elapsed.ToString(@"mm\:ss");
+
+        return new Markup($"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] Waiting for execution state... [grey](elapsed {elapsedText})[/]");
     }
 
     private static Table CreateEventsTable(IReadOnlyList<ExecutionEventRecord> events)
@@ -219,13 +276,50 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
         return table;
     }
 
-    private static Table CreateSessionsTable(IReadOnlyList<AgentSessionHandle> sessions)
+    private static Table CreateSessionsTable(
+        IReadOnlyList<AgentSessionHandle> sessions,
+        IReadOnlyList<AgentOutputChunk> chunks,
+        TaskPhase currentPhase,
+        AgentOptions agentOptions)
     {
         var table = new Table().Border(TableBorder.Rounded).AddColumns("Role", "Provider", "Workdir", "Transcript");
         var recentSessions = sessions.TakeLast(4).ToArray();
+        if (recentSessions.Length == 0 && chunks.Count > 0)
+        {
+            recentSessions = chunks
+                .GroupBy(chunk => chunk.SessionId)
+                .OrderByDescending(group => group.Max(item => item.Timestamp))
+                .Take(4)
+                .Select(group =>
+                {
+                    var latest = group.Last();
+                    return new AgentSessionHandle(
+                        latest.SessionId,
+                        latest.Provider,
+                        latest.Role,
+                        latest.WorkingDirectory,
+                        "Live output only");
+                })
+                .ToArray();
+        }
+
         if (recentSessions.Length == 0)
         {
-            table.AddRow("-", "-", "[grey]-[/]", "[grey]-[/]");
+            var activeRole = GetRoleForPhase(currentPhase);
+            var activeConfig = GetConfigForPhase(currentPhase, agentOptions);
+            if (activeRole is not null && activeConfig is not null)
+            {
+                table.AddRow(
+                    CliStyle.Role(activeRole.Value),
+                    CliStyle.Provider(activeConfig.Provider),
+                    "[grey]Waiting for session...[/]",
+                    "[grey]-[/]");
+            }
+            else
+            {
+                table.AddRow("-", "-", "[grey]-[/]", "[grey]-[/]");
+            }
+
             return table;
         }
 
@@ -241,12 +335,17 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
         return table;
     }
 
-    private static Table CreateAgentOutputTable(IReadOnlyList<AgentOutputChunk> chunks)
+    private static Table CreateAgentOutputTable(IReadOnlyList<AgentOutputChunk> chunks, TaskPhase phase, int tick, bool useUnicode)
     {
         var table = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
         if (chunks.Count == 0)
         {
-            table.AddRow("Output", "[grey]Waiting for agent output...[/]");
+            var spinner = GetSpinnerFrame(tick, useUnicode);
+            var waitingText = phase is TaskPhase.Completed or TaskPhase.Failed or TaskPhase.Skipped
+                ? "[grey]No agent output captured.[/]"
+                : $"[grey]{Markup.Escape(spinner)} Waiting for agent output...[/]";
+
+            table.AddRow("Output", waitingText);
             return table;
         }
 
@@ -304,6 +403,47 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleSe
     private static bool IsPastPhase(TaskPhase phase, TaskPhase currentPhase)
     {
         return Array.IndexOf(OrderedPhases, phase) < Array.IndexOf(OrderedPhases, currentPhase);
+    }
+
+    private static string FormatAgent(AgentRoleConfig config)
+    {
+        return $"{config.Provider} / {config.Model}";
+    }
+
+    private static string? GetAgentForPhase(TaskPhase phase, AgentOptions agentOptions)
+    {
+        var config = GetConfigForPhase(phase, agentOptions);
+        return config is null ? null : FormatAgent(config);
+    }
+
+    private static AgentRoleConfig? GetConfigForPhase(TaskPhase phase, AgentOptions agentOptions)
+    {
+        return phase switch
+        {
+            TaskPhase.Planning => agentOptions.Plan,
+            TaskPhase.Coding => agentOptions.Code,
+            TaskPhase.Reviewing => agentOptions.Review,
+            TaskPhase.ApplyingReview => agentOptions.Code,
+            _ => null,
+        };
+    }
+
+    private static AgentRole? GetRoleForPhase(TaskPhase phase)
+    {
+        return phase switch
+        {
+            TaskPhase.Planning => AgentRole.Plan,
+            TaskPhase.Coding => AgentRole.Code,
+            TaskPhase.Reviewing => AgentRole.Review,
+            TaskPhase.ApplyingReview => AgentRole.Code,
+            _ => null,
+        };
+    }
+
+    private static string GetSpinnerFrame(int tick, bool useUnicode)
+    {
+        var frames = useUnicode ? UnicodeSpinnerFrames : AsciiSpinnerFrames;
+        return frames[Math.Abs(tick) % frames.Length];
     }
 
 }

@@ -21,7 +21,7 @@ public static class AgentOutputNormalizer
 
         if (structuredOutput && LooksLikeJson(content))
         {
-            return [];
+            return NormalizeClaudeStructuredJson(content);
         }
 
         return [content];
@@ -94,9 +94,13 @@ public static class AgentOutputNormalizer
 
     private static void AddContentStrings(JsonElement payload, List<string> messages)
     {
-        if (!payload.TryGetProperty("content", out var content))
+        var content = payload;
+        if (payload.ValueKind == JsonValueKind.Object)
         {
-            return;
+            if (!payload.TryGetProperty("content", out content))
+            {
+                return;
+            }
         }
 
         if (content.ValueKind == JsonValueKind.String)
@@ -134,6 +138,46 @@ public static class AgentOutputNormalizer
     {
         return (value.StartsWith('{') && value.EndsWith('}')) ||
                (value.StartsWith('[') && value.EndsWith(']'));
+    }
+
+    private static IReadOnlyList<string> NormalizeClaudeStructuredJson(string content)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            var messages = new List<string>();
+
+            AddIfPresent(messages, TryGetString(root, "message"));
+            AddIfPresent(messages, TryGetString(root, "summary"));
+            AddIfPresent(messages, TryGetString(root, "text"));
+            AddIfPresent(messages, TryGetString(root, "title"));
+            AddIfPresent(messages, TryGetString(root, "delta"));
+            AddIfPresent(messages, TryGetString(root, "completion"));
+            AddIfPresent(messages, TryGetNestedString(root, "error", "message"));
+            AddContentStrings(root, messages);
+
+            if (root.TryGetProperty("payload", out var payload) && payload.ValueKind == JsonValueKind.Object)
+            {
+                AddIfPresent(messages, TryGetString(payload, "message"));
+                AddIfPresent(messages, TryGetString(payload, "summary"));
+                AddIfPresent(messages, TryGetString(payload, "text"));
+                AddIfPresent(messages, TryGetString(payload, "title"));
+                AddIfPresent(messages, TryGetString(payload, "delta"));
+                AddIfPresent(messages, TryGetNestedString(payload, "error", "message"));
+                AddContentStrings(payload, messages);
+            }
+
+            return messages
+                .Select(item => item.Trim())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static bool ShouldIgnoreCodexType(string? type)

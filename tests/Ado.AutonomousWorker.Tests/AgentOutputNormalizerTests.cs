@@ -27,6 +27,18 @@ public sealed class AgentOutputNormalizerTests
     }
 
     [Fact]
+    public void NormalizeClaudeLine_ExtractsMessageFromStructuredJsonStdout()
+    {
+        const string line = """{"message":"Planning repositories and validation strategy."}""";
+
+        var result = AgentOutputNormalizer.NormalizeClaudeLine(
+            new ProcessOutputLine(AgentOutputStream.Stdout, line),
+            structuredOutput: true);
+
+        Assert.Equal(["Planning repositories and validation strategy."], result);
+    }
+
+    [Fact]
     public void NormalizeCodexLine_ExtractsMessageFromJsonPayload()
     {
         const string line = """{"type":"assistant_message","payload":{"message":"Inspecting failing test and tracing null input path."}}""";
