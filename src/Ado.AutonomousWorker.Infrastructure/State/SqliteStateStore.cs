@@ -415,11 +415,8 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
             return null;
         }
 
-        return new ReviewResult(
-            reader.GetString(0),
-            [],
-            reader.GetString(1),
-            reader.IsDBNull(2) ? null : reader.GetString(2));
+        var payload = reader.IsDBNull(2) ? null : reader.GetString(2);
+        return Agents.ReviewResultParser.Parse(payload, reader.GetString(1));
     }
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
