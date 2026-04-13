@@ -1,5 +1,4 @@
 using Ado.AutonomousWorker.Core.Enums;
-using Ado.AutonomousWorker.Core.Models;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
