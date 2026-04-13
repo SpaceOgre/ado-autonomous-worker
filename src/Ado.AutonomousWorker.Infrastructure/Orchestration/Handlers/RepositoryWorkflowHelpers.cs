@@ -63,7 +63,18 @@ internal static class RepositoryWorkflowHelpers
     };
 
     internal static string ComputeSlug(string title)
-        => Regex.Replace(title.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+    {
+        var transliterated = title.ToLowerInvariant()
+            .Replace("å", "a")
+            .Replace("ä", "a")
+            .Replace("ö", "o")
+            .Replace("é", "e")
+            .Replace("è", "e")
+            .Replace("ü", "u")
+            .Replace("ñ", "n")
+            .Replace("ç", "c");
+        return Regex.Replace(transliterated, "[^a-z0-9]+", "-").Trim('-');
+    }
 
     public static string FormatWorkItemLabel(WorkItemType workItemType) => workItemType switch
     {
