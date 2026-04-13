@@ -134,6 +134,7 @@ ado-worker task set-phase --last --phase Reviewing
 ado-worker task set-phase --execution-id <execution-id> --phase Validating
 ado-worker agent test
 ado-worker agent test --role review
+ado-worker agent test --role pr
 ado-worker ui splash
 ado-worker ui splash --status "Queue run"
 ado-worker ui run-preview
@@ -148,7 +149,7 @@ Use the local or global installation flow below depending on how you want to run
 
 Use `ado-worker task set-phase` to rewind a completed or failed execution to an earlier phase (`Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`) and reset its status to `Failed` so `task resume` can continue from that point.
 
-Use `ado-worker agent test` to verify agent connectivity before running real tasks. It sends a minimal prompt to each configured agent (Plan, Code, Review) and reports whether each one responded successfully. Pass `--role plan|code|review` to test a single agent.
+Use `ado-worker agent test` to verify agent connectivity before running real tasks. It sends a minimal prompt to each configured agent (Plan, Code, Review, Pr) and reports whether each one responded successfully. Pass `--role plan|code|review|pr` to test a single agent.
 
 Use `ado-worker ui splash` to test the branded run banner without touching queue state, and `ado-worker ui run-preview` to render the exact queue slice that `ado-worker run` would process without starting any agent work.
 

@@ -32,6 +32,7 @@ public sealed class AgentTestCommand(
             ("Plan",   AgentRole.Plan,   options.Plan),
             ("Code",   AgentRole.Code,   options.Code),
             ("Review", AgentRole.Review, options.Review),
+            ("Pr",     AgentRole.Plan,   options.Pr),
         ];
 
         var targets = string.IsNullOrWhiteSpace(settings.Role)
@@ -42,24 +43,24 @@ public sealed class AgentTestCommand(
 
         if (targets.Length == 0)
         {
-            AnsiConsole.MarkupLine($"[red]Unknown role '{Markup.Escape(settings.Role!)}'. Valid values: plan, code, review.[/]");
+            AnsiConsole.MarkupLine($"[red]Unknown role '{Markup.Escape(settings.Role!)}'. Valid values: plan, code, review, pr.[/]");
             return 1;
         }
 
         var allPassed = true;
         foreach (var (label, role, config) in targets)
         {
-            if (!await TestRoleAsync(role, config, cancellationToken))
+            if (!await TestRoleAsync(label, role, config, cancellationToken))
                 allPassed = false;
         }
 
         return allPassed ? 0 : 1;
     }
 
-    private async Task<bool> TestRoleAsync(AgentRole role, AgentRoleConfig config, CancellationToken cancellationToken)
+    private async Task<bool> TestRoleAsync(string label, AgentRole role, AgentRoleConfig config, CancellationToken cancellationToken)
     {
         AnsiConsole.Markup(
-            $"Testing {CliStyle.Role(role)} {CliStyle.Provider(config.Provider)} " +
+            $"Testing [cornflowerblue]{Markup.Escape(label)}[/] {CliStyle.Provider(config.Provider)} " +
             $"[grey]({Markup.Escape(config.Model)})[/] ... ");
 
         var artifactDir = Path.Combine(Path.GetTempPath(), "ado-worker-agent-test", Guid.NewGuid().ToString("N"));

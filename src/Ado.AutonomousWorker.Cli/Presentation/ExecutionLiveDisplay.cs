@@ -185,7 +185,8 @@ public sealed class ExecutionLiveDisplay(
                 $"[grey]Exec[/] {Markup.Escape(shortId)}  " +
                 $"[grey]Plan[/] {Markup.Escape(FormatAgent(agentOptions.Plan))}  " +
                 $"[grey]Code[/] {Markup.Escape(FormatAgent(agentOptions.Code))}  " +
-                $"[grey]Review[/] {Markup.Escape(FormatAgent(agentOptions.Review))}"),
+                $"[grey]Review[/] {Markup.Escape(FormatAgent(agentOptions.Review))}  " +
+                $"[grey]PR[/] {Markup.Escape(FormatAgent(agentOptions.Pr))}"),
 
             // Activity status line with spinner / outcome icon
             CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions),
@@ -346,6 +347,7 @@ public sealed class ExecutionLiveDisplay(
             TaskPhase.Coding => agentOptions.Code,
             TaskPhase.Reviewing => agentOptions.Review,
             TaskPhase.ApplyingReview => agentOptions.Code,
+            TaskPhase.Publishing => agentOptions.Pr,
             _ => null,
         };
     }

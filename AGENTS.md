@@ -42,6 +42,7 @@ dotnet tool run ado-worker -- task set-phase --last --phase Reviewing
 dotnet tool run ado-worker -- task set-phase --execution-id <executionId> --phase Validating
 dotnet tool run ado-worker -- agent test
 dotnet tool run ado-worker -- agent test --role review
+dotnet tool run ado-worker -- agent test --role pr
 dotnet tool run ado-worker -- doctor
 ```
 
@@ -70,13 +71,14 @@ The orchestrator (`TaskOrchestrator`) is phase-aware and can **resume** from any
 
 Use `task set-phase` to manually rewind a Completed or Failed execution to `Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`, then `task resume` to continue from there.
 
-### Three-Role Agent Model
+### Four-Role Agent Model
 
-Each role is independently configured in `appsettings.json` under `Agents.Plan`, `Agents.Code`, and `Agents.Review`. Roles map to `AgentRole` enum; providers are `Claude` (invokes `claude` CLI) or `Codex` (invokes `codex` CLI).
+Each role is independently configured in `appsettings.json` under `Agents.Plan`, `Agents.Code`, `Agents.Review`, and `Agents.Pr`. Roles map to `AgentRole` enum; providers are `Claude` (invokes `claude` CLI) or `Codex` (invokes `codex` CLI).
 
 - **Plan**: Decomposes the work item into a `PlanResult` (scope, target repos, validation steps, risks). Output is JSON extracted by `AgentOutputNormalizer`.
 - **Code**: Implements the feature in an isolated git worktree. Loops until review approves or `ReviewCycleLimit` is hit.
 - **Review**: Critiques the code, outputs structured `ReviewResult` JSON. If findings exist, Code re-runs to address them.
+- **Pr**: Generates a structured PR title and description (Classification, Summary, Key impacts, Bug description for bugfix branches) after the commit is made in Publishing. Uses `git log` and `git diff --stat` as input. Defaults to a cheap/fast model (Haiku); configure in `Agents.Pr`. Falls back to a bare-minimum format on failure.
 
 ### Repository Isolation
 

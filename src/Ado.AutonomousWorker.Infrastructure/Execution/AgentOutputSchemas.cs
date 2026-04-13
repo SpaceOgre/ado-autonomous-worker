@@ -17,6 +17,17 @@ internal static class AgentOutputSchemas
     }
     """;
 
+    public const string PullRequestDescription = """
+    {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["title", "description"]
+    }
+    """;
+
     public const string Review = """
     {
       "type": "object",
