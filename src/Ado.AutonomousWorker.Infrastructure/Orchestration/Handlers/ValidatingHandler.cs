@@ -29,8 +29,11 @@ internal sealed partial class ValidatingHandler(
                     context.ExecutionId, repoKind, validationCommand);
 
                 var artifactPath = Path.Combine(artifactDirectory, $"{NormalizeFileName(validationCommand)}.log");
+                var validationWorkingDirectory = string.IsNullOrWhiteSpace(repositoryExecution.Profile.ValidationWorkingDirectory)
+                    ? workspace.WorkingDirectory
+                    : Path.Combine(workspace.WorkingDirectory, repositoryExecution.Profile.ValidationWorkingDirectory);
                 var result = await commandRunner.RunPowerShellAsync(
-                    validationCommand, workspace.WorkingDirectory, artifactPath, cancellationToken);
+                    validationCommand, validationWorkingDirectory, artifactPath, cancellationToken);
 
                 if (!result.Success)
                     throw new ValidationFailureException(

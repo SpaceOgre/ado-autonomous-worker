@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Ado.AutonomousWorker.Core.Enums;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
@@ -53,6 +54,16 @@ internal static class RepositoryWorkflowHelpers
 
     public static string FormatRepoKinds(IEnumerable<RepoKind> repoKinds)
         => string.Join(" + ", repoKinds.Distinct().Select(k => k.ToString()));
+
+    internal static IReadOnlyList<RepoKind> MapScopeToRepos(WorkItemScope scope) => scope switch
+    {
+        WorkItemScope.Backend  => [RepoKind.Backend],
+        WorkItemScope.Frontend => [RepoKind.Frontend],
+        _                      => [RepoKind.Backend, RepoKind.Frontend],
+    };
+
+    internal static string ComputeSlug(string title)
+        => Regex.Replace(title.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
 
     public static string FormatWorkItemLabel(WorkItemType workItemType) => workItemType switch
     {

@@ -52,13 +52,13 @@ public sealed partial class WorkspaceManager(
         {
             var fetchResult = await RunGitAsync(
                 profile.BaseClonePath,
-                Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-fetch.log"),
-                ["fetch", "origin", profile.MainBranch],
+                Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-pull.log"),
+                ["pull", "origin", profile.MainBranch],
                 cancellationToken);
 
             if (!fetchResult.Success)
             {
-                throw new InvalidOperationException($"Failed to fetch branch '{profile.MainBranch}' for {repoKind}: {fetchResult.StandardError}");
+                throw new InvalidOperationException($"Failed to pull branch '{profile.MainBranch}' for {repoKind}: {fetchResult.StandardError}");
             }
 
             var addLogPath = Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-add.log");

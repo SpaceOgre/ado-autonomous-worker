@@ -42,6 +42,7 @@ builder.Services.AddSingleton<UiSplashCommand>();
 builder.Services.AddSingleton<VersionCommand>();
 builder.Services.AddSingleton<ResetCommand>();
 builder.Services.AddSingleton<AgentTestCommand>();
+builder.Services.AddSingleton<SetPhaseCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 builder.Services.AddSingleton<TerminalTitleService>();
@@ -101,6 +102,7 @@ app.Configure(config =>
     {
         task.AddCommand<RunTaskCommand>("run").WithDescription("Run a specific Azure DevOps work item.");
         task.AddCommand<ResumeTaskCommand>("resume").WithDescription("Resume a prior execution by ID.");
+        task.AddCommand<SetPhaseCommand>("set-phase").WithDescription("Rewind an execution to an earlier phase so it can be resumed from there.");
     });
 
     config.AddBranch("agent", agent =>

@@ -1,7 +1,9 @@
+using System.Text.RegularExpressions;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
+using Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -15,6 +17,8 @@ internal sealed class TaskOrchestrator(
     ExecutionJournal executionJournal,
     TaskStateMachine stateMachine,
     IOptions<WorkerOptions> workerOptions,
+    IOptions<RepositoryOptions> repositoryOptions,
+    IOptions<StorageOptions> storageOptions,
     ILogger<TaskOrchestrator> logger) : ITaskOrchestrator
 {
     public async Task<IReadOnlyList<string>> RunQueueAsync(CancellationToken cancellationToken)
@@ -126,6 +130,12 @@ internal sealed class TaskOrchestrator(
             context.LatestReview = await stateStore.GetLatestReviewResultAsync(executionId, cancellationToken);
         }
 
+        if (startPhase > TaskPhase.Coding && context.Plan is not null)
+        {
+            context.RepositoryExecutions = await RebuildRepositoryExecutionsAsync(
+                workItem, context.Plan, executionId, cancellationToken);
+        }
+
         await RunWithMachineAsync(context, startPhase, cancellationToken);
     }
 
@@ -156,6 +166,49 @@ internal sealed class TaskOrchestrator(
                 cancellationToken);
             throw;
         }
+    }
+
+    private async Task<IReadOnlyList<RepositoryExecution>> RebuildRepositoryExecutionsAsync(
+        WorkItemDetails workItem,
+        PlanResult plan,
+        string executionId,
+        CancellationToken cancellationToken)
+    {
+        var slug = RepositoryWorkflowHelpers.ComputeSlug(workItem.Title);
+        var executionArtifactRoot = storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId);
+        var result = new List<RepositoryExecution>();
+
+        foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
+        {
+            var childTask = workItem.WorkItemType == WorkItemType.Bug
+                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                    ?? throw new InvalidOperationException(
+                        $"Cannot resume: no child task found for {repoKind} on work item #{workItem.WorkItemId}.");
+
+            var profile = repoKind switch
+            {
+                RepoKind.Backend  => repositoryOptions.Value.Backend,
+                RepoKind.Frontend => repositoryOptions.Value.Frontend,
+                _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'.")
+            };
+
+            var workspace = await workspaceManager.CreateRepoExecutionAsync(
+                workItem.WorkItemId, childTask.WorkItemId, repoKind, slug,
+                preserveExistingWorkspace: true, cancellationToken);
+
+            result.Add(new RepositoryExecution(
+                childTask,
+                profile,
+                workspace,
+                Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant())));
+        }
+
+        logger.LogInformation(
+            "Execution {ExecutionId}: rebuilt {Count} repository execution(s) for resume.",
+            executionId, result.Count);
+
+        return result;
     }
 
     private static TaskPhase ResolveResumePhase(TaskExecutionRecord execution)

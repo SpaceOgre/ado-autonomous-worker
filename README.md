@@ -129,6 +129,9 @@ ado-worker completion powershell
 ado-worker run
 ado-worker task run --id 12345
 ado-worker task resume --execution-id <execution-id>
+ado-worker task resume --last
+ado-worker task set-phase --last --phase Reviewing
+ado-worker task set-phase --execution-id <execution-id> --phase Validating
 ado-worker agent test
 ado-worker agent test --role review
 ado-worker ui splash
@@ -142,6 +145,8 @@ Use the local or global installation flow below depending on how you want to run
 `ado-worker run` first previews the exact queue slice it will execute, including the current ordering and `MaxItemsPerRun` cap, and then starts immediately.
 
 `ado-worker run` is intentionally fail-fast. If one queued work item fails, the command stops immediately so you can inspect and fix the issue before spending more agent tokens on the remaining backlog items.
+
+Use `ado-worker task set-phase` to rewind a completed or failed execution to an earlier phase (`Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`) and reset its status to `Failed` so `task resume` can continue from that point.
 
 Use `ado-worker agent test` to verify agent connectivity before running real tasks. It sends a minimal prompt to each configured agent (Plan, Code, Review) and reports whether each one responded successfully. Pass `--role plan|code|review` to test a single agent.
 

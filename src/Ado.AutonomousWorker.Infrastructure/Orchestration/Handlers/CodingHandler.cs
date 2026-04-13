@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -8,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
-internal sealed partial class CodingHandler(
+internal sealed class CodingHandler(
     IAzureDevOpsClient azureDevOpsClient,
     IWorkspaceManager workspaceManager,
     IAgentRunnerFactory agentRunnerFactory,
@@ -34,13 +33,17 @@ internal sealed partial class CodingHandler(
         await context.Journal.AppendEventAsync(
             context.ExecutionId, TaskPhase.Coding, $"Preparing repositories for scope {plan.Scope}.", cancellationToken);
 
-        var slug = SlugRegex().Replace(workItem.Title.ToLowerInvariant(), "-").Trim('-');
+        var slug = RepositoryWorkflowHelpers.ComputeSlug(workItem.Title);
         var repositoryExecutions = new List<RepositoryExecution>();
 
-        foreach (var repoKind in MapScopeToRepos(plan.Scope))
+        foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
         {
-            var childTask = workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                ?? await CreateChildTaskAsync(workItem, repoKind, cancellationToken);
+            // Bugs cannot have child Tasks in this ADO project (they sit at the same level).
+            // When the parent is a Bug, work directly against the Bug itself.
+            var childTask = workItem.WorkItemType == WorkItemType.Bug
+                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                    ?? await CreateChildTaskAsync(workItem, repoKind, cancellationToken);
             var repoProfile = GetRepositoryProfile(repoKind);
             var workspace = await workspaceManager.CreateRepoExecutionAsync(
                 workItem.WorkItemId, childTask.WorkItemId, repoKind, slug, context.IsExplicitResume, cancellationToken);
@@ -108,13 +111,6 @@ internal sealed partial class CodingHandler(
         _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
     };
 
-    private static IReadOnlyList<RepoKind> MapScopeToRepos(WorkItemScope scope) => scope switch
-    {
-        WorkItemScope.Backend => [RepoKind.Backend],
-        WorkItemScope.Frontend => [RepoKind.Frontend],
-        _ => [RepoKind.Backend, RepoKind.Frontend],
-    };
-
     private static string BuildCodePrompt(
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
@@ -154,6 +150,4 @@ internal sealed partial class CodingHandler(
         """;
     }
 
-    [GeneratedRegex("[^a-z0-9]+", RegexOptions.IgnoreCase)]
-    private static partial Regex SlugRegex();
 }

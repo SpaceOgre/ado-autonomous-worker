@@ -8,13 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Maintenance Rules
 
-**When you add, rename, or remove a CLI command**, you must update all three of these in the same change:
+**When you add, rename, or remove a CLI command**, you must update all four of these in the same change:
 
-1. **`CliCommandCatalog.cs`** (`src/Ado.AutonomousWorker.Cli/Completion/CliCommandCatalog.cs`) — add the command to `TopLevelCommands` and its options to `CommandOptions`. This drives tab-completion.
-2. **`README.md`** — add the command to the `## Commands` section.
+1. **`CliCommandCatalog.cs`** (`src/Ado.AutonomousWorker.Cli/Completion/CliCommandCatalog.cs`) — add the command to `TopLevelCommands` and/or `BranchCommands`, and its options to `CommandOptions`. This drives tab-completion.
+2. **`README.md`** — add the command to the `## Commands` section with example invocations and a description.
 3. **`Program.cs`** — register the command class as a singleton and add it to the CLI config.
+4. **`AGENTS.md`** — add the command to the Commands section below.
 
-Forgetting any of these will leave tab-completion or the README out of sync.
+Forgetting any of these will leave tab-completion, the README, or agent guidance out of sync.
 
 ## Commands
 
@@ -36,6 +37,11 @@ dotnet tool run ado-worker -- queue
 dotnet tool run ado-worker -- run
 dotnet tool run ado-worker -- task run --id <workItemId>
 dotnet tool run ado-worker -- task resume --execution-id <executionId>
+dotnet tool run ado-worker -- task resume --last
+dotnet tool run ado-worker -- task set-phase --last --phase Reviewing
+dotnet tool run ado-worker -- task set-phase --execution-id <executionId> --phase Validating
+dotnet tool run ado-worker -- agent test
+dotnet tool run ado-worker -- agent test --role review
 dotnet tool run ado-worker -- doctor
 ```
 
@@ -60,7 +66,9 @@ Queued → Planning → Coding → Reviewing → ApplyingReview → Validating �
                                                                                    → Skipped
 ```
 
-The orchestrator (`TaskOrchestrator`) is phase-aware and can **resume** from the `Planning` or `Validating` checkpoints without re-running earlier phases. Phase state is persisted in SQLite.
+The orchestrator (`TaskOrchestrator`) is phase-aware and can **resume** from any post-Coding phase without re-running earlier phases. On resume it rebuilds `RepositoryExecutions` from the persisted plan and existing worktrees (`preserveExistingWorkspace: true`), so Reviewing, Validating, and Publishing all have the correct repo contexts. Phase state is persisted in SQLite.
+
+Use `task set-phase` to manually rewind a Completed or Failed execution to `Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`, then `task resume` to continue from there.
 
 ### Three-Role Agent Model
 

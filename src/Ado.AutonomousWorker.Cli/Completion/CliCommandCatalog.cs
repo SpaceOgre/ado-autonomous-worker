@@ -24,7 +24,7 @@ public static class CliCommandCatalog
             ["agent"] = ["test"],
             ["completion"] = ["powershell"],
             ["execution"] = ["show"],
-            ["task"] = ["resume", "run"],
+            ["task"] = ["resume", "run", "set-phase"],
             ["ui"] = ["run-preview", "splash"],
         };
 
@@ -51,6 +51,7 @@ public static class CliCommandCatalog
             {
                 ["resume"] = ["--execution-id", "--last"],
                 ["run"] = ["--id"],
+                ["set-phase"] = ["--execution-id", "--last", "--phase"],
             },
             ["ui"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {
