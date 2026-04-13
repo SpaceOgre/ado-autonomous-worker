@@ -10,6 +10,7 @@ public static class CliCommandCatalog
         "execution",
         "executions",
         "queue",
+        "reset",
         "run",
         "task",
         "ui",
@@ -35,6 +36,10 @@ public static class CliCommandCatalog
             ["executions"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {
                 [string.Empty] = ["--active"],
+            },
+            ["reset"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                [string.Empty] = ["--force"],
             },
             ["task"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {

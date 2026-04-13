@@ -1,8 +1,7 @@
-using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 using Ado.AutonomousWorker.Infrastructure.State;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ado.AutonomousWorker.Tests;
 
@@ -45,26 +44,27 @@ public sealed class SqliteStateStoreTests : IDisposable
         try
         {
             if (Directory.Exists(_rootPath))
-            {
                 Directory.Delete(_rootPath, recursive: true);
-            }
         }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private SqliteStateStore CreateStore()
     {
-        return new SqliteStateStore(Options.Create(new StorageOptions
+        var dbPath = Path.Combine(_rootPath, "worker.db");
+        var factory = new TestDbContextFactory(dbPath);
+        return new SqliteStateStore(factory);
+    }
+
+    private sealed class TestDbContextFactory(string dbPath) : IDbContextFactory<WorkerDbContext>
+    {
+        public WorkerDbContext CreateDbContext()
         {
-            DataRoot = _rootPath,
-            DatabasePath = Path.Combine(_rootPath, "worker.db"),
-            LogRoot = Path.Combine(_rootPath, "logs"),
-            ArtifactRoot = Path.Combine(_rootPath, "artifacts"),
-        }));
+            var options = new DbContextOptionsBuilder<WorkerDbContext>()
+                .UseSqlite($"Data Source={dbPath}")
+                .Options;
+            return new WorkerDbContext(options);
+        }
     }
 }

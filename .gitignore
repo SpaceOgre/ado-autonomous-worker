@@ -19,3 +19,4 @@ TestResults/
 
 appsettings.local.json
 src/Ado.AutonomousWorker.Cli/appsettings.local.json
+.claude/settings.local.json

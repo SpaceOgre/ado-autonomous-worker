@@ -6,6 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `Ado.AutonomousWorker` is a .NET 10 console application (CLI tool) that automates end-to-end AI-assisted development for Azure DevOps work items tagged `AI-Work` or `AI-Rework` in the PRIIS backlog. It orchestrates three AI roles — **Plan**, **Code**, and **Review** — against isolated git worktrees, then publishes draft PRs linked to the parent work item.
 
+## Maintenance Rules
+
+**When you add, rename, or remove a CLI command**, you must update all three of these in the same change:
+
+1. **`CliCommandCatalog.cs`** (`src/Ado.AutonomousWorker.Cli/Completion/CliCommandCatalog.cs`) — add the command to `TopLevelCommands` and its options to `CommandOptions`. This drives tab-completion.
+2. **`README.md`** — add the command to the `## Commands` section.
+3. **`Program.cs`** — register the command class as a singleton and add it to the CLI config.
+
+Forgetting any of these will leave tab-completion or the README out of sync.
+
 ## Commands
 
 ```bash

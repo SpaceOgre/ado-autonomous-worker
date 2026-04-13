@@ -116,6 +116,8 @@ stateDiagram-v2
 
 ```powershell
 ado-worker bootstrap
+ado-worker reset
+ado-worker reset --force
 ado-worker doctor
 ado-worker queue
 ado-worker executions

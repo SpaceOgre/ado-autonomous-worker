@@ -40,6 +40,7 @@ builder.Services.AddSingleton<ResumeTaskCommand>();
 builder.Services.AddSingleton<UiRunPreviewCommand>();
 builder.Services.AddSingleton<UiSplashCommand>();
 builder.Services.AddSingleton<VersionCommand>();
+builder.Services.AddSingleton<ResetCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 builder.Services.AddSingleton<TerminalTitleService>();
@@ -79,6 +80,7 @@ app.Configure(config =>
 {
     config.SetApplicationName("ado-worker");
     config.AddCommand<BootstrapCommand>("bootstrap").WithDescription("Initialize storage and workspace directories.");
+    config.AddCommand<ResetCommand>("reset").WithDescription("Delete the local worker database.");
     config.AddCommand<DoctorCommand>("doctor").WithDescription("Verify configuration, repos, CLI tools, and Azure DevOps access.");
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");

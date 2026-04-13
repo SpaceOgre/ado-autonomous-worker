@@ -10,6 +10,7 @@ using Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 using Ado.AutonomousWorker.Infrastructure.Queue;
 using Ado.AutonomousWorker.Infrastructure.State;
 using Ado.AutonomousWorker.Infrastructure.Workspaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -26,6 +27,13 @@ public static class DependencyInjection
         services.Configure<StorageOptions>(configuration.GetSection("Storage"));
         services.PostConfigure<StorageOptions>(options => options.NormalizePaths());
         services.Configure<WorkerOptions>(configuration.GetSection("Worker"));
+
+        services.AddDbContextFactory<WorkerDbContext>((provider, options) =>
+        {
+            var storage = provider.GetRequiredService<IOptions<StorageOptions>>().Value;
+            Directory.CreateDirectory(Path.GetDirectoryName(storage.DatabasePath)!);
+            options.UseSqlite($"Data Source={storage.DatabasePath}");
+        }, ServiceLifetime.Singleton);
 
         services.AddSingleton<IRulesEngine, RulesEngine>();
         services.AddSingleton<IStateStore, SqliteStateStore>();
