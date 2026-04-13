@@ -6,7 +6,7 @@ using Spectre.Console.Rendering;
 
 namespace Ado.AutonomousWorker.Cli.Presentation;
 
-public sealed class ExecutionLiveDisplay(IStateStore stateStore)
+public sealed class ExecutionLiveDisplay(IStateStore stateStore, TerminalTitleService terminalTitleService)
 {
     private static readonly TaskPhase[] OrderedPhases =
     [
@@ -76,6 +76,12 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
     {
         await stateStore.InitializeAsync(cancellationToken);
 
+        using var titleScope = terminalTitleService.BeginScope();
+        var useUnicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var tick = 0;
+
+        terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildWaitingTitle(title, tick++, useUnicode));
+
         var operationTask = operation(cancellationToken);
         if (!AnsiConsole.Profile.Capabilities.Interactive)
         {
@@ -91,11 +97,13 @@ public sealed class ExecutionLiveDisplay(IStateStore stateStore)
                 while (!operationTask.IsCompleted)
                 {
                     var execution = await executionResolver(cancellationToken);
+                    terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildExecutionTitle(title, execution, tick++, useUnicode));
                     context.UpdateTarget(await BuildViewAsync(title, execution, cancellationToken));
                     await Task.Delay(TimeSpan.FromMilliseconds(750), cancellationToken);
                 }
 
                 var finalExecution = await executionResolver(cancellationToken);
+                terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildExecutionTitle(title, finalExecution, tick, useUnicode));
                 context.UpdateTarget(await BuildViewAsync(title, finalExecution, cancellationToken));
             });
 

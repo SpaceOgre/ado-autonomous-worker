@@ -43,6 +43,7 @@ builder.Services.AddSingleton<VersionCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 builder.Services.AddSingleton<RunPreambleDisplay>();
+builder.Services.AddSingleton<TerminalTitleService>();
 
 using var host = builder.Build();
 
