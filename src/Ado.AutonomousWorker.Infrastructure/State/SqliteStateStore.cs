@@ -25,6 +25,7 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
             title TEXT NOT NULL,
             kind INTEGER NOT NULL,
             phase INTEGER NOT NULL,
+            status INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             plan_provider_session_id TEXT NULL
@@ -78,6 +79,17 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        // Idempotent migration: add status column if it does not exist yet.
+        await using var migrationCheck = connection.CreateCommand();
+        migrationCheck.CommandText = "SELECT COUNT(*) FROM pragma_table_info('executions') WHERE name='status';";
+        var hasStatus = (long)(await migrationCheck.ExecuteScalarAsync(cancellationToken))! > 0;
+        if (!hasStatus)
+        {
+            await using var alterTable = connection.CreateCommand();
+            alterTable.CommandText = "ALTER TABLE executions ADD COLUMN status INTEGER NOT NULL DEFAULT 0;";
+            await alterTable.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
@@ -86,14 +98,15 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         await using var command = connection.CreateCommand();
         command.CommandText = """
         INSERT OR REPLACE INTO executions
-        (execution_id, work_item_id, title, kind, phase, created_at, updated_at, plan_provider_session_id)
-        VALUES ($id, $workItemId, $title, $kind, $phase, $createdAt, $updatedAt, $planSessionId);
+        (execution_id, work_item_id, title, kind, phase, status, created_at, updated_at, plan_provider_session_id)
+        VALUES ($id, $workItemId, $title, $kind, $phase, $status, $createdAt, $updatedAt, $planSessionId);
         """;
         command.Parameters.AddWithValue("$id", execution.ExecutionId);
         command.Parameters.AddWithValue("$workItemId", execution.WorkItemId);
         command.Parameters.AddWithValue("$title", execution.Title);
         command.Parameters.AddWithValue("$kind", (int)execution.Kind);
         command.Parameters.AddWithValue("$phase", (int)execution.Phase);
+        command.Parameters.AddWithValue("$status", (int)execution.Status);
         command.Parameters.AddWithValue("$createdAt", execution.CreatedAt.ToString("O"));
         command.Parameters.AddWithValue("$updatedAt", execution.UpdatedAt.ToString("O"));
         command.Parameters.AddWithValue("$planSessionId", (object?)execution.ProviderPlanSessionId ?? DBNull.Value);
@@ -105,7 +118,7 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-        SELECT execution_id, work_item_id, title, kind, phase, created_at, updated_at, plan_provider_session_id
+        SELECT execution_id, work_item_id, title, kind, phase, status, created_at, updated_at, plan_provider_session_id
         FROM executions
         WHERE execution_id = $id;
         """;
@@ -125,7 +138,7 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-        SELECT execution_id, work_item_id, title, kind, phase, created_at, updated_at, plan_provider_session_id
+        SELECT execution_id, work_item_id, title, kind, phase, status, created_at, updated_at, plan_provider_session_id
         FROM executions
         ORDER BY updated_at DESC;
         """;
@@ -145,14 +158,12 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-        SELECT execution_id, work_item_id, title, kind, phase, created_at, updated_at, plan_provider_session_id
+        SELECT execution_id, work_item_id, title, kind, phase, status, created_at, updated_at, plan_provider_session_id
         FROM executions
-        WHERE phase NOT IN ($completed, $failed, $skipped)
+        WHERE status = $running
         ORDER BY updated_at DESC;
         """;
-        command.Parameters.AddWithValue("$completed", (int)TaskPhase.Completed);
-        command.Parameters.AddWithValue("$failed", (int)TaskPhase.Failed);
-        command.Parameters.AddWithValue("$skipped", (int)TaskPhase.Skipped);
+        command.Parameters.AddWithValue("$running", (int)ExecutionStatus.Running);
 
         var results = new List<TaskExecutionRecord>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -176,6 +187,22 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         """;
         command.Parameters.AddWithValue("$id", executionId);
         command.Parameters.AddWithValue("$phase", (int)phase);
+        command.Parameters.AddWithValue("$updatedAt", DateTimeOffset.UtcNow.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        UPDATE executions
+        SET status = $status,
+            updated_at = $updatedAt
+        WHERE execution_id = $id;
+        """;
+        command.Parameters.AddWithValue("$id", executionId);
+        command.Parameters.AddWithValue("$status", (int)status);
         command.Parameters.AddWithValue("$updatedAt", DateTimeOffset.UtcNow.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -435,9 +462,10 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
             reader.GetString(2),
             (QueueItemKind)reader.GetInt32(3),
             (TaskPhase)reader.GetInt32(4),
-            DateTimeOffset.Parse(reader.GetString(5)),
+            (ExecutionStatus)reader.GetInt32(5),
             DateTimeOffset.Parse(reader.GetString(6)),
-            reader.IsDBNull(7) ? null : reader.GetString(7));
+            DateTimeOffset.Parse(reader.GetString(7)),
+            reader.IsDBNull(8) ? null : reader.GetString(8));
     }
 
     private static string SerializeList(IReadOnlyList<string> values)

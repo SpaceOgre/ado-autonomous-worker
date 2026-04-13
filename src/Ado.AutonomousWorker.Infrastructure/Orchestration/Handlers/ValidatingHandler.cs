@@ -11,7 +11,7 @@ internal sealed partial class ValidatingHandler(
 {
     public TaskPhase Phase => TaskPhase.Validating;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         foreach (var repositoryExecution in context.RepositoryExecutions)
         {
@@ -43,7 +43,7 @@ internal sealed partial class ValidatingHandler(
             }
         }
 
-        return TaskPhase.Publishing;
+        return PhaseTransition.To(TaskPhase.Publishing);
     }
 
     private static string NormalizeFileName(string value)

@@ -19,7 +19,7 @@ internal sealed class ReviewingHandler(
 {
     public TaskPhase Phase => TaskPhase.Reviewing;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         var workItem = context.WorkItem;
         var repositoryExecutions = context.RepositoryExecutions;
@@ -59,13 +59,13 @@ internal sealed class ReviewingHandler(
             await context.Journal.AppendEventAsync(
                 context.ExecutionId, TaskPhase.Reviewing,
                 $"{acceptedFindings.Length} findings accepted for remediation.", cancellationToken);
-            return TaskPhase.ApplyingReview;
+            return PhaseTransition.To(TaskPhase.ApplyingReview);
         }
 
         await context.Journal.AppendEventAsync(
             context.ExecutionId, TaskPhase.Reviewing,
             "No accepted findings — proceeding to validation.", cancellationToken);
-        return TaskPhase.Validating;
+        return PhaseTransition.To(TaskPhase.Validating);
     }
 
     private static string BuildReviewPrompt(

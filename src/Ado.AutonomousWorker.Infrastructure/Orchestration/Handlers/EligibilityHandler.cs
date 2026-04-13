@@ -14,7 +14,7 @@ internal sealed class EligibilityHandler(
 {
     public TaskPhase Phase => TaskPhase.Queued;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         var workItem = context.WorkItem;
 
@@ -26,7 +26,7 @@ internal sealed class EligibilityHandler(
                 TaskPhase.Queued,
                 "Work item is no longer eligible for automation.",
                 cancellationToken);
-            return TaskPhase.Skipped;
+            return PhaseTransition.Skip();
         }
 
         if (rulesEngine.ExceedsAcceptanceCriteriaLimit(workItem, 10, out var lineCount))
@@ -43,14 +43,14 @@ internal sealed class EligibilityHandler(
                 TaskPhase.Queued,
                 "Acceptance criteria exceeded the configured limit.",
                 cancellationToken);
-            return TaskPhase.Skipped;
+            return PhaseTransition.Skip();
         }
 
         context.CurrentSprintPath =
             await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken) ?? workItem.IterationPath;
 
         await EnsureWorkItemReadyAsync(workItem, context.CurrentSprintPath, cancellationToken);
-        return TaskPhase.Planning;
+        return PhaseTransition.To(TaskPhase.Planning);
     }
 
     private async Task EnsureWorkItemReadyAsync(

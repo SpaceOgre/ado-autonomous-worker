@@ -16,7 +16,7 @@ internal sealed class ApplyingReviewHandler(
 {
     public TaskPhase Phase => TaskPhase.ApplyingReview;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         var codeSession = context.CodeSession
             ?? throw new InvalidOperationException("CodeSession must be set before entering ApplyingReview phase.");
@@ -51,7 +51,7 @@ internal sealed class ApplyingReviewHandler(
             executionJournal.CreateOutputObserver(context.ExecutionId),
             cancellationToken);
 
-        return TaskPhase.Validating;
+        return PhaseTransition.To(TaskPhase.Validating);
     }
 
     private static string BuildReviewResumePrompt(IReadOnlyList<ReviewFinding> findings)

@@ -25,8 +25,8 @@ public sealed class CliCompletionServiceTests
     {
         var service = new CliCompletionService(new FakeStateStore(
         [
-            new TaskExecutionRecord("exec-123", 1, "Title", QueueItemKind.AiWork, TaskPhase.Completed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
-            new TaskExecutionRecord("exec-456", 2, "Other", QueueItemKind.AiRework, TaskPhase.Failed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+            new TaskExecutionRecord("exec-123", 1, "Title", QueueItemKind.AiWork, TaskPhase.Publishing, ExecutionStatus.Completed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+            new TaskExecutionRecord("exec-456", 2, "Other", QueueItemKind.AiRework, TaskPhase.Reviewing, ExecutionStatus.Failed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
         ]));
 
         var suggestions = await service.GetSuggestionsAsync("exec-", ["execution", "show", "--id"], CancellationToken.None);
@@ -84,6 +84,8 @@ public sealed class CliCompletionServiceTests
             => Task.FromResult(_executions);
 
         public Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task AppendEventAsync(ExecutionEventRecord executionEvent, CancellationToken cancellationToken) => Task.CompletedTask;
 

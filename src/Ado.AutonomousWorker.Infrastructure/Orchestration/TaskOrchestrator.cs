@@ -55,6 +55,7 @@ internal sealed class TaskOrchestrator(
             workItem.Title,
             workItem.Kind,
             TaskPhase.Queued,
+            ExecutionStatus.Running,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
@@ -88,24 +89,16 @@ internal sealed class TaskOrchestrator(
             ?? throw new InvalidOperationException($"Execution '{executionId}' was not found.");
 
         var workItem = await azureDevOpsClient.GetWorkItemAsync(execution.WorkItemId, cancellationToken);
+        var startPhase = ResolveResumePhase(execution);
 
         await executionJournal.AppendEventAsync(
             executionId,
             execution.Phase,
-            "Resuming execution from persisted state.",
+            $"Resuming execution from phase {startPhase}.",
             cancellationToken);
         logger.LogInformation(
-            "Resuming execution {ExecutionId} for #{WorkItemId} from phase {Phase}.",
-            executionId, execution.WorkItemId, execution.Phase);
-
-        var events = await stateStore.GetEventsAsync(executionId, cancellationToken);
-        var startPhase = ResolveResumePhase(execution.Phase, events);
-
-        await executionJournal.AppendEventAsync(
-            executionId,
-            execution.Phase,
-            $"Resume start phase resolved to {startPhase}.",
-            cancellationToken);
+            "Resuming execution {ExecutionId} for #{WorkItemId} at phase {Phase}.",
+            executionId, execution.WorkItemId, startPhase);
 
         var context = new PhaseContext
         {
@@ -115,7 +108,6 @@ internal sealed class TaskOrchestrator(
             Journal = executionJournal,
         };
 
-        // Pre-populate context from stateStore based on where we are resuming from.
         if (startPhase > TaskPhase.Planning)
         {
             context.Plan = await stateStore.GetPlanAsync(executionId, cancellationToken)
@@ -142,8 +134,14 @@ internal sealed class TaskOrchestrator(
         {
             await stateMachine.RunAsync(context, startPhase, cancellationToken);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
+            // Status is already set to Failed by the machine's internal catch.
+            // Handle ADO side effects here.
             logger.LogError(ex,
                 "Execution {ExecutionId} failed for work item {WorkItemId}",
                 context.ExecutionId, context.WorkItem.WorkItemId);
@@ -155,25 +153,17 @@ internal sealed class TaskOrchestrator(
                 context.WorkItem.WorkItemId,
                 WorkItemCommentFormatter.BuildFailureComment(context.ExecutionId, ex),
                 cancellationToken);
-            await executionJournal.UpdatePhaseAsync(
-                context.ExecutionId, TaskPhase.Failed, ex.Message, cancellationToken);
             throw;
         }
     }
 
-    private static TaskPhase ResolveResumePhase(TaskPhase recorded, IReadOnlyList<ExecutionEventRecord> events)
+    private static TaskPhase ResolveResumePhase(TaskExecutionRecord execution)
     {
-        if (recorded is TaskPhase.Completed or TaskPhase.Skipped)
-            throw new InvalidOperationException($"Execution is in phase {recorded} and cannot be resumed.");
+        if (execution.Status is ExecutionStatus.Completed or ExecutionStatus.Skipped)
+            throw new InvalidOperationException($"Cannot resume a {execution.Status} execution.");
 
-        if (recorded != TaskPhase.Failed)
-            return recorded;
-
-        // Failed: find the last meaningful phase from the event log and resume from there.
-        return events
-            .Select(e => e.Phase)
-            .LastOrDefault(p => p is not TaskPhase.Failed and not TaskPhase.Queued,
-                           TaskPhase.Queued);
+        // Phase always holds the last active workflow phase — correct for both Running and Failed.
+        return execution.Phase;
     }
 
     private async Task PrepareRuntimeAsync(CancellationToken cancellationToken)

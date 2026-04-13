@@ -52,6 +52,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         summary.AddRow("Title", Markup.Escape(execution.Title));
         summary.AddRow("Kind", CliStyle.QueueKind(execution.Kind));
         summary.AddRow("Phase", CliStyle.Phase(execution.Phase));
+        summary.AddRow("Status", CliStyle.Status(execution.Status));
         summary.AddRow("Created", execution.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         summary.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
 

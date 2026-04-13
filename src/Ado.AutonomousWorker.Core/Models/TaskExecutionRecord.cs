@@ -8,6 +8,7 @@ public sealed record TaskExecutionRecord(
     string Title,
     QueueItemKind Kind,
     TaskPhase Phase,
+    ExecutionStatus Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? ProviderPlanSessionId = null);

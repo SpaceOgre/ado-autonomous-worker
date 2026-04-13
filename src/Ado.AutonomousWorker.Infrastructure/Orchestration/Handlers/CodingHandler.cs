@@ -23,7 +23,7 @@ internal sealed partial class CodingHandler(
 {
     public TaskPhase Phase => TaskPhase.Coding;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         var plan = context.Plan
             ?? throw new InvalidOperationException("Plan must be set before entering Coding phase.");
@@ -81,7 +81,7 @@ internal sealed partial class CodingHandler(
         await stateStore.SaveAgentSessionAsync(context.ExecutionId, codeStart.Session, cancellationToken);
         context.CodeSession = codeStart.Session;
 
-        return TaskPhase.Reviewing;
+        return PhaseTransition.To(TaskPhase.Reviewing);
     }
 
     private async Task<ChildTaskRecord> CreateChildTaskAsync(WorkItemDetails parent, RepoKind repoKind, CancellationToken cancellationToken)

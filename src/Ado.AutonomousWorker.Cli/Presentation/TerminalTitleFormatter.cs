@@ -16,24 +16,14 @@ public static class TerminalTitleFormatter
     public static string BuildExecutionTitle(string baseTitle, TaskExecutionRecord? execution, int tick, bool useUnicode)
     {
         if (execution is null)
-        {
             return BuildWaitingTitle(baseTitle, tick, useUnicode);
-        }
 
-        var phaseText = execution.Phase switch
+        var (phaseText, prefix) = execution.Status switch
         {
-            TaskPhase.Completed => "Completed",
-            TaskPhase.Failed => "Failed",
-            TaskPhase.Skipped => "Skipped",
-            _ => execution.Phase.ToString(),
-        };
-
-        var prefix = execution.Phase switch
-        {
-            TaskPhase.Completed => useUnicode ? "✓" : "*",
-            TaskPhase.Failed => useUnicode ? "✗" : "!",
-            TaskPhase.Skipped => useUnicode ? "↷" : "~",
-            _ => GetSpinnerFrame(tick, useUnicode),
+            ExecutionStatus.Completed => ("Completed", useUnicode ? "✓" : "*"),
+            ExecutionStatus.Failed => ($"Failed ({execution.Phase})", useUnicode ? "✗" : "!"),
+            ExecutionStatus.Skipped => ("Skipped", useUnicode ? "↷" : "~"),
+            _ => (execution.Phase.ToString(), GetSpinnerFrame(tick, useUnicode)),
         };
 
         return $"{prefix} {baseTitle} | {phaseText} | ado-worker";

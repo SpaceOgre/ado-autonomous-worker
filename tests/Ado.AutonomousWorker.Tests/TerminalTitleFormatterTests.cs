@@ -25,6 +25,7 @@ public sealed class TerminalTitleFormatterTests
             "Title",
             QueueItemKind.AiWork,
             TaskPhase.Planning,
+            ExecutionStatus.Running,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
@@ -43,7 +44,8 @@ public sealed class TerminalTitleFormatterTests
             28639,
             "Title",
             QueueItemKind.AiWork,
-            TaskPhase.Completed,
+            TaskPhase.Publishing,
+            ExecutionStatus.Completed,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 

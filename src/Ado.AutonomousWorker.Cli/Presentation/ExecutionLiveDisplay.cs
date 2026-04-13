@@ -24,7 +24,6 @@ public sealed class ExecutionLiveDisplay(
         TaskPhase.ApplyingReview,
         TaskPhase.Validating,
         TaskPhase.Publishing,
-        TaskPhase.Completed,
     ];
 
     public Task<string> RunForWorkItemAsync(
@@ -140,9 +139,9 @@ public sealed class ExecutionLiveDisplay(
         [
             CreateSummaryTable(execution, agentOptions.Value),
             new Rule("Activity"),
-            CreateActivityMarkup(execution.Phase, tick, startedAt, useUnicode, agentOptions.Value),
+            CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions.Value),
             new Rule("Progress"),
-            CreatePhaseMarkup(execution.Phase),
+            CreatePhaseMarkup(execution.Phase, execution.Status),
             new Rule("Recent Events"),
             CreateEventsTable(events),
             new Rule("Plan"),
@@ -182,6 +181,7 @@ public sealed class ExecutionLiveDisplay(
         table.AddRow("Work Item", execution.WorkItemId.ToString());
         table.AddRow("Kind", CliStyle.QueueKind(execution.Kind));
         table.AddRow("Phase", CliStyle.Phase(execution.Phase));
+        table.AddRow("Status", CliStyle.Status(execution.Status));
         table.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         table.AddRow("Title", Markup.Escape(execution.Title));
         table.AddRow("Plan Agent", Markup.Escape(FormatAgent(agentOptions.Plan)));
@@ -190,10 +190,10 @@ public sealed class ExecutionLiveDisplay(
         return table;
     }
 
-    private static IRenderable CreatePhaseMarkup(TaskPhase currentPhase)
+    private static IRenderable CreatePhaseMarkup(TaskPhase currentPhase, ExecutionStatus status)
     {
         var entries = OrderedPhases
-            .Select(phase => FormatPipelinePhase(phase, currentPhase))
+            .Select(phase => FormatPipelinePhase(phase, currentPhase, status))
             .ToArray();
 
         return new Markup(string.Join(" [grey]->[/] ", entries));
@@ -201,6 +201,7 @@ public sealed class ExecutionLiveDisplay(
 
     private static IRenderable CreateActivityMarkup(
         TaskPhase phase,
+        ExecutionStatus status,
         int tick,
         DateTimeOffset startedAt,
         bool useUnicode,
@@ -211,11 +212,11 @@ public sealed class ExecutionLiveDisplay(
             ? elapsed.ToString(@"hh\:mm\:ss")
             : elapsed.ToString(@"mm\:ss");
 
-        var (prefix, color, message) = phase switch
+        var (prefix, color, message) = status switch
         {
-            TaskPhase.Completed => (useUnicode ? "✓" : "*", "green", "Execution completed."),
-            TaskPhase.Failed => (useUnicode ? "✗" : "!", "red", "Execution failed."),
-            TaskPhase.Skipped => (useUnicode ? "↷" : "~", "yellow", "Execution skipped."),
+            ExecutionStatus.Completed => (useUnicode ? "✓" : "*", "green", "Execution completed."),
+            ExecutionStatus.Failed => (useUnicode ? "✗" : "!", "red", $"Failed during {phase}."),
+            ExecutionStatus.Skipped => (useUnicode ? "↷" : "~", "yellow", "Execution skipped."),
             _ => (GetSpinnerFrame(tick, useUnicode), "deepskyblue1", $"{phase} in progress..."),
         };
 
@@ -341,7 +342,7 @@ public sealed class ExecutionLiveDisplay(
         if (chunks.Count == 0)
         {
             var spinner = GetSpinnerFrame(tick, useUnicode);
-            var waitingText = phase is TaskPhase.Completed or TaskPhase.Failed or TaskPhase.Skipped
+            var waitingText = phase is TaskPhase.Publishing
                 ? "[grey]No agent output captured.[/]"
                 : $"[grey]{Markup.Escape(spinner)} Waiting for agent output...[/]";
 
@@ -389,13 +390,19 @@ public sealed class ExecutionLiveDisplay(
         return string.IsNullOrWhiteSpace(parent) ? tail : Path.Combine(parent, tail);
     }
 
-    private static string FormatPipelinePhase(TaskPhase phase, TaskPhase currentPhase)
+    private static string FormatPipelinePhase(TaskPhase phase, TaskPhase currentPhase, ExecutionStatus status)
     {
-        var color = phase == currentPhase
-            ? "deepskyblue1"
-            : IsPastPhase(phase, currentPhase)
-                ? "green"
-                : "grey";
+        string color;
+        if (status == ExecutionStatus.Completed)
+            color = "green";
+        else if (status == ExecutionStatus.Failed && phase == currentPhase)
+            color = "red";
+        else if (phase == currentPhase)
+            color = "deepskyblue1";
+        else if (IsPastPhase(phase, currentPhase))
+            color = "green";
+        else
+            color = "grey";
 
         return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
     }

@@ -18,7 +18,7 @@ internal sealed class PublishingHandler(
 {
     public TaskPhase Phase => TaskPhase.Publishing;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         foreach (var repositoryExecution in context.RepositoryExecutions)
         {
@@ -74,7 +74,7 @@ internal sealed class PublishingHandler(
                 new ImplementationRunResult(review, AcceptedFindingCount: null)),
             cancellationToken);
 
-        return TaskPhase.Completed;
+        return PhaseTransition.Complete();
     }
 
     private async Task RunGitAsync(string workingDirectory, string artifactDirectory,

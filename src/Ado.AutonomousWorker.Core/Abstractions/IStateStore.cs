@@ -17,6 +17,8 @@ public interface IStateStore
 
     Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken);
 
+    Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken);
+
     Task AppendEventAsync(ExecutionEventRecord executionEvent, CancellationToken cancellationToken);
 
     Task SaveAgentSessionAsync(string executionId, AgentSessionHandle session, CancellationToken cancellationToken);

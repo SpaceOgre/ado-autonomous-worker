@@ -8,9 +8,6 @@ internal sealed class TaskStateMachine(
     ExecutionJournal journal,
     ILogger<TaskStateMachine> logger)
 {
-    private static readonly HashSet<TaskPhase> TerminalPhases =
-        [TaskPhase.Completed, TaskPhase.Failed, TaskPhase.Skipped];
-
     private readonly Dictionary<TaskPhase, IPhaseHandler> _handlers =
         handlers.ToDictionary(h => h.Phase);
 
@@ -18,7 +15,7 @@ internal sealed class TaskStateMachine(
     {
         var phase = startPhase;
 
-        while (!TerminalPhases.Contains(phase))
+        while (true)
         {
             if (!_handlers.TryGetValue(phase, out var handler))
                 throw new InvalidOperationException($"No handler registered for phase {phase}.");
@@ -27,22 +24,43 @@ internal sealed class TaskStateMachine(
                 "Execution {ExecutionId}: executing phase {Phase}.",
                 context.ExecutionId, phase);
 
-            var next = await handler.ExecuteAsync(context, cancellationToken);
-
-            if (next != phase)
+            PhaseTransition transition;
+            try
             {
-                await journal.UpdatePhaseAsync(
-                    context.ExecutionId,
-                    next,
-                    $"{phase} → {next}",
-                    cancellationToken);
+                transition = await handler.ExecuteAsync(context, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Execution {ExecutionId}: phase {Phase} failed.",
+                    context.ExecutionId, phase);
+                await journal.TerminateAsync(context.ExecutionId, ExecutionStatus.Failed, phase, ex.Message, cancellationToken);
+                throw;
             }
 
-            phase = next;
-        }
+            if (transition.IsTerminal)
+            {
+                var terminalMessage = transition.TerminalStatus switch
+                {
+                    ExecutionStatus.Completed => "Execution completed successfully.",
+                    ExecutionStatus.Skipped => "Execution skipped.",
+                    _ => "Execution terminated.",
+                };
+                await journal.TerminateAsync(context.ExecutionId, transition.TerminalStatus!.Value, phase, terminalMessage, cancellationToken);
+                return;
+            }
 
-        logger.LogInformation(
-            "Execution {ExecutionId}: reached terminal phase {Phase}.",
-            context.ExecutionId, phase);
+            await journal.UpdatePhaseAsync(
+                context.ExecutionId,
+                transition.NextPhase,
+                $"{phase} → {transition.NextPhase}",
+                cancellationToken);
+
+            phase = transition.NextPhase;
+        }
     }
 }

@@ -31,7 +31,7 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
             return 0;
         }
 
-        var table = new Table().Border(TableBorder.Rounded).AddColumns("Execution Id", "Work Item", "Kind", "Phase", "Updated", "Title");
+        var table = new Table().Border(TableBorder.Rounded).AddColumns("Execution Id", "Work Item", "Kind", "Phase", "Status", "Updated", "Title");
         foreach (var execution in executions)
         {
             table.AddRow(
@@ -39,6 +39,7 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
                 execution.WorkItemId.ToString(),
                 CliStyle.QueueKind(execution.Kind),
                 CliStyle.Phase(execution.Phase),
+                CliStyle.Status(execution.Status),
                 execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
                 Markup.Escape(execution.Title));
         }

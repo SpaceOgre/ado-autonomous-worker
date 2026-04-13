@@ -20,7 +20,7 @@ internal sealed class PlanningHandler(
 {
     public TaskPhase Phase => TaskPhase.Planning;
 
-    public async Task<TaskPhase> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         var workItem = context.WorkItem;
         var config = agentOptions.Value.Plan;
@@ -78,7 +78,7 @@ internal sealed class PlanningHandler(
             context.ExecutionId, plan.Scope, string.Join(", ", plan.Repositories));
 
         context.Plan = plan;
-        return TaskPhase.Coding;
+        return PhaseTransition.To(TaskPhase.Coding);
     }
 
     private static PlanResult? ParsePlan(string? payload)

@@ -19,6 +19,17 @@ internal sealed class ExecutionJournal(
         logger.LogInformation("Execution {ExecutionId} [{Phase}] {Message}", executionId, phase, message);
     }
 
+    /// <summary>
+    /// Records a terminal outcome (Completed, Failed, or Skipped) against the last active workflow phase.
+    /// The phase column is not changed — it retains the phase where execution stopped.
+    /// </summary>
+    public async Task TerminateAsync(string executionId, ExecutionStatus status, TaskPhase lastPhase, string message, CancellationToken cancellationToken)
+    {
+        await stateStore.UpdateStatusAsync(executionId, status, cancellationToken);
+        await AppendEventAsync(executionId, lastPhase, message, cancellationToken);
+        logger.LogInformation("Execution {ExecutionId} [{Status}@{Phase}] {Message}", executionId, status, lastPhase, message);
+    }
+
     public async Task AppendEventAsync(string executionId, TaskPhase phase, string message, CancellationToken cancellationToken)
     {
         await stateStore.AppendEventAsync(new ExecutionEventRecord(executionId, DateTimeOffset.UtcNow, phase, message), cancellationToken);

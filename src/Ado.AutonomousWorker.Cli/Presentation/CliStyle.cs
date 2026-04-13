@@ -9,9 +9,6 @@ public static class CliStyle
     {
         var color = phase switch
         {
-            TaskPhase.Completed => "green",
-            TaskPhase.Failed => "red",
-            TaskPhase.Skipped => "yellow",
             TaskPhase.Validating => "aqua",
             TaskPhase.Reviewing => "mediumspringgreen",
             TaskPhase.ApplyingReview => "yellow",
@@ -23,6 +20,20 @@ public static class CliStyle
         };
 
         return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
+    }
+
+    public static string Status(ExecutionStatus status)
+    {
+        var color = status switch
+        {
+            ExecutionStatus.Completed => "green",
+            ExecutionStatus.Failed => "red",
+            ExecutionStatus.Skipped => "yellow",
+            ExecutionStatus.Running => "deepskyblue1",
+            _ => "white",
+        };
+
+        return $"[{color}]{Markup.Escape(status.ToString())}[/]";
     }
 
     public static string WorkItemState(string state)
