@@ -77,7 +77,7 @@ internal sealed class TaskOrchestrator(
             workItem.WorkItemId,
             workItem.Title);
 
-        await RunInternalAsync(executionId, workItem, isExplicitResume: false, cancellationToken);
+        await RunInternalAsync(executionId, workItem, ResumeCheckpoint.Planning, isExplicitResume: false, cancellationToken);
         return executionId;
     }
 
@@ -100,7 +100,14 @@ internal sealed class TaskOrchestrator(
             execution.WorkItemId,
             execution.Phase);
 
-        await RunInternalAsync(executionId, workItem, isExplicitResume: true, cancellationToken);
+        var resumeCheckpoint = await DetermineResumeCheckpointAsync(executionId, execution.Phase, cancellationToken);
+        await executionJournal.AppendEventAsync(
+            executionId,
+            execution.Phase,
+            $"Resume checkpoint resolved to {resumeCheckpoint}.",
+            cancellationToken);
+
+        await RunInternalAsync(executionId, workItem, resumeCheckpoint, isExplicitResume: true, cancellationToken);
     }
 
     private async Task PrepareRuntimeAsync(CancellationToken cancellationToken)
@@ -109,7 +116,12 @@ internal sealed class TaskOrchestrator(
         await workspaceManager.PrepareAsync(cancellationToken);
     }
 
-    private async Task RunInternalAsync(string executionId, WorkItemDetails workItem, bool isExplicitResume, CancellationToken cancellationToken)
+    private async Task<ExecutionOutcome> RunInternalAsync(
+        string executionId,
+        WorkItemDetails workItem,
+        ResumeCheckpoint resumeCheckpoint,
+        bool isExplicitResume,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -121,7 +133,7 @@ internal sealed class TaskOrchestrator(
                     TaskPhase.Skipped,
                     "Work item is no longer eligible for automation.",
                     cancellationToken);
-                return;
+                return ExecutionOutcome.Skipped;
             }
 
             if (rulesEngine.ExceedsAcceptanceCriteriaLimit(workItem, 10, out var lineCount))
@@ -138,47 +150,84 @@ internal sealed class TaskOrchestrator(
                     TaskPhase.Skipped,
                     "Acceptance criteria exceeded the configured limit.",
                     cancellationToken);
-                return;
+                return ExecutionOutcome.Skipped;
             }
 
             var currentSprint = await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken) ?? workItem.IterationPath;
             await EnsureWorkItemReadyAsync(workItem, currentSprint, cancellationToken);
 
-            await executionJournal.UpdatePhaseAsync(executionId, TaskPhase.Planning, "Running planning agent.", cancellationToken);
-            var plan = await planningService.RunPlanAsync(executionId, workItem, cancellationToken);
+            PlanResult plan;
+            if (resumeCheckpoint == ResumeCheckpoint.Planning)
+            {
+                await executionJournal.UpdatePhaseAsync(executionId, TaskPhase.Planning, "Running planning agent.", cancellationToken);
+                plan = await planningService.RunPlanAsync(executionId, workItem, cancellationToken);
+            }
+            else
+            {
+                plan = await stateStore.GetPlanAsync(executionId, cancellationToken)
+                    ?? throw new InvalidOperationException("Cannot resume without a persisted plan.");
+                await executionJournal.AppendEventAsync(
+                    executionId,
+                    TaskPhase.Planning,
+                    "Reusing persisted plan for resume.",
+                    cancellationToken);
+            }
 
             var repositoryExecutions = await repositoryWorkflowService.PrepareAsync(
                 executionId,
                 workItem,
                 MapScopeToRepos(plan.Scope),
+                preserveExistingWorkspace: resumeCheckpoint != ResumeCheckpoint.Planning,
                 cancellationToken);
 
-            await repositoryWorkflowService.RunImplementationAsync(
-                executionId,
-                workItem,
-                repositoryExecutions,
-                plan,
-                cancellationToken);
+            ImplementationRunResult implementation;
+            if (resumeCheckpoint == ResumeCheckpoint.ValidationAndPublishing)
+            {
+                implementation = await LoadImplementationResultAsync(executionId, cancellationToken);
+                await executionJournal.AppendEventAsync(
+                    executionId,
+                    TaskPhase.Validating,
+                    "Skipping planning and coding; resuming from validation/publishing.",
+                    cancellationToken);
+            }
+            else
+            {
+                implementation = await repositoryWorkflowService.RunImplementationAsync(
+                    executionId,
+                    workItem,
+                    repositoryExecutions,
+                    plan,
+                    cancellationToken);
+            }
 
+            var publishedRepositories = new List<RepositoryPublishResult>();
             foreach (var repositoryExecution in repositoryExecutions)
             {
-                var pr = await repositoryWorkflowService.ValidateAndPublishAsync(
+                var publication = await repositoryWorkflowService.ValidateAndPublishAsync(
                     executionId,
                     workItem,
                     repositoryExecution,
                     cancellationToken);
-                await azureDevOpsClient.LinkPullRequestAsync(repositoryExecution.ChildTask.WorkItemId, pr, cancellationToken);
+                await azureDevOpsClient.LinkPullRequestAsync(repositoryExecution.ChildTask.WorkItemId, publication.PullRequest, cancellationToken);
+                publishedRepositories.Add(publication);
             }
 
             await azureDevOpsClient.UpdateTagsAsync(workItem.WorkItemId, rulesEngine.BuildCompletionTags(workItem), cancellationToken);
-            await azureDevOpsClient.AddCommentAsync(workItem.WorkItemId, $"Execution {executionId} completed successfully.", cancellationToken);
+            await azureDevOpsClient.AddCommentAsync(
+                workItem.WorkItemId,
+                WorkItemCommentFormatter.BuildSuccessComment(executionId, publishedRepositories, implementation),
+                cancellationToken);
             await executionJournal.UpdatePhaseAsync(executionId, TaskPhase.Completed, "Execution completed successfully.", cancellationToken);
+            return ExecutionOutcome.Completed;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Execution {ExecutionId} failed for work item {WorkItemId}", executionId, workItem.WorkItemId);
             await azureDevOpsClient.UpdateTagsAsync(workItem.WorkItemId, rulesEngine.BuildFailureTags(workItem), cancellationToken);
-            await azureDevOpsClient.AddCommentAsync(workItem.WorkItemId, $"Execution {executionId} failed: {ex.Message}", cancellationToken);
+            await azureDevOpsClient.AddCommentAsync(
+                workItem.WorkItemId,
+                WorkItemCommentFormatter.BuildFailureComment(executionId, ex),
+                cancellationToken);
             await executionJournal.UpdatePhaseAsync(executionId, TaskPhase.Failed, ex.Message, cancellationToken);
             throw;
         }
@@ -211,4 +260,42 @@ internal sealed class TaskOrchestrator(
         WorkItemScope.Frontend => [RepoKind.Frontend],
         _ => [RepoKind.Backend, RepoKind.Frontend],
     };
+
+    private async Task<ResumeCheckpoint> DetermineResumeCheckpointAsync(string executionId, TaskPhase currentPhase, CancellationToken cancellationToken)
+    {
+        if (currentPhase is TaskPhase.Completed or TaskPhase.Skipped)
+        {
+            throw new InvalidOperationException($"Execution is in phase {currentPhase} and cannot be resumed.");
+        }
+
+        if (currentPhase != TaskPhase.Failed)
+        {
+            return currentPhase switch
+            {
+                TaskPhase.Validating or TaskPhase.Publishing => ResumeCheckpoint.ValidationAndPublishing,
+                TaskPhase.Coding or TaskPhase.Reviewing or TaskPhase.ApplyingReview => ResumeCheckpoint.Implementation,
+                _ => ResumeCheckpoint.Planning,
+            };
+        }
+
+        var events = await stateStore.GetEventsAsync(executionId, cancellationToken);
+        var lastMeaningfulPhase = events
+            .Select(item => item.Phase)
+            .LastOrDefault(phase => phase != TaskPhase.Failed && phase != TaskPhase.Queued);
+
+        return lastMeaningfulPhase switch
+        {
+            TaskPhase.Validating or TaskPhase.Publishing => ResumeCheckpoint.ValidationAndPublishing,
+            TaskPhase.Coding or TaskPhase.Reviewing or TaskPhase.ApplyingReview => ResumeCheckpoint.Implementation,
+            TaskPhase.Planning when await stateStore.GetPlanAsync(executionId, cancellationToken) is not null => ResumeCheckpoint.Implementation,
+            _ => ResumeCheckpoint.Planning,
+        };
+    }
+
+    private async Task<ImplementationRunResult> LoadImplementationResultAsync(string executionId, CancellationToken cancellationToken)
+    {
+        var review = await stateStore.GetLatestReviewResultAsync(executionId, cancellationToken)
+            ?? new ReviewResult("Review result unavailable for resumed validation.", [], string.Empty);
+        return new ImplementationRunResult(review, AcceptedFindingCount: null);
+    }
 }

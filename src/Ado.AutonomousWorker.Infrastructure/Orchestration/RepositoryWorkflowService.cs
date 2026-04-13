@@ -27,6 +27,7 @@ internal sealed partial class RepositoryWorkflowService(
         string executionId,
         WorkItemDetails parent,
         IReadOnlyList<RepoKind> repoKinds,
+        bool preserveExistingWorkspace,
         CancellationToken cancellationToken)
     {
         var slug = SlugRegex().Replace(parent.Title.ToLowerInvariant(), "-").Trim('-');
@@ -44,7 +45,7 @@ internal sealed partial class RepositoryWorkflowService(
                 repoKind,
                 childTask.WorkItemId);
 
-            var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, cancellationToken);
+            var workspace = await workspaceManager.CreateRepoExecutionAsync(parent.WorkItemId, childTask.WorkItemId, repoKind, slug, preserveExistingWorkspace, cancellationToken);
             var artifactDirectory = Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant());
             var workspaceMessage =
                 $"Using {repoKind} worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}' for child task #{childTask.WorkItemId}.";
@@ -57,7 +58,7 @@ internal sealed partial class RepositoryWorkflowService(
         return repositoryExecutions;
     }
 
-    public async Task RunImplementationAsync(
+    public async Task<ImplementationRunResult> RunImplementationAsync(
         string executionId,
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
@@ -69,6 +70,10 @@ internal sealed partial class RepositoryWorkflowService(
         var implementationArtifactRoot = Path.Combine(
             storageOptions.Value.GetExecutionArtifactRoot(parent.WorkItemId, executionId),
             "implementation");
+        var commentsBlock = WorkItemPromptContextFormatter.FormatComments(
+            parent.Comments,
+            workerOptions.Value.MaxPromptComments,
+            workerOptions.Value.MaxPromptCommentCharacters);
 
         await executionJournal.UpdatePhaseAsync(executionId, TaskPhase.Coding, $"Running coding agent for {scopeLabel}.", cancellationToken);
         var codeRunner = agentRunnerFactory.GetRunner(agentOptions.Value.Code.Provider);
@@ -77,7 +82,7 @@ internal sealed partial class RepositoryWorkflowService(
             agentOptions.Value.Code,
             await PromptTemplateLoader.ApplyAsync(
                 agentOptions.Value.Code,
-                BuildCodePrompt(parent, repositoryExecutions, plan, agentWorkingDirectory),
+                BuildCodePrompt(parent, repositoryExecutions, plan, agentWorkingDirectory, commentsBlock),
                 cancellationToken),
             agentWorkingDirectory,
             Path.Combine(implementationArtifactRoot, "code"),
@@ -93,7 +98,7 @@ internal sealed partial class RepositoryWorkflowService(
             agentOptions.Value.Review,
             await PromptTemplateLoader.ApplyAsync(
                 agentOptions.Value.Review,
-                BuildReviewPrompt(parent, repositoryExecutions, agentWorkingDirectory),
+                BuildReviewPrompt(parent, repositoryExecutions, agentWorkingDirectory, commentsBlock),
                 cancellationToken),
             agentWorkingDirectory,
             Path.Combine(implementationArtifactRoot, "review"),
@@ -117,16 +122,17 @@ internal sealed partial class RepositoryWorkflowService(
                 Path.Combine(implementationArtifactRoot, "resume"),
                 executionJournal.CreateOutputObserver(executionId),
                 cancellationToken);
-            return;
+            return new ImplementationRunResult(review, acceptedFindings.Length);
         }
 
         logger.LogInformation(
             "Execution {ExecutionId}: no accepted review findings for {ScopeLabel}.",
             executionId,
             scopeLabel);
+        return new ImplementationRunResult(review, 0);
     }
 
-    public async Task<PullRequestInfo> ValidateAndPublishAsync(
+    public async Task<RepositoryPublishResult> ValidateAndPublishAsync(
         string executionId,
         WorkItemDetails parent,
         RepositoryExecution repositoryExecution,
@@ -146,15 +152,21 @@ internal sealed partial class RepositoryWorkflowService(
                 executionId,
                 repoKind,
                 validationCommand);
+            var validationArtifactPath = Path.Combine(artifactDirectory, $"{NormalizeFileName(validationCommand)}.log");
             var validationResult = await commandRunner.RunPowerShellAsync(
                 validationCommand,
                 workspace.WorkingDirectory,
-                Path.Combine(artifactDirectory, $"{NormalizeFileName(validationCommand)}.log"),
+                validationArtifactPath,
                 cancellationToken);
 
             if (!validationResult.Success)
             {
-                throw new InvalidOperationException($"Validation failed for {repoKind}: {validationResult.StandardError}");
+                throw new ValidationFailureException(
+                    repoKind,
+                    validationCommand,
+                    validationArtifactPath,
+                    validationResult.StandardOutput,
+                    validationResult.StandardError);
             }
 
             logger.LogInformation("Execution {ExecutionId}: validation passed for {RepoKind}: {Command}", executionId, repoKind, validationCommand);
@@ -168,6 +180,7 @@ internal sealed partial class RepositoryWorkflowService(
             "git-commit.log",
             ["commit", "-m", $"#{childTask.WorkItemId}: {parent.Title}"],
             cancellationToken);
+        var commitSha = await GetCommitShaAsync(workspace.WorkingDirectory, artifactDirectory, cancellationToken);
         await RunGitAsync(workspace.WorkingDirectory, artifactDirectory, "git-push.log", ["push", "-u", "origin", workspace.BranchName], cancellationToken);
 
         var pullRequest = await azureDevOpsClient.CreateDraftPullRequestAsync(
@@ -190,7 +203,13 @@ internal sealed partial class RepositoryWorkflowService(
             logger.LogInformation("Execution {ExecutionId}: cleaned up worktree for {RepoKind}.", executionId, repoKind);
         }
 
-        return pullRequest;
+        return new RepositoryPublishResult(
+            repoKind,
+            childTask,
+            workspace.BranchName,
+            commitSha,
+            repoProfile.ValidationCommands.ToArray(),
+            pullRequest);
     }
 
     private async Task<ChildTaskRecord> CreateChildTaskAsync(WorkItemDetails parent, RepoKind repoKind, CancellationToken cancellationToken)
@@ -260,6 +279,26 @@ internal sealed partial class RepositoryWorkflowService(
         }
     }
 
+    private async Task<string> GetCommitShaAsync(string workingDirectory, string artifactDirectory, CancellationToken cancellationToken)
+    {
+        var result = await commandRunner.RunAsync(
+            "git",
+            ["-C", workingDirectory, "rev-parse", "HEAD"],
+            workingDirectory,
+            Path.Combine(artifactDirectory, "git-rev-parse.log"),
+            environmentVariables: null,
+            activityName: null,
+            outputCallback: null,
+            cancellationToken);
+
+        if (!result.Success)
+        {
+            throw new InvalidOperationException(result.StandardError);
+        }
+
+        return result.StandardOutput.Trim();
+    }
+
     private RepositoryProfile GetRepositoryProfile(RepoKind repoKind) => repoKind switch
     {
         RepoKind.Backend => repositoryOptions.Value.Backend,
@@ -283,7 +322,8 @@ internal sealed partial class RepositoryWorkflowService(
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
         PlanResult plan,
-        string agentWorkingDirectory)
+        string agentWorkingDirectory,
+        string commentsBlock)
     {
         var repositorySummary = BuildRepositorySummary(repositoryExecutions, agentWorkingDirectory);
         return $$"""
@@ -292,12 +332,16 @@ internal sealed partial class RepositoryWorkflowService(
         Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Agent working directory: {{agentWorkingDirectory}}
         Plan summary: {{plan.Summary}}
+        Parent feature: {{parent.ParentFeatureTitle ?? "-"}}
 
         Description:
         {{parent.Description}}
 
         Acceptance Criteria:
         {{parent.AcceptanceCriteria}}
+
+        Recent comments:
+        {{commentsBlock}}
 
         Repositories:
         {{repositorySummary}}
@@ -316,7 +360,8 @@ internal sealed partial class RepositoryWorkflowService(
     private static string BuildReviewPrompt(
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
-        string agentWorkingDirectory)
+        string agentWorkingDirectory,
+        string commentsBlock)
     {
         var repositorySummary = BuildRepositorySummary(repositoryExecutions, agentWorkingDirectory);
         return $$"""
@@ -325,6 +370,10 @@ internal sealed partial class RepositoryWorkflowService(
 
         Parent item: #{{parent.WorkItemId}} {{FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Agent working directory: {{agentWorkingDirectory}}
+        Parent feature: {{parent.ParentFeatureTitle ?? "-"}}
+
+        Recent comments:
+        {{commentsBlock}}
 
         Repositories:
         {{repositorySummary}}

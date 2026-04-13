@@ -396,6 +396,32 @@ public sealed class SqliteStateStore(IOptions<StorageOptions> storageOptions) : 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+        SELECT summary, transcript_path, structured_payload
+        FROM review_results
+        WHERE execution_id = $executionId
+        ORDER BY rowid DESC
+        LIMIT 1;
+        """;
+        command.Parameters.AddWithValue("$executionId", executionId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new ReviewResult(
+            reader.GetString(0),
+            [],
+            reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2));
+    }
+
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_databasePath)!);

@@ -106,5 +106,8 @@ public sealed class CliCompletionServiceTests
             => Task.FromResult<PlanResult?>(null);
 
         public Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken)
+            => Task.FromResult<ReviewResult?>(null);
     }
 }

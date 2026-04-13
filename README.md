@@ -40,6 +40,8 @@ Use the local or global installation flow below depending on how you want to run
 
 Use `ado-worker ui splash` to test the branded run banner without touching queue state, and `ado-worker ui run-preview` to render the exact queue slice that `ado-worker run` would process without starting any agent work.
 
+`ado-worker task resume` is phase-aware. When a plan already exists it is reused instead of rerunning planning, and resumes after validation or publishing preserve the existing worktree so you can fix the issue manually and retry validation without resetting the branch.
+
 ## Configuration
 
 Base configuration lives in:
@@ -51,6 +53,8 @@ Local machine overrides should go in:
 - `src/Ado.AutonomousWorker.Cli/appsettings.local.json`
 
 Set Azure DevOps and provider credentials outside source control.
+
+The worker also uses work item comments as prompt context for both `AI-Work` and `AI-Rework` items. Use `Worker:MaxPromptComments` and `Worker:MaxPromptCommentCharacters` to bound how much comment context is sent to the agents.
 
 Execution state, logs, artifacts, and the local SQLite database are stored under:
 

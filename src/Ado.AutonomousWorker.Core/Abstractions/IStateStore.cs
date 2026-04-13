@@ -34,4 +34,6 @@ public interface IStateStore
     Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken);
 
     Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken);
+
+    Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken);
 }

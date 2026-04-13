@@ -23,7 +23,7 @@ public sealed partial class WorkspaceManager(
         return Task.CompletedTask;
     }
 
-    public async Task<RepoExecutionContext> CreateRepoExecutionAsync(int parentWorkItemId, int childTaskId, RepoKind repoKind, string slug, CancellationToken cancellationToken)
+    public async Task<RepoExecutionContext> CreateRepoExecutionAsync(int parentWorkItemId, int childTaskId, RepoKind repoKind, string slug, bool preserveExistingWorkspace, CancellationToken cancellationToken)
     {
         var profile = GetProfile(repoKind);
         var safeSlug = UnsafeCharactersRegex().Replace(slug.ToLowerInvariant(), "-").Trim('-');
@@ -35,6 +35,17 @@ public sealed partial class WorkspaceManager(
         if (!Directory.Exists(profile.BaseClonePath))
         {
             throw new DirectoryNotFoundException($"Base clone path '{profile.BaseClonePath}' was not found for {repoKind}.");
+        }
+
+        if (Directory.Exists(worktreePath) && preserveExistingWorkspace)
+        {
+            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, repoKind, cancellationToken);
+            logger.LogInformation(
+                "Reusing existing {RepoKind} worktree at {Path} on branch {BranchName}.",
+                repoKind,
+                worktreePath,
+                branchName);
+            return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
         }
 
         if (!Directory.Exists(worktreePath))
@@ -143,6 +154,43 @@ public sealed partial class WorkspaceManager(
             activityName: null,
             outputCallback: null,
             cancellationToken);
+    }
+
+    private async Task EnsureExpectedBranchAsync(
+        string worktreePath,
+        string branchName,
+        string artifactFolder,
+        RepoKind repoKind,
+        CancellationToken cancellationToken)
+    {
+        var showCurrentBranch = await RunGitAsync(
+            worktreePath,
+            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-branch-current.log"),
+            ["branch", "--show-current"],
+            cancellationToken);
+
+        if (!showCurrentBranch.Success)
+        {
+            throw new InvalidOperationException($"Failed to inspect current branch for {repoKind}: {showCurrentBranch.StandardError}");
+        }
+
+        var currentBranch = showCurrentBranch.StandardOutput.Trim();
+        if (string.Equals(currentBranch, branchName, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var checkoutResult = await RunGitAsync(
+            worktreePath,
+            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout-existing.log"),
+            ["checkout", branchName],
+            cancellationToken);
+
+        if (!checkoutResult.Success)
+        {
+            throw new InvalidOperationException(
+                $"Existing worktree for {repoKind} is on '{currentBranch}' and could not switch to '{branchName}': {checkoutResult.StandardError}");
+        }
     }
 
     private RepositoryProfile GetProfile(RepoKind kind) => kind switch
