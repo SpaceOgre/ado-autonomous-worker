@@ -70,7 +70,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
         if (events.Count > 0)
         {
-            AnsiConsole.Write(new Rule("Events"));
+            AnsiConsole.Write(CliStyle.SectionRule("Events", "deepskyblue1"));
             AnsiConsole.Write(eventsTable);
             AnsiConsole.WriteLine();
         }
@@ -85,7 +85,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             planTable.AddRow("Test Intent", FormatList(plan.TestIntent));
             planTable.AddRow("Risks", FormatList(plan.Risks));
 
-            AnsiConsole.Write(new Rule("Plan"));
+            AnsiConsole.Write(CliStyle.SectionRule("Plan", "cornflowerblue"));
             AnsiConsole.Write(planTable);
             AnsiConsole.WriteLine();
         }
@@ -103,7 +103,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     Markup.Escape(session.TranscriptPath));
             }
 
-            AnsiConsole.Write(new Rule("Agent Sessions"));
+            AnsiConsole.Write(CliStyle.SectionRule("Agent Sessions", "mediumpurple2"));
             AnsiConsole.Write(sessionsTable);
             AnsiConsole.WriteLine();
         }
@@ -124,7 +124,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     Markup.Escape(string.Join(Environment.NewLine, sessionOutput.TakeLast(20).Select(chunk => chunk.Content))));
             }
 
-            AnsiConsole.Write(new Rule("Agent Output"));
+            AnsiConsole.Write(CliStyle.SectionRule("Agent Output", "mediumspringgreen"));
             AnsiConsole.Write(outputTable);
         }
 

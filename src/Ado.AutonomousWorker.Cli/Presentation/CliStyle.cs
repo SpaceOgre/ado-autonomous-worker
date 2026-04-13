@@ -114,6 +114,9 @@ public static class CliStyle
         return $"[{color}]{Markup.Escape(provider.ToString())}[/]";
     }
 
+    public static Rule SectionRule(string title, string color)
+        => new Rule($"[{color}]{Markup.Escape(title)}[/]").RuleStyle(color);
+
     public static string Role(AgentRole role)
     {
         var color = role switch

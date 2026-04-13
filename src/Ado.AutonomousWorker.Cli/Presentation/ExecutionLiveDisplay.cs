@@ -135,9 +135,9 @@ public sealed class ExecutionLiveDisplay(
         var body = new Rows(
         [
             CreateCompactHeader(execution, tick, startedAt, useUnicode, agentOptions.Value),
-            new Rule("Recent Events"),
+            CliStyle.SectionRule("Recent Events", "deepskyblue1"),
             CreateEventsTable(events),
-            new Rule("Agent Output"),
+            CliStyle.SectionRule("Agent Output", "mediumspringgreen"),
             CreateAgentOutputMarkup(agentOutput, execution.Phase, tick, useUnicode),
         ]);
 
