@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -38,7 +39,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var payload = commandResult.StandardOutput;
-        var result = new AgentRunResult(commandResult.Success, payload.Trim(), transcriptPath, commandResult.StandardOutput, outputSchema is null ? null : payload);
+        var structuredPayload = outputSchema is null ? null : ExtractStructuredPayload(payload);
+        var result = new AgentRunResult(commandResult.Success, payload.Trim(), transcriptPath, commandResult.StandardOutput, structuredPayload);
         return new AgentSessionStartResult(session, result);
     }
 
@@ -132,6 +134,25 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         args.Add("-p");
         args.Add(prompt);
         return args;
+    }
+
+    // Claude CLI with --output-format json wraps the structured output in a result envelope:
+    // {"type":"result","subtype":"success",...,"structured_output":{...},...}
+    // Extract the inner "structured_output" object when present; fall back to the raw payload.
+    private static string? ExtractStructuredPayload(string rawOutput)
+    {
+        if (string.IsNullOrWhiteSpace(rawOutput))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawOutput.Trim());
+            if (document.RootElement.TryGetProperty("structured_output", out var structuredOutput))
+                return structuredOutput.GetRawText();
+        }
+        catch (JsonException) { }
+
+        return rawOutput.Trim();
     }
 
     private static string GetCommandPath(AgentRoleConfig config)
