@@ -4,7 +4,7 @@ using Spectre.Console.Rendering;
 
 namespace Ado.AutonomousWorker.Cli.Presentation;
 
-public sealed class RunPreambleDisplay
+public static class RunPreambleDisplay
 {
     private const string HeaderText = """
 ░░      ░░░       ░░░░      ░░░░░░░░░  ░░░░  ░░░      ░░░       ░░░  ░░░░  ░░        ░░       ░░
@@ -26,7 +26,7 @@ public sealed class RunPreambleDisplay
         "hotpink",
     ];
 
-    public void ShowSplash(string? status = null)
+    public static void ShowSplash(string? status = null)
     {
         if (AnsiConsole.Profile.Capabilities.Interactive)
         {
@@ -59,7 +59,7 @@ public sealed class RunPreambleDisplay
         }
     }
 
-    public void ShowQueuePreview(IReadOnlyList<QueueItem> selectedQueue, int eligibleCount, int maxItemsPerRun, bool previewOnly)
+    public static void ShowQueuePreview(IReadOnlyList<QueueItem> selectedQueue, int eligibleCount, int maxItemsPerRun, bool previewOnly)
     {
         var selectedText = selectedQueue.Count == 1 ? "item" : "items";
         var eligibleText = eligibleCount == 1 ? "item" : "items";
@@ -75,6 +75,33 @@ public sealed class RunPreambleDisplay
         }
 
         AnsiConsole.Write(QueueTableRenderer.CreateTable(selectedQueue, includeOrder: true));
+        AnsiConsole.WriteLine();
+    }
+
+    public static void BeginLiveRunScreen(
+        int currentIndex,
+        int totalItems,
+        int eligibleCount,
+        int maxItemsPerRun,
+        QueueItem item)
+    {
+        if (AnsiConsole.Profile.Capabilities.Interactive)
+        {
+            AnsiConsole.Clear();
+        }
+
+        var body = new Rows(
+        [
+            new Markup("[deepskyblue1]ado-worker[/] [grey]Autonomous Azure DevOps backlog worker[/]"),
+            new Markup($"[yellow]Queue run[/] [grey]|[/] [deepskyblue1]{currentIndex}/{totalItems}[/] [grey]|[/] processing {totalItems} of {eligibleCount} eligible items [grey](MaxItemsPerRun={maxItemsPerRun})[/]"),
+            new Markup($"[grey]Current:[/] #{item.WorkItemId} {Markup.Escape(item.Title)} [grey]({item.WorkItemType}, {item.Kind})[/]"),
+        ]);
+
+        AnsiConsole.Write(new Panel(body)
+        {
+            Border = BoxBorder.Rounded,
+            BorderStyle = new Style(Color.DeepSkyBlue1),
+        });
         AnsiConsole.WriteLine();
     }
 

@@ -4,7 +4,7 @@ using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class UiSplashCommand(RunPreambleDisplay runPreambleDisplay) : Command<UiSplashCommand.Settings>
+public sealed class UiSplashCommand : Command<UiSplashCommand.Settings>
 {
     public sealed class Settings : CommandSettings
     {
@@ -15,7 +15,7 @@ public sealed class UiSplashCommand(RunPreambleDisplay runPreambleDisplay) : Com
 
     protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        runPreambleDisplay.ShowSplash(settings.Status);
+        RunPreambleDisplay.ShowSplash(settings.Status);
         return 0;
     }
 }

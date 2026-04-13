@@ -12,7 +12,6 @@ public sealed class RunCommand(
     ITaskOrchestrator taskOrchestrator,
     QueueInspector queueInspector,
     ExecutionLiveDisplay liveDisplay,
-    RunPreambleDisplay runPreambleDisplay,
     IOptions<WorkerOptions> workerOptions) : AsyncCommand
 {
     protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
@@ -22,8 +21,8 @@ public sealed class RunCommand(
             .Take(workerOptions.Value.MaxItemsPerRun)
             .ToArray();
 
-        runPreambleDisplay.ShowSplash("Queue run");
-        runPreambleDisplay.ShowQueuePreview(queue, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun, previewOnly: false);
+        RunPreambleDisplay.ShowSplash("Queue run");
+        RunPreambleDisplay.ShowQueuePreview(queue, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun, previewOnly: false);
 
         if (queue.Length == 0)
         {
@@ -34,6 +33,7 @@ public sealed class RunCommand(
         for (var index = 0; index < queue.Length; index++)
         {
             var item = queue[index];
+            RunPreambleDisplay.BeginLiveRunScreen(index + 1, queue.Length, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun, item);
             var title = $"Queue {index + 1}/{queue.Length} - Work item #{item.WorkItemId}";
             var executionId = await liveDisplay.RunForWorkItemAsync(
                 title,
@@ -42,7 +42,6 @@ public sealed class RunCommand(
                 cancellationToken);
 
             executionIds.Add(executionId);
-            AnsiConsole.WriteLine();
         }
 
         AnsiConsole.MarkupLine($"[green]Completed queue run.[/] Executions: {string.Join(", ", executionIds)}");
