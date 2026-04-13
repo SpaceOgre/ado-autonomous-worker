@@ -10,11 +10,11 @@ using Microsoft.Extensions.Options;
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration;
 
 internal sealed class TaskPlanningService(
-    IRulesEngine rulesEngine,
     IStateStore stateStore,
     IAgentRunnerFactory agentRunnerFactory,
     ExecutionJournal executionJournal,
     IOptions<AgentOptions> agentOptions,
+    IOptions<WorkerOptions> workerOptions,
     IOptions<StorageOptions> storageOptions,
     ILogger<TaskPlanningService> logger)
 {
@@ -23,6 +23,10 @@ internal sealed class TaskPlanningService(
         var config = agentOptions.Value.Plan;
         var runner = agentRunnerFactory.GetRunner(config.Provider);
         var artifactDirectory = Path.Combine(storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId), "plan");
+        var commentsBlock = WorkItemPromptContextFormatter.FormatComments(
+            workItem.Comments,
+            workerOptions.Value.MaxPromptComments,
+            workerOptions.Value.MaxPromptCommentCharacters);
 
         var rawPrompt = $$"""
         Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
@@ -32,12 +36,16 @@ internal sealed class TaskPlanningService(
         Assigned to: {{workItem.AssignedTo}}
         Iteration: {{workItem.IterationPath}}
         Tags: {{string.Join(", ", workItem.Tags)}}
+        Parent feature: {{workItem.ParentFeatureTitle ?? "-"}}
 
         Description:
         {{workItem.Description}}
 
         Acceptance Criteria:
         {{workItem.AcceptanceCriteria}}
+
+        Recent comments:
+        {{commentsBlock}}
         """;
 
         var prompt = await PromptTemplateLoader.ApplyAsync(config, rawPrompt, cancellationToken);
@@ -53,7 +61,8 @@ internal sealed class TaskPlanningService(
             cancellationToken);
 
         await stateStore.SaveAgentSessionAsync(executionId, startResult.Session, cancellationToken);
-        var plan = ParsePlan(startResult.Result.StructuredPayload) ?? BuildFallbackPlan(workItem);
+        var plan = ParsePlan(startResult.Result.StructuredPayload)
+            ?? throw new InvalidOperationException("Planning agent returned invalid or empty structured output.");
         await stateStore.SavePlanAsync(executionId, plan, cancellationToken);
         await executionJournal.AppendEventAsync(executionId, TaskPhase.Planning, plan.Summary, cancellationToken);
 
@@ -89,26 +98,6 @@ internal sealed class TaskPlanningService(
             return null;
         }
     }
-
-    private PlanResult BuildFallbackPlan(WorkItemDetails workItem)
-    {
-        var scope = rulesEngine.ClassifyScope(workItem);
-        var repos = MapScopeToRepos(scope).Select(item => item.ToString()).ToArray();
-        return new PlanResult(
-            scope,
-            repos,
-            repos.Select(repo => $"{repo} validation").ToArray(),
-            ["Keep behavior coherent and cover changed logic."],
-            [],
-            $"Fallback plan derived from deterministic rules: {scope}.");
-    }
-
-    private static IReadOnlyList<RepoKind> MapScopeToRepos(WorkItemScope scope) => scope switch
-    {
-        WorkItemScope.Backend => [RepoKind.Backend],
-        WorkItemScope.Frontend => [RepoKind.Frontend],
-        _ => [RepoKind.Backend, RepoKind.Frontend],
-    };
 
     private static string FormatWorkItemLabel(WorkItemType workItemType)
     {

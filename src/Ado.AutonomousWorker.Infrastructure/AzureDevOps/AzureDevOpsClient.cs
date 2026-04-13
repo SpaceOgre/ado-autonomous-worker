@@ -92,21 +92,36 @@ public sealed class AzureDevOpsClient(
         var fields = root.GetProperty("fields");
         var tags = ParseTags(fields.TryGetProperty("System.Tags", out var tagElement) ? tagElement.GetString() : null);
         var childIds = new List<int>();
+        var parentIds = new List<int>();
 
         if (root.TryGetProperty("relations", out var relationsElement))
         {
             foreach (var relation in relationsElement.EnumerateArray())
             {
-                if (!relation.TryGetProperty("rel", out var relElement) ||
-                    !string.Equals(relElement.GetString(), "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
+                if (!relation.TryGetProperty("rel", out var relElement))
                 {
                     continue;
                 }
 
-                if (relation.TryGetProperty("url", out var urlElement) &&
-                    int.TryParse(urlElement.GetString()?.Split('/').Last(), out var childId))
+                if (!relation.TryGetProperty("url", out var urlElement))
                 {
-                    childIds.Add(childId);
+                    continue;
+                }
+
+                var relatedId = TryParseWorkItemId(urlElement.GetString());
+                if (relatedId is null)
+                {
+                    continue;
+                }
+
+                var relationType = relElement.GetString();
+                if (string.Equals(relationType, "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
+                {
+                    childIds.Add(relatedId.Value);
+                }
+                else if (string.Equals(relationType, "System.LinkTypes.Hierarchy-Reverse", StringComparison.OrdinalIgnoreCase))
+                {
+                    parentIds.Add(relatedId.Value);
                 }
             }
         }
@@ -114,6 +129,10 @@ public sealed class AzureDevOpsClient(
         var children = childIds.Count == 0
             ? []
             : await GetChildTasksAsync(childIds, cancellationToken);
+        var parentFeatureTitle = parentIds.Count == 0
+            ? null
+            : await TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
+        var comments = await GetWorkItemCommentsAsync(workItemId, cancellationToken);
 
         return new WorkItemDetails
         {
@@ -125,6 +144,8 @@ public sealed class AzureDevOpsClient(
             IterationPath = fields.TryGetProperty("System.IterationPath", out var iterationElement) ? iterationElement.GetString() ?? string.Empty : string.Empty,
             Description = fields.TryGetProperty("System.Description", out var descriptionElement) ? descriptionElement.GetString() ?? string.Empty : string.Empty,
             AcceptanceCriteria = fields.TryGetProperty("Microsoft.VSTS.Common.AcceptanceCriteria", out var acceptanceElement) ? acceptanceElement.GetString() ?? string.Empty : string.Empty,
+            ParentFeatureTitle = parentFeatureTitle,
+            Comments = comments,
             Tags = tags,
             ChildTasks = children,
             Kind = tags.Contains("AI-Rework", StringComparer.OrdinalIgnoreCase) ? QueueItemKind.AiRework : QueueItemKind.AiWork,
@@ -324,6 +345,82 @@ public sealed class AzureDevOpsClient(
         return children;
     }
 
+    private async Task<string?> TryGetParentFeatureTitleAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_options.Project}/_apis/wit/workitemsbatch?api-version={ApiVersion}",
+            new
+            {
+                ids = parentIds,
+                fields = new[] { "System.WorkItemType", "System.Title" },
+            },
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        foreach (var item in document.RootElement.GetProperty("value").EnumerateArray())
+        {
+            var fields = item.GetProperty("fields");
+            if (!string.Equals(
+                    fields.TryGetProperty("System.WorkItemType", out var typeElement) ? typeElement.GetString() : null,
+                    "Feature",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return fields.TryGetProperty("System.Title", out var titleElement)
+                ? titleElement.GetString()
+                : null;
+        }
+
+        return null;
+    }
+
+    private async Task<IReadOnlyList<string>> GetWorkItemCommentsAsync(int workItemId, CancellationToken cancellationToken)
+    {
+        var comments = new List<string>();
+        string? continuationToken = null;
+
+        do
+        {
+            var route = $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?$top=200&api-version=7.1-preview.3";
+            if (!string.IsNullOrWhiteSpace(continuationToken))
+            {
+                route = $"{route}&continuationToken={Uri.EscapeDataString(continuationToken)}";
+            }
+
+            var response = await _httpClient.GetAsync(route, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            if (document.RootElement.TryGetProperty("comments", out var commentsElement))
+            {
+                foreach (var commentElement in commentsElement.EnumerateArray())
+                {
+                    if (!commentElement.TryGetProperty("text", out var textElement))
+                    {
+                        continue;
+                    }
+
+                    var text = textElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        comments.Add(text.Trim());
+                    }
+                }
+            }
+
+            continuationToken = document.RootElement.TryGetProperty("continuationToken", out var continuationElement)
+                ? continuationElement.GetString()
+                : null;
+        }
+        while (!string.IsNullOrWhiteSpace(continuationToken));
+
+        return comments;
+    }
+
     private async Task PatchFieldsAsync(int workItemId, object[] document, CancellationToken cancellationToken)
     {
         using var request = BuildPatchRequest(
@@ -387,6 +484,12 @@ public sealed class AzureDevOpsClient(
         return string.IsNullOrWhiteSpace(tags)
             ? []
             : tags.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static int? TryParseWorkItemId(string? url)
+    {
+        var segment = url?.Split('/').LastOrDefault();
+        return int.TryParse(segment, out var id) ? id : null;
     }
 
     private static WorkItemType ParseWorkItemType(string? workItemType)

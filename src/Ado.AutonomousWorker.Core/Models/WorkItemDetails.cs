@@ -20,6 +20,10 @@ public sealed record WorkItemDetails
 
     public string AcceptanceCriteria { get; init; } = string.Empty;
 
+    public string? ParentFeatureTitle { get; init; }
+
+    public IReadOnlyList<string> Comments { get; init; } = [];
+
     public IReadOnlyList<string> Tags { get; init; } = [];
 
     public IReadOnlyList<ChildTaskRecord> ChildTasks { get; init; } = [];

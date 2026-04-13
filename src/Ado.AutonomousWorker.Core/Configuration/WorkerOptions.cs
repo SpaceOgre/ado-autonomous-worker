@@ -11,4 +11,8 @@ public sealed class WorkerOptions
     public bool CleanupWorktreesAfterSuccess { get; set; }
 
     public string CurrentSprintFallback { get; set; } = string.Empty;
+
+    public int MaxPromptComments { get; set; } = 8;
+
+    public int MaxPromptCommentCharacters { get; set; } = 4000;
 }
