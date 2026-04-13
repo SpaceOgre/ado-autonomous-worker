@@ -25,7 +25,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         var transcriptPath = Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-claude.log");
         var session = new AgentSessionHandle(sessionId, Provider, role, workingDirectory, transcriptPath, sessionId);
 
-        var args = BuildArguments(config, prompt, outputSchema, sessionId, isResume: false);
+        var args = BuildArguments(role, config, prompt, outputSchema, sessionId, isResume: false);
         var commandResult = await commandRunner.RunAsync(
             GetCommandPath(config),
             args,
@@ -52,7 +52,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
     {
         Directory.CreateDirectory(artifactDirectory);
         var transcriptPath = Path.Combine(artifactDirectory, $"{session.Role.ToString().ToLowerInvariant()}-claude-resume.log");
-        var args = BuildArguments(config, prompt, outputSchema: null, session.ProviderSessionId ?? session.SessionId, isResume: true);
+        var args = BuildArguments(session.Role, config, prompt, outputSchema: null, session.ProviderSessionId ?? session.SessionId, isResume: true);
 
         var commandResult = await commandRunner.RunAsync(
             GetCommandPath(config),
@@ -90,7 +90,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         return ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath);
     }
 
-    private static List<string> BuildArguments(AgentRoleConfig config, string prompt, string? outputSchema, string sessionId, bool isResume)
+    private static List<string> BuildArguments(AgentRole role, AgentRoleConfig config, string prompt, string? outputSchema, string sessionId, bool isResume)
     {
         var args = new List<string>();
 
@@ -112,6 +112,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         args.Add(MapEffort(config.Effort));
         args.Add("--permission-mode");
         args.Add("bypassPermissions");
+        args.Add("--append-system-prompt");
+        args.Add(AgentSystemPromptGuards.BuildSystemPromptAppend(role));
 
         if (outputSchema is not null)
         {

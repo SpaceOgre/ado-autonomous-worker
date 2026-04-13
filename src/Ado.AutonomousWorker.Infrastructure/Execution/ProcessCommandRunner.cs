@@ -21,11 +21,12 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
         var resolvedFileName = CommandPathResolver.ResolveOrOriginal(fileName);
+        var (startFileName, startArguments) = PrepareProcessStart(resolvedFileName, arguments);
 
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
         {
-            FileName = resolvedFileName,
+            FileName = startFileName,
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -33,7 +34,7 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             CreateNoWindow = true,
         };
 
-        foreach (var argument in arguments)
+        foreach (var argument in startArguments)
         {
             process.StartInfo.ArgumentList.Add(argument);
         }
@@ -152,6 +153,43 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         return timeoutCts is not null &&
                timeoutCts.IsCancellationRequested &&
                !outerCancellationToken.IsCancellationRequested;
+    }
+
+    private static (string FileName, IReadOnlyList<string> Arguments) PrepareProcessStart(string resolvedFileName, IReadOnlyList<string> arguments)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return (resolvedFileName, arguments);
+        }
+
+        var extension = Path.GetExtension(resolvedFileName);
+        if (!string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase))
+        {
+            return (resolvedFileName, arguments);
+        }
+
+        var shellCommand = string.Join(
+            " ",
+            new[] { QuoteForCmd(resolvedFileName) }
+                .Concat(arguments.Select(QuoteForCmd)));
+
+        return (
+            Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
+            ["/d", "/s", "/c", shellCommand]);
+    }
+
+    private static string QuoteForCmd(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "\"\"";
+        }
+
+        var escaped = value.Replace("\"", "\"\"");
+        return value.Any(ch => char.IsWhiteSpace(ch) || ch is '"' or '&' or '|' or '<' or '>' or '^' or '(' or ')')
+            ? $"\"{escaped}\""
+            : escaped;
     }
 
     private static async Task PumpOutputAsync(

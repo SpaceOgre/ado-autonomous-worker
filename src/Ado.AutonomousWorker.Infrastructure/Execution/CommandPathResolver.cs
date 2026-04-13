@@ -21,7 +21,7 @@ internal static class CommandPathResolver
 
         if (Path.IsPathRooted(commandPath))
         {
-            return File.Exists(commandPath) ? commandPath : null;
+            return ResolveRooted(commandPath);
         }
 
         var searchFolders = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
@@ -45,7 +45,7 @@ internal static class CommandPathResolver
 
     private static IReadOnlyList<string> GetCandidateNames(string commandPath)
     {
-        var names = new List<string> { commandPath };
+        var names = new List<string>();
         if (!Path.HasExtension(commandPath))
         {
             foreach (var extension in GetExecutableExtensions())
@@ -54,7 +54,27 @@ internal static class CommandPathResolver
             }
         }
 
+        names.Add(commandPath);
         return names;
+    }
+
+    private static string? ResolveRooted(string commandPath)
+    {
+        if (Path.HasExtension(commandPath))
+        {
+            return File.Exists(commandPath) ? commandPath : null;
+        }
+
+        foreach (var extension in GetExecutableExtensions())
+        {
+            var candidatePath = commandPath + extension;
+            if (File.Exists(candidatePath))
+            {
+                return candidatePath;
+            }
+        }
+
+        return File.Exists(commandPath) ? commandPath : null;
     }
 
     private static IReadOnlyList<string> GetExecutableExtensions()

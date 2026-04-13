@@ -308,6 +308,7 @@ internal sealed partial class RepositoryWorkflowService(
         - Coordinate backend and frontend changes together when more than one repository is listed.
         - Keep each repository on its prepared branch.
         - Update or add tests when relevant.
+        - Do not create commits, push branches, open pull requests, link work items, or publish changes to Azure DevOps or Git hosting systems.
         - Leave every listed repository in a reviewable state for validation and PR creation.
         """;
     }
@@ -327,6 +328,9 @@ internal sealed partial class RepositoryWorkflowService(
 
         Repositories:
         {{repositorySummary}}
+
+        Requirements:
+        - Do not create commits, push branches, open pull requests, link work items, or publish changes.
         """;
     }
 
@@ -341,6 +345,9 @@ internal sealed partial class RepositoryWorkflowService(
 
         Accepted findings:
         {{formattedFindings}}
+
+        Requirements:
+        - Do not create commits, push branches, open pull requests, link work items, or publish changes.
         """;
     }
 

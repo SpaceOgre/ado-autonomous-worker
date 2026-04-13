@@ -42,6 +42,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             config.Model,
             "-o",
             outputPath,
+            "-c",
+            $"model_instructions={JsonSerializer.Serialize(AgentSystemPromptGuards.BuildSystemPromptAppend(role))}"
         };
 
         if (schemaPath is not null)
@@ -94,6 +96,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             config.Model,
             "-o",
             outputPath,
+            "-c",
+            $"model_instructions={JsonSerializer.Serialize(AgentSystemPromptGuards.BuildSystemPromptAppend(session.Role))}"
         };
 
         AddConfigArguments(args, config);
