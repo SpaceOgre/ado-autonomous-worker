@@ -12,17 +12,21 @@ public sealed class RunCommand(
     ITaskOrchestrator taskOrchestrator,
     QueueInspector queueInspector,
     ExecutionLiveDisplay liveDisplay,
+    RunPreambleDisplay runPreambleDisplay,
     IOptions<WorkerOptions> workerOptions) : AsyncCommand
 {
     protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var queue = (await queueInspector.GetQueueAsync(cancellationToken))
+        var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
+        var queue = eligibleQueue
             .Take(workerOptions.Value.MaxItemsPerRun)
             .ToArray();
 
+        runPreambleDisplay.ShowSplash("Queue run");
+        runPreambleDisplay.ShowQueuePreview(queue, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun, previewOnly: false);
+
         if (queue.Length == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No eligible queue items found.[/]");
             return 0;
         }
 

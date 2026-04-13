@@ -42,7 +42,7 @@ public sealed class CliCompletionService(IStateStore stateStore)
     {
         if (tokens.Count == 0)
         {
-            return ["bootstrap", "completion", "doctor", "execution", "executions", "queue", "run", "task"];
+            return CliCommandCatalog.TopLevelCommands;
         }
 
         if (IsAwaitingValue(tokens, "--id") || IsAwaitingValue(tokens, "--execution-id"))
@@ -53,53 +53,29 @@ public sealed class CliCompletionService(IStateStore stateStore)
                 .ToArray();
         }
 
-        return tokens[0] switch
+        if (CliCommandCatalog.BranchCommands.TryGetValue(tokens[0], out var branchCommands))
         {
-            "completion" => SuggestForCompletion(tokens),
-            "execution" => SuggestForExecution(tokens),
-            "executions" => SuggestForExecutions(tokens),
-            "task" => SuggestForTask(tokens),
-            _ => [],
-        };
-    }
+            if (tokens.Count == 1)
+            {
+                return branchCommands;
+            }
 
-    private static IReadOnlyList<string> SuggestForCompletion(IReadOnlyList<string> tokens)
-    {
-        return tokens.Count switch
-        {
-            1 => ["powershell"],
-            _ => [],
-        };
-    }
+            if (CliCommandCatalog.CommandOptions.TryGetValue(tokens[0], out var branchOptions)
+                && branchOptions.TryGetValue(tokens[1], out var options))
+            {
+                return options;
+            }
 
-    private static IReadOnlyList<string> SuggestForExecution(IReadOnlyList<string> tokens)
-    {
-        return tokens.Count switch
-        {
-            1 => ["show"],
-            2 when tokens[1] == "show" => ["--id", "--last"],
-            _ => [],
-        };
-    }
+            return [];
+        }
 
-    private static IReadOnlyList<string> SuggestForExecutions(IReadOnlyList<string> tokens)
-    {
-        return tokens.Count switch
+        if (CliCommandCatalog.CommandOptions.TryGetValue(tokens[0], out var topLevelOptions)
+            && topLevelOptions.TryGetValue(string.Empty, out var topLevelSuggestions))
         {
-            1 => ["--active"],
-            _ => [],
-        };
-    }
+            return topLevelSuggestions;
+        }
 
-    private static IReadOnlyList<string> SuggestForTask(IReadOnlyList<string> tokens)
-    {
-        return tokens.Count switch
-        {
-            1 => ["resume", "run"],
-            2 when tokens[1] == "run" => ["--id"],
-            2 when tokens[1] == "resume" => ["--execution-id", "--last"],
-            _ => [],
-        };
+        return [];
     }
 
     private static bool IsAwaitingValue(IReadOnlyList<string> tokens, string optionName)

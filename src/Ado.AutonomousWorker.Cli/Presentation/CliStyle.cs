@@ -84,6 +84,13 @@ public static class CliStyle
         };
     }
 
+    public static string StackRank(double stackRank)
+    {
+        return stackRank >= double.MaxValue / 2
+            ? "[grey]-[/]"
+            : stackRank.ToString("0.##");
+    }
+
     public static string Provider(AgentProvider provider)
     {
         var color = provider switch

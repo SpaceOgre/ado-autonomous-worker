@@ -37,9 +37,12 @@ builder.Services.AddSingleton<PowerShellCompletionCommand>();
 builder.Services.AddSingleton<RunCommand>();
 builder.Services.AddSingleton<RunTaskCommand>();
 builder.Services.AddSingleton<ResumeTaskCommand>();
+builder.Services.AddSingleton<UiRunPreviewCommand>();
+builder.Services.AddSingleton<UiSplashCommand>();
 builder.Services.AddSingleton<VersionCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
+builder.Services.AddSingleton<RunPreambleDisplay>();
 
 using var host = builder.Build();
 
@@ -79,7 +82,7 @@ app.Configure(config =>
     config.AddCommand<DoctorCommand>("doctor").WithDescription("Verify configuration, repos, CLI tools, and Azure DevOps access.");
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
-    config.AddCommand<RunCommand>("run").WithDescription("Process the current queue and stop on the first failure.");
+    config.AddCommand<RunCommand>("run").WithDescription("Preview the selected queue, then process it and stop on the first failure.");
     config.AddCommand<VersionCommand>("version").WithDescription("Show the installed ado-worker version and runtime information.");
     config.AddBranch("completion", completion =>
     {
@@ -95,6 +98,12 @@ app.Configure(config =>
     {
         task.AddCommand<RunTaskCommand>("run").WithDescription("Run a specific Azure DevOps work item.");
         task.AddCommand<ResumeTaskCommand>("resume").WithDescription("Resume a prior execution by ID.");
+    });
+
+    config.AddBranch("ui", ui =>
+    {
+        ui.AddCommand<UiSplashCommand>("splash").WithDescription("Render the run splash banner without starting any work.");
+        ui.AddCommand<UiRunPreviewCommand>("run-preview").WithDescription("Render the exact queue slice that the run command would process.");
     });
 });
 

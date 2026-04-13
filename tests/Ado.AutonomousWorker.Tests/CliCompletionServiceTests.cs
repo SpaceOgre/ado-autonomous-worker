@@ -12,8 +12,10 @@ public sealed class CliCompletionServiceTests
     {
         var service = new CliCompletionService(new FakeStateStore());
 
-        var suggestions = await service.GetSuggestionsAsync("ex", [], CancellationToken.None);
+        var suggestions = await service.GetSuggestionsAsync(string.Empty, [], CancellationToken.None);
 
+        Assert.Contains("ui", suggestions);
+        Assert.Contains("version", suggestions);
         Assert.Contains("execution", suggestions);
         Assert.Contains("executions", suggestions);
     }
@@ -41,6 +43,27 @@ public sealed class CliCompletionServiceTests
 
         Assert.Contains("--execution-id", suggestions);
         Assert.Contains("--last", suggestions);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_SuggestsUiBranchCommands()
+    {
+        var service = new CliCompletionService(new FakeStateStore());
+
+        var suggestions = await service.GetSuggestionsAsync("r", ["ui"], CancellationToken.None);
+
+        Assert.Contains("run-preview", suggestions);
+        Assert.DoesNotContain("splash", suggestions);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_SuggestsUiSplashOptions()
+    {
+        var service = new CliCompletionService(new FakeStateStore());
+
+        var suggestions = await service.GetSuggestionsAsync("--", ["ui", "splash"], CancellationToken.None);
+
+        Assert.Equal(["--status"], suggestions);
     }
 
     private sealed class FakeStateStore(IReadOnlyList<TaskExecutionRecord>? executions = null) : IStateStore
