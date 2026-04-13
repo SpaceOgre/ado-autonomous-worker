@@ -4,6 +4,7 @@ public static class CliCommandCatalog
 {
     public static readonly IReadOnlyList<string> TopLevelCommands =
     [
+        "agent",
         "bootstrap",
         "completion",
         "doctor",
@@ -20,6 +21,7 @@ public static class CliCommandCatalog
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> BranchCommands =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
+            ["agent"] = ["test"],
             ["completion"] = ["powershell"],
             ["execution"] = ["show"],
             ["task"] = ["resume", "run"],
@@ -29,6 +31,10 @@ public static class CliCommandCatalog
     public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyList<string>>> CommandOptions =
         new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyList<string>>>(StringComparer.OrdinalIgnoreCase)
         {
+            ["agent"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["test"] = ["--role"],
+            },
             ["execution"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["show"] = ["--id", "--last"],

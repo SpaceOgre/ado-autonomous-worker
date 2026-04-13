@@ -34,9 +34,21 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             CreateNoWindow = true,
         };
 
-        foreach (var argument in startArguments)
+        if (startArguments.RawArguments is not null)
         {
-            process.StartInfo.ArgumentList.Add(argument);
+            // For .CMD/.BAT files the whole invocation is pre-built as a single raw
+            // command-line string and must be passed via Arguments (not ArgumentList).
+            // Using ArgumentList would cause .NET to re-escape the string with \"...\"
+            // which cmd.exe does not recognise — it uses "" for embedded quotes — and
+            // that re-escaping splits quoted tokens into separate words at spaces.
+            process.StartInfo.Arguments = startArguments.RawArguments;
+        }
+        else
+        {
+            foreach (var argument in startArguments.List!)
+            {
+                process.StartInfo.ArgumentList.Add(argument);
+            }
         }
 
         if (environmentVariables is not null)
@@ -155,18 +167,18 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
                !outerCancellationToken.IsCancellationRequested;
     }
 
-    private static (string FileName, IReadOnlyList<string> Arguments) PrepareProcessStart(string resolvedFileName, IReadOnlyList<string> arguments)
+    private static (string FileName, ProcessArguments Arguments) PrepareProcessStart(string resolvedFileName, IReadOnlyList<string> arguments)
     {
         if (!OperatingSystem.IsWindows())
         {
-            return (resolvedFileName, arguments);
+            return (resolvedFileName, new ProcessArguments(arguments));
         }
 
         var extension = Path.GetExtension(resolvedFileName);
         if (!string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase))
         {
-            return (resolvedFileName, arguments);
+            return (resolvedFileName, new ProcessArguments(arguments));
         }
 
         var shellCommand = string.Join(
@@ -174,9 +186,20 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             new[] { QuoteForCmd(resolvedFileName) }
                 .Concat(arguments.Select(QuoteForCmd)));
 
+        // Wrap the shellCommand in outer quotes so that cmd.exe /s /c strips exactly
+        // the outermost pair and leaves the inner quoted tokens (e.g. the prompt argument)
+        // intact.  Passing shellCommand as a separate ArgumentList entry would cause .NET
+        // to re-escape every " as \" which cmd.exe does not handle.
+        var rawArguments = $"/d /s /c \"{shellCommand}\"";
         return (
             Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
-            ["/d", "/s", "/c", shellCommand]);
+            new ProcessArguments(rawArguments));
+    }
+
+    private readonly record struct ProcessArguments(IReadOnlyList<string>? List, string? RawArguments)
+    {
+        public ProcessArguments(IReadOnlyList<string> list) : this(list, null) { }
+        public ProcessArguments(string raw) : this(null, raw) { }
     }
 
     private static string QuoteForCmd(string value)

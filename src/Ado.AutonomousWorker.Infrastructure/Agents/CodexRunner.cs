@@ -42,8 +42,6 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             config.Model,
             "-o",
             outputPath,
-            "-c",
-            $"model_instructions={JsonSerializer.Serialize(AgentSystemPromptGuards.BuildSystemPromptAppend(role))}"
         };
 
         if (schemaPath is not null)
@@ -53,7 +51,12 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         }
 
         AddConfigArguments(args, config);
-        args.Add(prompt);
+        // Prepend the guard to the prompt instead of using -c model_instructions=
+        // because the latter passes through cmd.exe on Windows (Volta .CMD wrapper),
+        // which strips inner quotes and splits the multi-word value into positional args.
+        // Space-separate rather than newline-separate: embedded newlines inside a quoted
+        // cmd.exe argument are legal but can be mishandled by some .CMD shims (e.g. Volta).
+        args.Add(AgentSystemPromptGuards.BuildSystemPromptAppend(role) + " " + prompt);
 
         var commandResult = await commandRunner.RunAsync(
             GetCommandPath(config, "codex"),
@@ -96,12 +99,10 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             config.Model,
             "-o",
             outputPath,
-            "-c",
-            $"model_instructions={JsonSerializer.Serialize(AgentSystemPromptGuards.BuildSystemPromptAppend(session.Role))}"
         };
 
         AddConfigArguments(args, config);
-        args.Add(prompt);
+        args.Add(AgentSystemPromptGuards.BuildSystemPromptAppend(session.Role) + " " + prompt);
 
         var commandResult = await commandRunner.RunAsync(
             GetCommandPath(config, "codex"),

@@ -129,6 +129,8 @@ ado-worker completion powershell
 ado-worker run
 ado-worker task run --id 12345
 ado-worker task resume --execution-id <execution-id>
+ado-worker agent test
+ado-worker agent test --role review
 ado-worker ui splash
 ado-worker ui splash --status "Queue run"
 ado-worker ui run-preview
@@ -140,6 +142,8 @@ Use the local or global installation flow below depending on how you want to run
 `ado-worker run` first previews the exact queue slice it will execute, including the current ordering and `MaxItemsPerRun` cap, and then starts immediately.
 
 `ado-worker run` is intentionally fail-fast. If one queued work item fails, the command stops immediately so you can inspect and fix the issue before spending more agent tokens on the remaining backlog items.
+
+Use `ado-worker agent test` to verify agent connectivity before running real tasks. It sends a minimal prompt to each configured agent (Plan, Code, Review) and reports whether each one responded successfully. Pass `--role plan|code|review` to test a single agent.
 
 Use `ado-worker ui splash` to test the branded run banner without touching queue state, and `ado-worker ui run-preview` to render the exact queue slice that `ado-worker run` would process without starting any agent work.
 

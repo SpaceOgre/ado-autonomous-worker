@@ -41,6 +41,7 @@ builder.Services.AddSingleton<UiRunPreviewCommand>();
 builder.Services.AddSingleton<UiSplashCommand>();
 builder.Services.AddSingleton<VersionCommand>();
 builder.Services.AddSingleton<ResetCommand>();
+builder.Services.AddSingleton<AgentTestCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 builder.Services.AddSingleton<TerminalTitleService>();
@@ -100,6 +101,11 @@ app.Configure(config =>
     {
         task.AddCommand<RunTaskCommand>("run").WithDescription("Run a specific Azure DevOps work item.");
         task.AddCommand<ResumeTaskCommand>("resume").WithDescription("Resume a prior execution by ID.");
+    });
+
+    config.AddBranch("agent", agent =>
+    {
+        agent.AddCommand<AgentTestCommand>("test").WithDescription("Send a test prompt to each configured agent to verify connectivity.");
     });
 
     config.AddBranch("ui", ui =>
