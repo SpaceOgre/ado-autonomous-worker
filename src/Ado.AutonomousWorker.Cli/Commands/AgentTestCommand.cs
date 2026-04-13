@@ -123,9 +123,7 @@ public sealed class AgentTestCommand(
         Model = baseConfig.Model,
         Effort = "low",
         CommandPath = baseConfig.CommandPath,
-        ExtraArguments = baseConfig.Provider == AgentProvider.Codex
-            ? [.. baseConfig.ExtraArguments, "--skip-git-repo-check"]
-            : baseConfig.ExtraArguments,
+        ExtraArguments = baseConfig.ExtraArguments,
         TimeoutSeconds = 120,
         RequireStructuredOutput = false,
         ToolPolicy = baseConfig.ToolPolicy,

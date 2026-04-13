@@ -37,6 +37,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         {
             "exec",
             "--full-auto",
+            "--skip-git-repo-check",
             "--json",
             "-m",
             config.Model,
@@ -94,6 +95,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             "exec",
             "resume",
             targetSession,
+            "--skip-git-repo-check",
             "--json",
             "-m",
             config.Model,
