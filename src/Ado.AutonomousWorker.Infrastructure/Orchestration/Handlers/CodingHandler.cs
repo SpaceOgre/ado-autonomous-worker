@@ -82,6 +82,8 @@ internal sealed class CodingHandler(
             cancellationToken);
 
         await stateStore.SaveAgentSessionAsync(context.ExecutionId, codeStart.Session, cancellationToken);
+        if (codeStart.Result.Usage is not null)
+            await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.Coding, AgentRole.Code, config.Provider, codeStart.Result.Usage, cancellationToken);
         context.CodeSession = codeStart.Session;
 
         return PhaseTransition.To(TaskPhase.Reviewing);

@@ -131,10 +131,11 @@ public sealed class ExecutionLiveDisplay(
 
         var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
         var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
+        var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
 
         var body = new Rows(
         [
-            CreateCompactHeader(execution, tick, startedAt, useUnicode, agentOptions.Value),
+            CreateCompactHeader(execution, tick, startedAt, useUnicode, agentOptions.Value, usageRecords),
             CliStyle.SectionRule("Recent Events", "deepskyblue1"),
             CreateEventsTable(events),
             CliStyle.SectionRule("Agent Output", "mediumspringgreen"),
@@ -161,20 +162,21 @@ public sealed class ExecutionLiveDisplay(
         };
     }
 
-    // Compact 4-line header replacing the old 13-line summary table + separate activity + progress sections.
+    // Compact header: title, agent config, activity, phase pipeline, and (when available) running token/cost totals.
     private static IRenderable CreateCompactHeader(
         TaskExecutionRecord execution,
         int tick,
         DateTimeOffset startedAt,
         bool useUnicode,
-        AgentOptions agentOptions)
+        AgentOptions agentOptions,
+        IReadOnlyList<AgentUsageRecord> usageRecords)
     {
         var shortId = execution.ExecutionId.Length > 8
             ? execution.ExecutionId[..8] + "…"
             : execution.ExecutionId;
 
-        return new Rows(
-        [
+        var rows = new List<IRenderable>
+        {
             // Title + work item identity
             new Markup(
                 $"[bold]{Markup.Escape(execution.Title)}[/]  " +
@@ -193,7 +195,26 @@ public sealed class ExecutionLiveDisplay(
 
             // Phase pipeline
             CreatePhaseMarkup(execution.Phase, execution.Status),
-        ]);
+        };
+
+        // Running token / cost totals — shown as soon as the first phase completes.
+        if (usageRecords.Count > 0)
+        {
+            var totalIn = usageRecords.Sum(u => u.InputTokens);
+            var totalOut = usageRecords.Sum(u => u.OutputTokens);
+            var totalCached = usageRecords.Sum(u => u.CachedInputTokens);
+            var totalCost = usageRecords.Sum(u => u.CostUsd ?? 0m);
+
+            var usageLine = $"[grey]Tokens: {totalIn:N0} in / {totalOut:N0} out";
+            if (totalCached > 0)
+                usageLine += $" ({totalCached:N0} cached)";
+            if (totalCost > 0m)
+                usageLine += $"  ·  ${totalCost:F4}";
+            usageLine += "[/]";
+            rows.Add(new Markup(usageLine));
+        }
+
+        return new Rows(rows);
     }
 
     private static IRenderable CreatePhaseMarkup(TaskPhase currentPhase, ExecutionStatus status)

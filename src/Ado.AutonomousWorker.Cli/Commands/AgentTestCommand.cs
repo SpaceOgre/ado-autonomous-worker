@@ -4,6 +4,7 @@ using Ado.AutonomousWorker.Cli.Presentation;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
+using Ado.AutonomousWorker.Core.Models;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -84,17 +85,21 @@ public sealed class AgentTestCommand(
 
             sw.Stop();
             var elapsed = FormatElapsed(sw.Elapsed);
-            var response = result.Result.Summary.Trim();
-            var preview = response.Length > 80 ? response[..80] + "…" : response;
+            var preview = result.Result.Summary.Length > 60
+                ? result.Result.Summary[..60] + "…"
+                : result.Result.Summary;
+            var metaSuffix = FormatUsageSuffix(result.Result.Usage);
 
             if (result.Result.Success)
             {
-                AnsiConsole.MarkupLine($"[green]✓[/] [grey]{Markup.Escape(preview)}  (elapsed {elapsed})[/]");
+                AnsiConsole.MarkupLine(
+                    $"[green]✓[/] [grey]{Markup.Escape(preview)}{Markup.Escape(metaSuffix)}  (elapsed {elapsed})[/]");
                 passed = true;
             }
             else
             {
-                AnsiConsole.MarkupLine($"[red]✗[/] [grey]{Markup.Escape(preview)}  (elapsed {elapsed})[/]");
+                AnsiConsole.MarkupLine(
+                    $"[red]✗[/] [grey]{Markup.Escape(preview)}{Markup.Escape(metaSuffix)}  (elapsed {elapsed})[/]");
                 AnsiConsole.MarkupLine($"  [grey]Transcript: {Markup.Escape(result.Result.TranscriptPath)}[/]");
             }
         }
@@ -129,6 +134,31 @@ public sealed class AgentTestCommand(
         RequireStructuredOutput = false,
         ToolPolicy = baseConfig.ToolPolicy,
     };
+
+    // Format the usage metadata suffix for display.
+    // Claude: model + tokens + cost. Codex: tokens only (no model or cost available from CLI).
+    private static string FormatUsageSuffix(AgentUsage? usage)
+    {
+        if (usage is null)
+            return string.Empty;
+
+        var parts = new List<string>();
+        if (usage.ActualModel is not null)
+            parts.Add(usage.ActualModel);
+
+        if (usage.InputTokens > 0 || usage.OutputTokens > 0)
+        {
+            var tokens = $"{usage.InputTokens} in / {usage.OutputTokens} out";
+            if (usage.CachedInputTokens > 0)
+                tokens += $" ({usage.CachedInputTokens} cached)";
+            parts.Add(tokens);
+        }
+
+        if (usage.CostUsd.HasValue)
+            parts.Add($"${usage.CostUsd:F4}");
+
+        return parts.Count > 0 ? "  · " + string.Join(" · ", parts) : string.Empty;
+    }
 
     private static string FormatElapsed(TimeSpan elapsed) =>
         elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");

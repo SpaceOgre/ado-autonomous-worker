@@ -5,4 +5,5 @@ public sealed record AgentRunResult(
     string Summary,
     string TranscriptPath,
     string? RawOutput = null,
-    string? StructuredPayload = null);
+    string? StructuredPayload = null,
+    AgentUsage? Usage = null);

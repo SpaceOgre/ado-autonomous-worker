@@ -73,7 +73,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
         var providerSessionId = TryReadCodexSessionId(commandResult.StandardOutput);
         session = session with { ProviderSessionId = providerSessionId };
-        var result = new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload);
+        var usage = ParseCodexUsage(commandResult.StandardOutput);
+        var result = new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload, usage);
         return new AgentSessionStartResult(session, result);
     }
 
@@ -118,10 +119,11 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
-        return new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload);
+        var usage = ParseCodexUsage(commandResult.StandardOutput);
+        return new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload, usage);
     }
 
-    public async Task<ReviewResult> RunReviewAsync(
+    public async Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
         AgentRoleConfig config,
         string prompt,
         string workingDirectory,
@@ -140,7 +142,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             outputCallback,
             cancellationToken);
 
-        return ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath);
+        return (ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath), startResult.Result.Usage);
     }
 
     private static string? TryReadCodexSessionId(string stdout)
@@ -157,6 +159,42 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
                 {
                     return idProperty.GetString();
                 }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    // Parse token counts from the turn.completed JSONL event emitted by Codex.
+    // Codex does not emit a model name in its output, so ActualModel is always null.
+    private static AgentUsage? ParseCodexUsage(string stdout)
+    {
+        foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!line.StartsWith('{'))
+                continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("type", out var type) || type.GetString() != "turn.completed")
+                    continue;
+
+                if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
+                var cachedTokens = usage.TryGetProperty("cached_input_tokens", out var ct) ? ct.GetInt32() : 0;
+                var outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
+
+                return inputTokens == 0 && outputTokens == 0
+                    ? null
+                    : new AgentUsage(null, inputTokens, outputTokens, cachedTokens, null);
             }
             catch (JsonException)
             {

@@ -37,7 +37,7 @@ internal sealed class ReviewingHandler(
         logger.LogInformation("Execution {ExecutionId}: running review agent for {ScopeLabel}.", context.ExecutionId, scopeLabel);
 
         var config = agentOptions.Value.Review;
-        var review = await agentRunnerFactory.GetRunner(config.Provider).RunReviewAsync(
+        var (review, reviewUsage) = await agentRunnerFactory.GetRunner(config.Provider).RunReviewAsync(
             config,
             await PromptTemplateLoader.ApplyAsync(
                 config,
@@ -50,6 +50,8 @@ internal sealed class ReviewingHandler(
             cancellationToken);
 
         await stateStore.SaveReviewResultAsync(context.ExecutionId, review, cancellationToken);
+        if (reviewUsage is not null)
+            await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.Reviewing, AgentRole.Review, config.Provider, reviewUsage, cancellationToken);
         context.LatestReview = review;
 
         var acceptedFindings = review.Findings.Where(ReviewFindingFilter.ShouldAccept).ToArray();

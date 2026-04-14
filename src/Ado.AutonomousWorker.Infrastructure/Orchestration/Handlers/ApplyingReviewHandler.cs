@@ -9,6 +9,7 @@ namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
 internal sealed class ApplyingReviewHandler(
     IAgentRunnerFactory agentRunnerFactory,
+    IStateStore stateStore,
     ExecutionJournal executionJournal,
     IOptions<AgentOptions> agentOptions,
     IOptions<StorageOptions> storageOptions,
@@ -43,13 +44,16 @@ internal sealed class ApplyingReviewHandler(
             context.ExecutionId, acceptedFindings.Count, scopeLabel);
 
         var config = agentOptions.Value.Code;
-        await agentRunnerFactory.GetRunner(config.Provider).ResumeSessionAsync(
+        var resumeResult = await agentRunnerFactory.GetRunner(config.Provider).ResumeSessionAsync(
             codeSession,
             config,
             BuildReviewResumePrompt(acceptedFindings),
             Path.Combine(implementationArtifactRoot, "resume"),
             executionJournal.CreateOutputObserver(context.ExecutionId),
             cancellationToken);
+
+        if (resumeResult.Usage is not null)
+            await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.ApplyingReview, AgentRole.Code, config.Provider, resumeResult.Usage, cancellationToken);
 
         return PhaseTransition.To(TaskPhase.Validating);
     }

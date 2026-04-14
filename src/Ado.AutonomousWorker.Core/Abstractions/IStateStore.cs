@@ -38,4 +38,8 @@ public interface IStateStore
     Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken);
 
     Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken);
+
+    Task RecordAgentUsageAsync(string executionId, TaskPhase phase, AgentRole role, AgentProvider provider, AgentUsage usage, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken);
 }

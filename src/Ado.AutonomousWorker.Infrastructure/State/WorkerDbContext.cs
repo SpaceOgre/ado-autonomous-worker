@@ -12,6 +12,7 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
     public DbSet<ReviewResultEntity> ReviewResults => Set<ReviewResultEntity>();
     public DbSet<ExecutionPlanEntity> ExecutionPlans => Set<ExecutionPlanEntity>();
     public DbSet<AgentOutputChunkEntity> AgentOutputChunks => Set<AgentOutputChunkEntity>();
+    public DbSet<AgentUsageEntity> AgentUsages => Set<AgentUsageEntity>();
 
     // SQLite does not support DateTimeOffset natively in ORDER BY; store as ISO 8601 text instead.
     // ISO 8601 strings sort lexicographically in the same order as DateTimeOffset chronologically.
@@ -99,6 +100,23 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
             entity.Property(e => e.Sequence).HasColumnName("sequence");
             entity.Property(e => e.Timestamp).HasColumnName("timestamp").HasConversion(DateTimeOffsetConverter);
             entity.Property(e => e.Content).HasColumnName("content");
+        });
+
+        modelBuilder.Entity<AgentUsageEntity>(entity =>
+        {
+            entity.ToTable("agent_usage");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.ExecutionId).HasColumnName("execution_id");
+            entity.Property(e => e.Phase).HasColumnName("phase");
+            entity.Property(e => e.Role).HasColumnName("role");
+            entity.Property(e => e.Provider).HasColumnName("provider");
+            entity.Property(e => e.ActualModel).HasColumnName("actual_model");
+            entity.Property(e => e.InputTokens).HasColumnName("input_tokens");
+            entity.Property(e => e.OutputTokens).HasColumnName("output_tokens");
+            entity.Property(e => e.CachedInputTokens).HasColumnName("cached_input_tokens");
+            entity.Property(e => e.CostUsd).HasColumnName("cost_usd");
+            entity.Property(e => e.Timestamp).HasColumnName("timestamp").HasConversion(DateTimeOffsetConverter);
         });
     }
 }

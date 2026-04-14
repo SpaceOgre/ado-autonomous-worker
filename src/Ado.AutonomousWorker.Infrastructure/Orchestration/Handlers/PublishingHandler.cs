@@ -14,6 +14,7 @@ internal sealed class PublishingHandler(
     IWorkspaceManager workspaceManager,
     IRulesEngine rulesEngine,
     IAgentRunnerFactory agentRunnerFactory,
+    IStateStore stateStore,
     ProcessCommandRunner commandRunner,
     IOptions<AgentOptions> agentOptions,
     IOptions<WorkerOptions> workerOptions,
@@ -141,6 +142,9 @@ internal sealed class PublishingHandler(
                 AgentOutputSchemas.PullRequestDescription,
                 outputCallback: null,
                 cancellationToken);
+
+            if (result.Result.Usage is not null)
+                await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.Publishing, AgentRole.Plan, config.Provider, result.Result.Usage, cancellationToken);
 
             if (result.Result.Success && !string.IsNullOrWhiteSpace(result.Result.StructuredPayload))
             {

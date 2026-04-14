@@ -65,6 +65,8 @@ internal sealed class PlanningHandler(
             cancellationToken);
 
         await stateStore.SaveAgentSessionAsync(context.ExecutionId, startResult.Session, cancellationToken);
+        if (startResult.Result.Usage is not null)
+            await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.Planning, AgentRole.Plan, config.Provider, startResult.Result.Usage, cancellationToken);
 
         var plan = ParsePlan(startResult.Result.StructuredPayload)
             ?? throw new InvalidOperationException("Planning agent returned invalid or empty structured output.");

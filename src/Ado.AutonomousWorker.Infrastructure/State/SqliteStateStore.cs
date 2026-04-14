@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Enums;
@@ -13,6 +14,26 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         await context.Database.EnsureCreatedAsync(cancellationToken);
+
+        // Ensure the agent_usage table exists for databases created before this table was added.
+        // EnsureCreatedAsync only creates tables when the database is first created, not on schema changes.
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS agent_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                execution_id TEXT NOT NULL,
+                phase INTEGER NOT NULL,
+                role INTEGER NOT NULL,
+                provider INTEGER NOT NULL,
+                actual_model TEXT,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+                cost_usd TEXT,
+                timestamp TEXT NOT NULL
+            )
+            """,
+            cancellationToken);
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
@@ -264,6 +285,47 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .FirstOrDefaultAsync(cancellationToken);
 
         return entity is null ? null : Agents.ReviewResultParser.Parse(entity.StructuredPayload, entity.TranscriptPath);
+    }
+
+    public async Task RecordAgentUsageAsync(string executionId, TaskPhase phase, AgentRole role, AgentProvider provider, AgentUsage usage, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        context.AgentUsages.Add(new AgentUsageEntity
+        {
+            ExecutionId = executionId,
+            Phase = (int)phase,
+            Role = (int)role,
+            Provider = (int)provider,
+            ActualModel = usage.ActualModel,
+            InputTokens = usage.InputTokens,
+            OutputTokens = usage.OutputTokens,
+            CachedInputTokens = usage.CachedInputTokens,
+            CostUsd = usage.CostUsd?.ToString("F6", CultureInfo.InvariantCulture),
+            Timestamp = DateTimeOffset.UtcNow,
+        });
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.AgentUsages
+            .AsNoTracking()
+            .Where(u => u.ExecutionId == executionId)
+            .OrderBy(u => u.Id)
+            .Select(u => new AgentUsageRecord(
+                u.Id,
+                u.ExecutionId,
+                (TaskPhase)u.Phase,
+                (AgentRole)u.Role,
+                (AgentProvider)u.Provider,
+                u.ActualModel,
+                u.InputTokens,
+                u.OutputTokens,
+                u.CachedInputTokens,
+                u.CostUsd == null ? (decimal?)null : decimal.Parse(u.CostUsd, CultureInfo.InvariantCulture),
+                u.Timestamp))
+            .ToListAsync(cancellationToken);
     }
 
     private static ExecutionEntity ToEntity(TaskExecutionRecord record) => new()

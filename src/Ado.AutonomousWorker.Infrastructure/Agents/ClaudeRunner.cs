@@ -38,9 +38,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             cancellationToken,
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
-        var payload = commandResult.StandardOutput;
-        var structuredPayload = outputSchema is null ? null : ExtractStructuredPayload(payload);
-        var result = new AgentRunResult(commandResult.Success, payload.Trim(), transcriptPath, commandResult.StandardOutput, structuredPayload);
+        var (summary, structuredPayload, usage) = ParseEnvelope(commandResult.StandardOutput, hasSchema: outputSchema is not null);
+        var result = new AgentRunResult(commandResult.Success, summary, transcriptPath, commandResult.StandardOutput, structuredPayload, usage);
         return new AgentSessionStartResult(session, result);
     }
 
@@ -67,10 +66,11 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             cancellationToken,
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
-        return new AgentRunResult(commandResult.Success, commandResult.StandardOutput.Trim(), transcriptPath, commandResult.StandardOutput, null);
+        var (summary, _, usage) = ParseEnvelope(commandResult.StandardOutput, hasSchema: false);
+        return new AgentRunResult(commandResult.Success, summary, transcriptPath, commandResult.StandardOutput, null, usage);
     }
 
-    public async Task<ReviewResult> RunReviewAsync(
+    public async Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
         AgentRoleConfig config,
         string prompt,
         string workingDirectory,
@@ -89,7 +89,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             outputCallback,
             cancellationToken);
 
-        return ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath);
+        return (ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath), startResult.Result.Usage);
     }
 
     private static List<string> BuildArguments(AgentRole role, AgentRoleConfig config, string prompt, string? outputSchema, string sessionId, bool isResume)
@@ -117,17 +117,14 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         args.Add("--append-system-prompt");
         args.Add(AgentSystemPromptGuards.BuildSystemPromptAppend(role));
 
+        // Always use JSON output to capture actual model, tokens, and cost in the result envelope.
+        // When a structured schema is required, also pass --json-schema for typed output.
+        args.Add("--output-format");
+        args.Add("json");
         if (outputSchema is not null)
         {
-            args.Add("--output-format");
-            args.Add("json");
             args.Add("--json-schema");
             args.Add(outputSchema);
-        }
-        else
-        {
-            args.Add("--output-format");
-            args.Add("text");
         }
 
         args.AddRange(config.ExtraArguments);
@@ -136,23 +133,46 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         return args;
     }
 
-    // Claude CLI with --output-format json wraps the structured output in a result envelope:
-    // {"type":"result","subtype":"success",...,"structured_output":{...},...}
-    // Extract the inner "structured_output" object when present; fall back to the raw payload.
-    private static string? ExtractStructuredPayload(string rawOutput)
+    // Parse the Claude CLI JSON result envelope that --output-format json always produces:
+    // {"type":"result","subtype":"success","result":"<text>","model":"...","usage":{...},"total_cost_usd":0.001,...}
+    // With --json-schema the envelope also contains "structured_output":{...}.
+    private static (string Summary, string? StructuredPayload, AgentUsage? Usage) ParseEnvelope(string raw, bool hasSchema)
     {
-        if (string.IsNullOrWhiteSpace(rawOutput))
-            return null;
+        if (string.IsNullOrWhiteSpace(raw))
+            return (raw, null, null);
 
         try
         {
-            using var document = JsonDocument.Parse(rawOutput.Trim());
-            if (document.RootElement.TryGetProperty("structured_output", out var structuredOutput))
-                return structuredOutput.GetRawText();
-        }
-        catch (JsonException) { }
+            using var document = JsonDocument.Parse(raw.Trim());
+            var root = document.RootElement;
 
-        return rawOutput.Trim();
+            var summary = root.TryGetProperty("result", out var r) ? r.GetString()?.Trim() ?? raw.Trim() : raw.Trim();
+
+            string? structuredPayload = null;
+            if (hasSchema && root.TryGetProperty("structured_output", out var so))
+                structuredPayload = so.GetRawText();
+
+            var model = root.TryGetProperty("model", out var m) ? m.GetString() : null;
+            int inputTokens = 0, outputTokens = 0, cachedTokens = 0;
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
+                outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
+                cachedTokens = usage.TryGetProperty("cache_read_input_tokens", out var ct) ? ct.GetInt32() : 0;
+            }
+
+            var costUsd = root.TryGetProperty("total_cost_usd", out var c) ? (decimal?)c.GetDecimal() : null;
+
+            var agentUsage = (inputTokens > 0 || outputTokens > 0 || model is not null)
+                ? new AgentUsage(model, inputTokens, outputTokens, cachedTokens, costUsd)
+                : null;
+
+            return (summary, structuredPayload, agentUsage);
+        }
+        catch (JsonException)
+        {
+            return (raw.Trim(), null, null);
+        }
     }
 
     private static string GetCommandPath(AgentRoleConfig config)

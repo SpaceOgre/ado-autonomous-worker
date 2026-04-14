@@ -45,6 +45,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         var sessions = await stateStore.GetAgentSessionsAsync(execution.ExecutionId, cancellationToken);
         var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
         var plan = await stateStore.GetPlanAsync(execution.ExecutionId, cancellationToken);
+        var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
 
         var summary = new Table().Border(TableBorder.Rounded).HideHeaders().AddColumns("Field", "Value");
         summary.AddRow("Execution Id", execution.ExecutionId);
@@ -126,6 +127,46 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
             AnsiConsole.Write(CliStyle.SectionRule("Agent Output", "mediumspringgreen"));
             AnsiConsole.Write(outputTable);
+        }
+
+        if (usageRecords.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            var usageTable = new Table().Border(TableBorder.Rounded)
+                .AddColumns("Phase", "Role", "Provider", "Model", "Tokens In", "Tokens Out", "Cached", "Cost");
+
+            var totalIn = 0;
+            var totalOut = 0;
+            var totalCached = 0;
+            var totalCost = 0m;
+
+            foreach (var u in usageRecords)
+            {
+                usageTable.AddRow(
+                    CliStyle.Phase(u.Phase),
+                    CliStyle.Role(u.Role),
+                    CliStyle.Provider(u.Provider),
+                    Markup.Escape(u.ActualModel ?? "-"),
+                    u.InputTokens.ToString("N0"),
+                    u.OutputTokens.ToString("N0"),
+                    u.CachedInputTokens > 0 ? u.CachedInputTokens.ToString("N0") : "-",
+                    u.CostUsd.HasValue ? $"${u.CostUsd:F4}" : "-");
+
+                totalIn += u.InputTokens;
+                totalOut += u.OutputTokens;
+                totalCached += u.CachedInputTokens;
+                totalCost += u.CostUsd ?? 0m;
+            }
+
+            usageTable.AddRow(
+                "[bold]Total[/]", "", "", "",
+                $"[bold]{totalIn:N0}[/]",
+                $"[bold]{totalOut:N0}[/]",
+                totalCached > 0 ? $"[bold]{totalCached:N0}[/]" : "-",
+                totalCost > 0m ? $"[bold green]${totalCost:F4}[/]" : "-");
+
+            AnsiConsole.Write(CliStyle.SectionRule("Token Usage", "gold3_1"));
+            AnsiConsole.Write(usageTable);
         }
 
         return 0;

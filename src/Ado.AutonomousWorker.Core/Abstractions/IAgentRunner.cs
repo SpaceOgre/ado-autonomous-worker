@@ -26,7 +26,7 @@ public interface IAgentRunner
         Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken);
 
-    Task<ReviewResult> RunReviewAsync(
+    Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
         AgentRoleConfig config,
         string prompt,
         string workingDirectory,
