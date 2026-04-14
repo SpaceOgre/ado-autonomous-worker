@@ -230,6 +230,13 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["PATH"] = Environment.GetEnvironmentVariable("PATH"),
+            // Inject safe.directory=* so that git commands spawned by the sandbox user
+            // can access worktrees owned by a different account (e.g. AzureAD vs local).
+            // The GIT_CONFIG_COUNT/KEY/VALUE vars are applied before any config file,
+            // so they work even when the sandbox user has no writable global gitconfig.
+            ["GIT_CONFIG_COUNT"] = "1",
+            ["GIT_CONFIG_KEY_0"] = "safe.directory",
+            ["GIT_CONFIG_VALUE_0"] = "*",
         };
 
         foreach (var name in names)
