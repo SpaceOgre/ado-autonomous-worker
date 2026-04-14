@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -188,7 +187,7 @@ internal sealed class TaskOrchestrator(
 
             var profile = repoKind switch
             {
-                RepoKind.Backend  => repositoryOptions.Value.Backend,
+                RepoKind.Backend => repositoryOptions.Value.Backend,
                 RepoKind.Frontend => repositoryOptions.Value.Frontend,
                 _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'.")
             };

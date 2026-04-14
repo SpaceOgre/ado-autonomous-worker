@@ -47,7 +47,7 @@ csharp_style_expression_bodied_properties = when_on_single_line:silent
 csharp_style_expression_bodied_accessors = when_on_single_line:silent
 csharp_style_expression_bodied_constructors = false:silent
 csharp_style_expression_bodied_operators = when_on_single_line:silent
-csharp_prefer_braces = true:suggestion
+csharp_prefer_braces = when_multiline:suggestion
 csharp_preserve_single_line_blocks = true
 csharp_preserve_single_line_statements = false
 

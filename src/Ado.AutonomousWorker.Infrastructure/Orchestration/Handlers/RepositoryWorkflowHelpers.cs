@@ -57,9 +57,9 @@ internal static class RepositoryWorkflowHelpers
 
     internal static IReadOnlyList<RepoKind> MapScopeToRepos(WorkItemScope scope) => scope switch
     {
-        WorkItemScope.Backend  => [RepoKind.Backend],
+        WorkItemScope.Backend => [RepoKind.Backend],
         WorkItemScope.Frontend => [RepoKind.Frontend],
-        _                      => [RepoKind.Backend, RepoKind.Frontend],
+        _ => [RepoKind.Backend, RepoKind.Frontend],
     };
 
     internal static string ComputeSlug(string title)
