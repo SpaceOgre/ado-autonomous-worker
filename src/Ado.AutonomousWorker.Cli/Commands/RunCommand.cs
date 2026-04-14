@@ -29,6 +29,18 @@ public sealed class RunCommand(
             return 0;
         }
 
+        if (AnsiConsole.Profile.Capabilities.Interactive && !AnsiConsole.Confirm("Proceed with run?"))
+        {
+            return 0;
+        }
+
+        if (AnsiConsole.Profile.Capabilities.Interactive)
+        {
+            AnsiConsole.Clear();
+        }
+
+        RunPreambleDisplay.ShowRunHeader(queue, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun);
+
         var executionIds = new List<string>(queue.Length);
         for (var index = 0; index < queue.Length; index++)
         {

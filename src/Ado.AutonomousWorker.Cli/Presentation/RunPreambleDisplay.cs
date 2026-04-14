@@ -78,6 +78,16 @@ public static class RunPreambleDisplay
         AnsiConsole.WriteLine();
     }
 
+    public static void ShowRunHeader(IReadOnlyList<QueueItem> selectedQueue, int eligibleCount, int maxItemsPerRun)
+    {
+        var selectedText = selectedQueue.Count == 1 ? "item" : "items";
+        var eligibleText = eligibleCount == 1 ? "item" : "items";
+        AnsiConsole.MarkupLine(
+            $"[deepskyblue1]Processing[/] {selectedQueue.Count} {selectedText} from {eligibleCount} eligible {eligibleText} ([grey]MaxItemsPerRun={maxItemsPerRun}[/]).");
+        AnsiConsole.Write(QueueTableRenderer.CreateTable(selectedQueue, includeOrder: true));
+        AnsiConsole.WriteLine();
+    }
+
     public static void BeginLiveRunScreen(
         int currentIndex,
         int totalItems,
@@ -85,11 +95,6 @@ public static class RunPreambleDisplay
         int maxItemsPerRun,
         QueueItem item)
     {
-        if (AnsiConsole.Profile.Capabilities.Interactive)
-        {
-            AnsiConsole.Clear();
-        }
-
         var body = new Rows(
         [
             new Markup("[deepskyblue1]ado-worker[/] [grey]Autonomous Azure DevOps backlog worker[/]"),
