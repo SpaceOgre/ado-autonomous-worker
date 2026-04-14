@@ -5,6 +5,7 @@ using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
+using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -18,6 +19,11 @@ public sealed class AgentTestCommand(
     private const string TestPrompt =
         "This is a connectivity test from the ado-worker CLI. Do not take any real actions. Reply with exactly the word: OK";
 
+    private const string StructuredTestPrompt =
+        "This is a connectivity test from the ado-worker CLI. Do not take any real actions. " +
+        "Return a minimal valid JSON object that matches the provided schema: " +
+        "use \"test\" for string fields, empty arrays for array fields, and null for nullable fields.";
+
     public sealed class Settings : CommandSettings
     {
         [Description("Agent role to test: plan, code, or review. If omitted, all three roles are tested.")]
@@ -28,12 +34,12 @@ public sealed class AgentTestCommand(
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
         var options = agentOptions.Value;
-        (string Label, AgentRole Role, AgentRoleConfig Config)[] candidates =
+        (string Label, AgentRole Role, AgentRoleConfig Config, string? Schema)[] candidates =
         [
-            ("Plan",   AgentRole.Plan,   options.Plan),
-            ("Code",   AgentRole.Code,   options.Code),
-            ("Review", AgentRole.Review, options.Review),
-            ("Pr",     AgentRole.Plan,   options.Pr),
+            ("Plan",   AgentRole.Plan,   options.Plan,   AgentOutputSchemas.Plan),
+            ("Code",   AgentRole.Code,   options.Code,   null),
+            ("Review", AgentRole.Review, options.Review, AgentOutputSchemas.Review),
+            ("Pr",     AgentRole.Plan,   options.Pr,     AgentOutputSchemas.PullRequestDescription),
         ];
 
         var targets = string.IsNullOrWhiteSpace(settings.Role)
@@ -49,19 +55,20 @@ public sealed class AgentTestCommand(
         }
 
         var allPassed = true;
-        foreach (var (label, role, config) in targets)
+        foreach (var (label, role, config, schema) in targets)
         {
-            if (!await TestRoleAsync(label, role, config, cancellationToken))
+            if (!await TestRoleAsync(label, role, config, schema, cancellationToken))
                 allPassed = false;
         }
 
         return allPassed ? 0 : 1;
     }
 
-    private async Task<bool> TestRoleAsync(string label, AgentRole role, AgentRoleConfig config, CancellationToken cancellationToken)
+    private async Task<bool> TestRoleAsync(string label, AgentRole role, AgentRoleConfig config, string? schema, CancellationToken cancellationToken)
     {
+        var schemaLabel = schema is not null ? " [grey](structured)[/]" : string.Empty;
         AnsiConsole.Markup(
-            $"Testing [cornflowerblue]{Markup.Escape(label)}[/] {CliStyle.Provider(config.Provider)} " +
+            $"Testing [cornflowerblue]{Markup.Escape(label)}[/]{schemaLabel} {CliStyle.Provider(config.Provider)} " +
             $"[grey]({Markup.Escape(config.Model)})[/] ... ");
 
         var artifactDir = Path.Combine(Path.GetTempPath(), "ado-worker-agent-test", Guid.NewGuid().ToString("N"));
@@ -73,13 +80,14 @@ public sealed class AgentTestCommand(
         {
             var runner = runnerFactory.GetRunner(config.Provider);
             var testConfig = CreateTestConfig(config);
+            var prompt = schema is not null ? StructuredTestPrompt : TestPrompt;
             var result = await runner.StartSessionAsync(
                 role,
                 testConfig,
-                TestPrompt,
+                prompt,
                 Directory.GetCurrentDirectory(),
                 artifactDir,
-                outputSchema: null,
+                outputSchema: schema,
                 outputCallback: null,
                 cancellationToken);
 

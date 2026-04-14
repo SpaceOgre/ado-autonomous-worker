@@ -1,10 +1,11 @@
 namespace Ado.AutonomousWorker.Infrastructure.Execution;
 
-internal static class AgentOutputSchemas
+public static class AgentOutputSchemas
 {
     public const string Plan = """
     {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "scope": { "type": "string", "enum": ["Backend", "Frontend", "Fullstack"] },
         "repositories": { "type": "array", "items": { "type": "string" } },
@@ -20,6 +21,7 @@ internal static class AgentOutputSchemas
     public const string PullRequestDescription = """
     {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "title": { "type": "string" },
         "description": { "type": "string" }
@@ -31,20 +33,22 @@ internal static class AgentOutputSchemas
     public const string Review = """
     {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "summary": { "type": "string" },
         "findings": {
           "type": "array",
           "items": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "id": { "type": "string" },
               "severity": { "type": "string" },
               "title": { "type": "string" },
               "rationale": { "type": "string" },
-              "filePath": { "type": ["string", "null"] }
+              "filePath": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
             },
-            "required": ["id", "severity", "title", "rationale"]
+            "required": ["id", "severity", "title", "rationale", "filePath"]
           }
         }
       },
