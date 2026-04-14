@@ -74,6 +74,12 @@ public sealed class ExecutionLiveDisplay(
             cancellationToken);
     }
 
+    private sealed record ViewData(
+        TaskExecutionRecord Execution,
+        IReadOnlyList<ExecutionEventRecord> Events,
+        IReadOnlyList<AgentOutputChunk> AgentOutput,
+        IReadOnlyList<AgentUsageRecord> UsageRecords);
+
     private async Task<string> RunAsync(
         string title,
         Func<CancellationToken, Task<string>> operation,
@@ -95,51 +101,78 @@ public sealed class ExecutionLiveDisplay(
             return await operationTask;
         }
 
+        const int SpinnerMs = 100;
+        const int DataRefreshMs = 750;
+        const int RefreshEvery = DataRefreshMs / SpinnerMs;
+
+        var loopIteration = 0;
+        ViewData? cached = null;
+
         await AnsiConsole.Live(CreateWaitingView(title, tick, startedAt, useUnicode))
             .AutoClear(false)
             .Overflow(VerticalOverflow.Visible)
-            .StartAsync(async context =>
+            .StartAsync(async liveCtx =>
             {
                 while (!operationTask.IsCompleted)
                 {
-                    var execution = await executionResolver(cancellationToken);
-                    terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildExecutionTitle(title, execution, tick++, useUnicode));
-                    context.UpdateTarget(await BuildViewAsync(title, execution, tick, startedAt, useUnicode, cancellationToken));
-                    await Task.Delay(TimeSpan.FromMilliseconds(750), cancellationToken);
+                    if (loopIteration % RefreshEvery == 0)
+                    {
+                        var execution = await executionResolver(cancellationToken);
+                        if (execution is not null)
+                        {
+                            var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
+                            var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
+                            var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
+                            cached = new ViewData(execution, events, agentOutput, usageRecords);
+                        }
+
+                        terminalTitleService.UpdateTitle(
+                            TerminalTitleFormatter.BuildExecutionTitle(title, cached?.Execution, tick, useUnicode));
+                    }
+
+                    liveCtx.UpdateTarget(BuildView(title, cached, tick, startedAt, useUnicode));
+                    tick++;
+                    loopIteration++;
+                    await Task.Delay(SpinnerMs, cancellationToken);
                 }
 
                 var finalExecution = await executionResolver(cancellationToken);
-                terminalTitleService.UpdateTitle(TerminalTitleFormatter.BuildExecutionTitle(title, finalExecution, tick, useUnicode));
-                context.UpdateTarget(await BuildViewAsync(title, finalExecution, tick, startedAt, useUnicode, cancellationToken));
+                ViewData? finalData = null;
+                if (finalExecution is not null)
+                {
+                    var events = await stateStore.GetEventsAsync(finalExecution.ExecutionId, cancellationToken);
+                    var agentOutput = await stateStore.GetAgentOutputChunksAsync(finalExecution.ExecutionId, cancellationToken);
+                    var usageRecords = await stateStore.GetAgentUsageAsync(finalExecution.ExecutionId, cancellationToken);
+                    finalData = new ViewData(finalExecution, events, agentOutput, usageRecords);
+                }
+
+                terminalTitleService.UpdateTitle(
+                    TerminalTitleFormatter.BuildExecutionTitle(title, finalData?.Execution, tick, useUnicode));
+                liveCtx.UpdateTarget(BuildView(title, finalData, tick, startedAt, useUnicode));
             });
 
         return await operationTask;
     }
 
-    private async Task<IRenderable> BuildViewAsync(
+    private IRenderable BuildView(
         string title,
-        TaskExecutionRecord? execution,
+        ViewData? data,
         int tick,
         DateTimeOffset startedAt,
-        bool useUnicode,
-        CancellationToken cancellationToken)
+        bool useUnicode)
     {
-        if (execution is null)
+        if (data is null)
         {
             return CreateWaitingView(title, tick, startedAt, useUnicode);
         }
 
-        var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
-        var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
-        var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
-
         var body = new Rows(
         [
-            CreateCompactHeader(execution, tick, startedAt, useUnicode, agentOptions.Value, usageRecords),
+            CreateCompactHeader(data.Execution, tick, startedAt, useUnicode, agentOptions.Value, data.UsageRecords),
             CliStyle.SectionRule("Recent Events", "deepskyblue1"),
-            CreateEventsTable(events),
+            CreateEventsTable(data.Events),
             CliStyle.SectionRule("Agent Output", "mediumspringgreen"),
-            CreateAgentOutputMarkup(agentOutput, execution.Phase, tick, useUnicode),
+            CreateAgentOutputMarkup(data.AgentOutput, data.Execution.Phase, tick, useUnicode),
         ]);
 
         return new Panel(body)
