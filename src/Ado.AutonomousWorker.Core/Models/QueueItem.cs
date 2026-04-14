@@ -10,4 +10,5 @@ public sealed record QueueItem(
     double StackRank,
     int? Priority,
     string State,
-    string? AssignedTo);
+    string? AssignedTo,
+    WorkItemScope Scope = WorkItemScope.Fullstack);

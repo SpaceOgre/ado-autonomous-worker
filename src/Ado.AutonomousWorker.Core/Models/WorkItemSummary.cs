@@ -9,4 +9,5 @@ public sealed record WorkItemSummary(
     string State,
     string? AssignedTo,
     double StackRank,
-    int? Priority = null);
+    int? Priority = null,
+    IReadOnlyList<string>? Tags = null);

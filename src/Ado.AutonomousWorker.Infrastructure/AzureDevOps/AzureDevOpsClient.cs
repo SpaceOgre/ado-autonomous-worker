@@ -287,6 +287,7 @@ public sealed class AzureDevOpsClient(
                     "System.AssignedTo",
                     "Microsoft.VSTS.Common.StackRank",
                     "Microsoft.VSTS.Common.Priority",
+                    "System.Tags",
                 },
             },
             cancellationToken);
@@ -305,7 +306,8 @@ public sealed class AzureDevOpsClient(
                 fields.GetProperty("System.State").GetString() ?? string.Empty,
                 TryReadIdentityString(fields, "System.AssignedTo"),
                 fields.TryGetProperty("Microsoft.VSTS.Common.StackRank", out var rankElement) ? ParseStackRank(rankElement) : double.MaxValue,
-                fields.TryGetProperty("Microsoft.VSTS.Common.Priority", out var priorityElement) ? ParsePriority(priorityElement) : null));
+                fields.TryGetProperty("Microsoft.VSTS.Common.Priority", out var priorityElement) ? ParsePriority(priorityElement) : null,
+                ParseTags(fields.TryGetProperty("System.Tags", out var tagsElement) ? tagsElement.GetString() : null)));
         }
 
         return items;

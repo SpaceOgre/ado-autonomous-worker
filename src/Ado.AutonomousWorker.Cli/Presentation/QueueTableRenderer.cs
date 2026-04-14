@@ -1,3 +1,4 @@
+using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 using Spectre.Console;
 
@@ -13,7 +14,7 @@ public static class QueueTableRenderer
             table.AddColumn("#");
         }
 
-        table.AddColumns("Work Item", "Type", "Title", "Kind", "State", "Assigned To", "StackRank", "Priority");
+        table.AddColumns("Work Item", "Type", "Title", "Kind", "Repos", "State", "Assigned To", "StackRank", "Priority");
 
         for (var index = 0; index < items.Count; index++)
         {
@@ -28,6 +29,7 @@ public static class QueueTableRenderer
             cells.Add(CliStyle.WorkItemTypeLabel(item.WorkItemType));
             cells.Add(Markup.Escape(item.Title));
             cells.Add(CliStyle.QueueKind(item.Kind));
+            cells.Add(FormatScope(item.Scope));
             cells.Add(CliStyle.WorkItemState(item.State));
             cells.Add(FormatAssignedTo(item.AssignedTo));
             cells.Add(CliStyle.StackRank(item.StackRank));
@@ -43,4 +45,11 @@ public static class QueueTableRenderer
     {
         return string.IsNullOrWhiteSpace(assignedTo) ? "[grey]-[/]" : Markup.Escape(assignedTo);
     }
+
+    private static string FormatScope(WorkItemScope scope) => scope switch
+    {
+        WorkItemScope.Backend => "[grey]BE[/]",
+        WorkItemScope.Frontend => "[grey]FE[/]",
+        _ => "[grey]BE+FE[/]",
+    };
 }

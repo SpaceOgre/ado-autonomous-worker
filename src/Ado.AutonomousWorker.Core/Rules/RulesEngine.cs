@@ -15,17 +15,33 @@ public sealed partial class RulesEngine : IRulesEngine
         var ordered = aiReworkItems
             .OrderBy(item => item.StackRank)
             .ThenBy(item => item.Priority ?? int.MaxValue)
-            .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiRework, item.StackRank, item.Priority, item.State, item.AssignedTo))
+            .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiRework, item.StackRank, item.Priority, item.State, item.AssignedTo, ClassifyScopeFromTags(item.Tags)))
             .Concat(
                 aiWorkItems
                     .OrderBy(item => item.StackRank)
                     .ThenBy(item => item.Priority ?? int.MaxValue)
-                    .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiWork, item.StackRank, item.Priority, item.State, item.AssignedTo)))
+                    .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiWork, item.StackRank, item.Priority, item.State, item.AssignedTo, ClassifyScopeFromTags(item.Tags))))
             .GroupBy(item => item.WorkItemId)
             .Select(group => group.First())
             .ToList();
 
         return ordered;
+    }
+
+    private static WorkItemScope ClassifyScopeFromTags(IReadOnlyList<string>? tags)
+    {
+        if (tags is null || tags.Count == 0)
+            return WorkItemScope.Fullstack;
+
+        var hasBackend = tags.Any(t => string.Equals(t, "Backend", StringComparison.OrdinalIgnoreCase));
+        var hasFrontend = tags.Any(t => string.Equals(t, "Frontend", StringComparison.OrdinalIgnoreCase));
+
+        return (hasBackend, hasFrontend) switch
+        {
+            (true, false) => WorkItemScope.Backend,
+            (false, true) => WorkItemScope.Frontend,
+            _ => WorkItemScope.Fullstack,
+        };
     }
 
     public bool IsEligible(WorkItemDetails workItem, string defaultAssignee)

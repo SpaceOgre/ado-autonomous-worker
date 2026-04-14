@@ -125,10 +125,10 @@ public sealed class ExecutionLiveDisplay(
                             var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
                             cached = new ViewData(execution, events, agentOutput, usageRecords);
                         }
-
-                        terminalTitleService.UpdateTitle(
-                            TerminalTitleFormatter.BuildExecutionTitle(title, cached?.Execution, tick, useUnicode));
                     }
+
+                    terminalTitleService.UpdateTitle(
+                        TerminalTitleFormatter.BuildExecutionTitle(title, cached?.Execution, tick, useUnicode));
 
                     liveCtx.UpdateTarget(BuildView(title, cached, tick, startedAt, useUnicode));
                     tick++;
