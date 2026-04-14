@@ -39,6 +39,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var (summary, structuredPayload, usage) = ParseEnvelope(commandResult.StandardOutput, hasSchema: outputSchema is not null);
+        if (usage is not null && usage.ActualModel is null)
+            usage = usage with { ActualModel = config.Model };
         var result = new AgentRunResult(commandResult.Success, summary, transcriptPath, commandResult.StandardOutput, structuredPayload, usage);
         return new AgentSessionStartResult(session, result);
     }
@@ -67,6 +69,8 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
 
         var (summary, _, usage) = ParseEnvelope(commandResult.StandardOutput, hasSchema: false);
+        if (usage is not null && usage.ActualModel is null)
+            usage = usage with { ActualModel = config.Model };
         return new AgentRunResult(commandResult.Success, summary, transcriptPath, commandResult.StandardOutput, null, usage);
     }
 

@@ -10,24 +10,42 @@ internal static class WorkItemCommentFormatter
         IReadOnlyList<RepositoryPublishResult> repositories,
         ImplementationRunResult implementation)
     {
+        var shortId = executionId.Length > 8 ? executionId[..8] : executionId;
         var builder = new StringBuilder()
-            .AppendLine($"Execution {executionId} completed successfully.")
-            .AppendLine()
-            .AppendLine("Repositories:");
+            .AppendLine($"Execution `{shortId}` completed successfully.")
+            .AppendLine();
 
         foreach (var repository in repositories.OrderBy(item => item.RepoKind))
         {
-            builder.AppendLine(
-                $"- {repository.RepoKind}: child task #{repository.ChildTask.WorkItemId}, branch `{repository.BranchName}`, commit `{repository.CommitSha}`, draft PR #{repository.PullRequest.PullRequestId} ({repository.PullRequest.Url})");
-            builder.AppendLine($"  Validation: {FormatList(repository.ValidationCommands)}");
+            var shortSha = repository.CommitSha.Length > 8 ? repository.CommitSha[..8] : repository.CommitSha;
+            builder
+                .AppendLine($"### {repository.RepoKind}")
+                .AppendLine()
+                .AppendLine($"Task: #{repository.ChildTask.WorkItemId}")
+                .AppendLine($"Branch: `{repository.BranchName}`")
+                .AppendLine($"Commit: `{shortSha}`")
+                .AppendLine($"PR: !{repository.PullRequest.PullRequestId}");
+
+            if (repository.ValidationCommands.Count > 0)
+                builder.AppendLine($"Validation: `{string.Join(" | ", repository.ValidationCommands)}`");
+
+            builder.AppendLine();
         }
 
-        var reviewSummary = implementation.AcceptedFindingCount.HasValue
-            ? $"Review: {implementation.Review.Findings.Count} findings, {implementation.AcceptedFindingCount.Value} accepted, transcript `{implementation.Review.TranscriptPath}`."
-            : $"Review transcript: `{implementation.Review.TranscriptPath}`.";
+        builder.AppendLine("### Review").AppendLine();
 
-        builder.AppendLine()
-            .AppendLine(reviewSummary);
+        if (implementation.AcceptedFindingCount.HasValue)
+            builder.AppendLine($"{implementation.Review.Findings.Count} findings, {implementation.AcceptedFindingCount.Value} accepted.");
+        else if (implementation.Review.Findings.Count > 0)
+            builder.AppendLine($"{implementation.Review.Findings.Count} findings.");
+
+        var hasMeaningfulSummary = !string.IsNullOrWhiteSpace(implementation.Review.Summary)
+            && !implementation.Review.Summary.Equals("No review available.", StringComparison.OrdinalIgnoreCase);
+
+        if (hasMeaningfulSummary)
+            builder.AppendLine(implementation.Review.Summary);
+        else if (!implementation.AcceptedFindingCount.HasValue && implementation.Review.Findings.Count == 0)
+            builder.AppendLine("No review.");
 
         return builder.ToString().TrimEnd();
     }
@@ -61,9 +79,6 @@ internal static class WorkItemCommentFormatter
 
         return builder.ToString().TrimEnd();
     }
-
-    private static string FormatList(IReadOnlyList<string> items)
-        => items.Count == 0 ? "-" : string.Join(" | ", items);
 
     private static string FirstNonEmpty(params string[] values)
         => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;

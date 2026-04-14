@@ -111,5 +111,10 @@ public sealed class CliCompletionServiceTests
 
         public Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken)
             => Task.FromResult<ReviewResult?>(null);
+
+        public Task RecordAgentUsageAsync(string executionId, TaskPhase phase, AgentRole role, AgentProvider provider, AgentUsage usage, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AgentUsageRecord>>([]);
     }
 }
