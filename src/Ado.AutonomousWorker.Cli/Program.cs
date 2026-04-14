@@ -42,6 +42,7 @@ builder.Services.AddSingleton<UiSplashCommand>();
 builder.Services.AddSingleton<VersionCommand>();
 builder.Services.AddSingleton<ResetCommand>();
 builder.Services.AddSingleton<AgentTestCommand>();
+builder.Services.AddSingleton<AzureDevOpsCommentTestCommand>();
 builder.Services.AddSingleton<SetPhaseCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
@@ -108,6 +109,11 @@ app.Configure(config =>
     config.AddBranch("agent", agent =>
     {
         agent.AddCommand<AgentTestCommand>("test").WithDescription("Send a test prompt to each configured agent to verify connectivity.");
+    });
+
+    config.AddBranch("ado", ado =>
+    {
+        ado.AddCommand<AzureDevOpsCommentTestCommand>("comment-test").WithDescription("Post a sample markdown comment to a work item to verify rendering.");
     });
 
     config.AddBranch("ui", ui =>

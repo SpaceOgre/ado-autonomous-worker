@@ -246,7 +246,7 @@ public sealed class AzureDevOpsClient(
     public async Task AddCommentAsync(int workItemId, string comment, CancellationToken cancellationToken)
     {
         var response = await _httpClient.PostAsJsonAsync(
-            $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?api-version=7.1-preview.3&format=Markdown",
+            $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?format=Markdown&api-version=7.2-preview.4",
             new { text = comment },
             cancellationToken);
         response.EnsureSuccessStatusCode();
