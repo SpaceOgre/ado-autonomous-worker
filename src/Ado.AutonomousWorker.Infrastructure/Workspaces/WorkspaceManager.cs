@@ -213,6 +213,17 @@ public sealed partial class WorkspaceManager(
                         ["worktree", "remove", "--force", worktreePath],
                         cancellationToken);
 
+                    // Bring the existing worktree up to the latest fetched remote state.
+                    var resetResult = await RunGitAsync(
+                        conflictPath,
+                        Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-reset.log"),
+                        ["reset", "--hard", $"origin/{branchName}"],
+                        cancellationToken);
+
+                    if (!resetResult.Success)
+                        throw new InvalidOperationException(
+                            $"Failed to reset existing worktree '{conflictPath}' to origin/{branchName}: {resetResult.StandardError}");
+
                     logger.LogInformation(
                         "Reusing existing {RepoKind} PR worktree at {Path} on branch {BranchName}.",
                         repoKind, conflictPath, branchName);
