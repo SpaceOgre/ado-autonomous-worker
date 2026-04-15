@@ -41,7 +41,7 @@ internal sealed class WorkItemCodingHandler(
             var childTask = workItem.WorkItemType == WorkItemType.Bug
                 ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
                 : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                    ?? await CreateChildTaskAsync(workItem, repoKind, cancellationToken);
+                    ?? await CreateChildTaskAsync(workItem, context.CurrentSprintPath, repoKind, cancellationToken);
             var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
             var workspace = await workspaceManager.CreateRepoExecutionAsync(
                 workItem.WorkItemId, childTask.WorkItemId, repoKind, slug, context.IsExplicitResume, cancellationToken);
@@ -86,13 +86,13 @@ internal sealed class WorkItemCodingHandler(
         return PhaseTransition.To(TaskPhase.Reviewing);
     }
 
-    private async Task<ChildTaskRecord> CreateChildTaskAsync(WorkItemDetails parent, RepoKind repoKind, CancellationToken cancellationToken)
+    private async Task<ChildTaskRecord> CreateChildTaskAsync(WorkItemDetails parent, string? currentSprintPath, RepoKind repoKind, CancellationToken cancellationToken)
     {
         var childTaskId = await azureDevOpsClient.CreateChildTaskAsync(
             parent.WorkItemId,
             $"{repoKind} - {parent.Title}",
             [repoKind.ToString()],
-            parent.IterationPath,
+            currentSprintPath ?? parent.IterationPath,
             azureDevOpsOptions.Value.DefaultAssignee,
             cancellationToken);
 
