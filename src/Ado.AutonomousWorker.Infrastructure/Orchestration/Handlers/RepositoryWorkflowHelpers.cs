@@ -84,6 +84,15 @@ internal static class RepositoryWorkflowHelpers
         _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
     };
 
+    internal static RepoKind GetRepoKindFromRepository(this RepositoryOptions options, string repositoryName)
+    {
+        if (string.Equals(repositoryName, options.Backend.AzureDevOpsRepository, StringComparison.OrdinalIgnoreCase))
+            return RepoKind.Backend;
+        if (string.Equals(repositoryName, options.Frontend.AzureDevOpsRepository, StringComparison.OrdinalIgnoreCase))
+            return RepoKind.Frontend;
+        throw new InvalidOperationException($"Repository '{repositoryName}' does not match any configured repository.");
+    }
+
     public static string FormatWorkItemLabel(WorkItemType workItemType) => workItemType switch
     {
         WorkItemType.UserStory => "User Story",

@@ -120,7 +120,7 @@ internal sealed class TaskOrchestrator(
                 : throw new InvalidOperationException(
                     $"Cannot resume AiPrFix execution '{executionId}': PR #{execution.PullRequestId} was not found.");
 
-            context = new PhaseContext.PrFixContext
+            var prFixContext = new PhaseContext.PrFixContext
             {
                 ExecutionId = executionId,
                 WorkItem = workItem,
@@ -128,6 +128,16 @@ internal sealed class TaskOrchestrator(
                 Journal = executionJournal,
                 PrTarget = prTarget,
             };
+
+            // Coding populates RepositoryExecutions in-memory. When resuming past Coding,
+            // that phase is skipped, so we must rebuild it here.
+            if (startPhase >= TaskPhase.Validating)
+            {
+                prFixContext.RepositoryExecutions = [await RebuildPrFixRepositoryExecutionAsync(
+                    workItem, prTarget, executionId, cancellationToken)];
+            }
+
+            context = prFixContext;
         }
         else
         {
@@ -185,6 +195,18 @@ internal sealed class TaskOrchestrator(
             logger.LogError(ex,
                 "Execution {ExecutionId} failed for work item {WorkItemId}",
                 context.ExecutionId, context.WorkItem.WorkItemId);
+
+            // Write the full stack trace to a file so it can be inspected after the fact,
+            // since the terminal UI may obscure console log output.
+            try
+            {
+                var exceptionLogPath = Path.Combine(
+                    storageOptions.Value.GetExecutionArtifactRoot(context.WorkItem.WorkItemId, context.ExecutionId),
+                    "exception.log");
+                Directory.CreateDirectory(Path.GetDirectoryName(exceptionLogPath)!);
+                await File.WriteAllTextAsync(exceptionLogPath, ex.ToString(), CancellationToken.None);
+            }
+            catch { /* best-effort */ }
 
             // For AiPrFix failures, do not modify work item tags — leave the "AI-Rework" PR label
             // intact so the developer knows the fix still needs attention.
@@ -245,6 +267,35 @@ internal sealed class TaskOrchestrator(
             executionId, result.Count);
 
         return result;
+    }
+
+    private async Task<RepositoryExecution> RebuildPrFixRepositoryExecutionAsync(
+        WorkItemDetails workItem,
+        PrTarget prTarget,
+        string executionId,
+        CancellationToken cancellationToken)
+    {
+        var repoKind = repositoryOptions.Value.GetRepoKindFromRepository(prTarget.RepositoryName);
+        var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
+
+        var childTask = workItem.WorkItemType == WorkItemType.Bug
+            ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+            : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
+
+        var workspace = await workspaceManager.CheckoutPrBranchAsync(
+            workItem.WorkItemId, childTask.WorkItemId, repoKind,
+            prTarget.BranchName, preserveExistingWorkspace: true, cancellationToken);
+
+        var artifactDirectory = Path.Combine(
+            storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId),
+            repoKind.ToString().ToLowerInvariant());
+
+        logger.LogInformation(
+            "Execution {ExecutionId}: rebuilt PR fix repository execution for resume at worktree '{WorktreePath}'.",
+            executionId, workspace.WorkingDirectory);
+
+        return new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory);
     }
 
     private static TaskPhase ResolveResumePhase(TaskExecutionRecord execution)

@@ -30,7 +30,7 @@ internal sealed class PrFixCodingHandler(
         var workItem = context.WorkItem;
         var executionArtifactRoot = storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, context.ExecutionId);
 
-        var repoKind = GetRepoKindFromRepository(prTarget.RepositoryName);
+        var repoKind = repositoryOptions.Value.GetRepoKindFromRepository(prTarget.RepositoryName);
         var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
 
         var childTask = workItem.WorkItemType == WorkItemType.Bug
@@ -90,10 +90,6 @@ internal sealed class PrFixCodingHandler(
         return PhaseTransition.To(TaskPhase.Validating);
     }
 
-    private RepoKind GetRepoKindFromRepository(string repositoryName) =>
-        string.Equals(repositoryName, repositoryOptions.Value.Backend.AzureDevOpsRepository, StringComparison.OrdinalIgnoreCase) ? RepoKind.Backend :
-        string.Equals(repositoryName, repositoryOptions.Value.Frontend.AzureDevOpsRepository, StringComparison.OrdinalIgnoreCase) ? RepoKind.Frontend :
-        throw new InvalidOperationException($"Repository '{repositoryName}' does not match any configured repository.");
 
     private static string BuildPrFixPrompt(
         WorkItemDetails workItem,
