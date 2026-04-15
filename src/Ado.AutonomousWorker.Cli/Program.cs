@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Events;
 using Spectre.Console.Cli;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -28,8 +29,26 @@ earlyStorageOptions.NormalizePaths();
 Directory.CreateDirectory(earlyStorageOptions.LogRoot);
 var logFilePath = Path.Combine(earlyStorageOptions.LogRoot, "worker-.log");
 
+var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
+var configuredMsLogLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
+var consoleLevel = configuredMsLogLevel switch
+{
+    LogLevel.Trace => LogEventLevel.Verbose,
+    LogLevel.Debug => LogEventLevel.Debug,
+    LogLevel.Information => LogEventLevel.Information,
+    LogLevel.Warning => LogEventLevel.Warning,
+    LogLevel.Error => LogEventLevel.Error,
+    LogLevel.Critical => LogEventLevel.Fatal,
+    _ => LogEventLevel.Warning
+};
+
 var serilogLogger = new LoggerConfiguration()
     .MinimumLevel.Information()
+    .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.Extensions.Http", LogEventLevel.Warning)
+    .WriteTo.Console(
+        restrictedToMinimumLevel: consoleLevel,
+        outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
     .WriteTo.File(
         logFilePath,
         rollingInterval: RollingInterval.Day,
@@ -37,18 +56,6 @@ var serilogLogger = new LoggerConfiguration()
     .CreateLogger();
 
 builder.Logging.ClearProviders();
-var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
-var consoleMinimumLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
-builder.Logging.SetMinimumLevel(LogLevel.Information);
-builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
-builder.Logging.AddSimpleConsole(options =>
-{
-    options.TimestampFormat = "HH:mm:ss ";
-    options.SingleLine = true;
-});
-builder.Logging.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
-    null, consoleMinimumLevel);
 builder.Logging.AddSerilog(serilogLogger, dispose: true);
 
 builder.Services.AddAutonomousWorker(builder.Configuration);
