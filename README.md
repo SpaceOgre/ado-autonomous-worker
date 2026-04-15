@@ -12,7 +12,7 @@ The worker picks up work items tagged `AI-Work` (or `AI-Rework`) from the Azure 
 |---|---|---|---|---|
 | **AI Work** | Work item tagged `AI-Work` | Queued → Planning → Coding → Reviewing → Validating → Publishing | Tag `AI-Done`, post success comment | Tag `AI-Failed`, post failure comment |
 | **AI Rework** | Work item tagged `AI-Rework` | Same as AI Work | Same as AI Work | Same as AI Work |
-| **PR Fix** | PR has both `AI-Generated` and `AI-Rework` labels | Queued → Coding → Validating → Publishing | Remove `AI-Rework` label from PR, tag `AI-Done` | Leave `AI-Rework` label intact (so developer knows it still needs attention), post failure comment |
+| **PR Fix** | PR has the `AI-Rework` label | Queued → Coding → Validating → Publishing | Remove `AI-Rework` label from PR, tag `AI-Done` | Leave `AI-Rework` label intact (so developer knows it still needs attention), post failure comment |
 
 PR Fix skips Planning and Reviewing — the existing PR branch defines the scope and the reviewer's comments are the quality signal.
 
