@@ -185,6 +185,47 @@ else
             }
         </MudTabPanel>
 
+        <MudTabPanel Text="Logs" Icon="@Icons.Material.Filled.Article">
+            @if (_agentSessions.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No agent sessions recorded.</MudText>
+            }
+            else
+            {
+                @foreach (var session in _agentSessions)
+                {
+                    <MudExpansionPanels Class="mb-2">
+                        <MudExpansionPanel>
+                            <TitleContent>
+                                <MudText Typo="Typo.subtitle2">
+                                    <MudIcon Icon="@RoleIcon(session.Role)" Size="Size.Small" Class="mr-1" />
+                                    @session.Role (@session.Provider)
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true"> — @Path.GetFileName(session.TranscriptPath)</MudText>
+                                </MudText>
+                            </TitleContent>
+                            <ChildContent>
+                                @{
+                                    var hasLog = _logContents.TryGetValue(session.SessionId, out var content);
+                                }
+                                @if (!hasLog)
+                                {
+                                    <MudText Color="Color.Secondary" Typo="Typo.caption">Log file not found: @session.TranscriptPath</MudText>
+                                }
+                                else if (content is { Length: 0 })
+                                {
+                                    <MudText Color="Color.Secondary" Typo="Typo.caption">Log file is empty.</MudText>
+                                }
+                                else
+                                {
+                                    <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 600px; overflow-y: auto;">@content</pre>
+                                }
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+            }
+        </MudTabPanel>
+
         <MudTabPanel Text="Usage" Icon="@Icons.Material.Filled.BarChart">
             @if (_usageRecords.Count == 0)
             {
@@ -233,6 +274,7 @@ else
     private List<AgentUsageRecord> _usageRecords = [];
     private System.Threading.Timer? _refreshTimer;
     private List<BreadcrumbItem> _breadcrumbs = [];
+    private Dictionary<string, string?> _logContents = [];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -278,6 +320,8 @@ else
         _plan = await planTask;
         _review = await reviewTask;
         _usageRecords = (await usageTask).ToList();
+
+        await LoadLogFilesAsync();
 
         _loading = false;
     }
@@ -327,6 +371,23 @@ else
             "LOW" or "INFO" => Color.Info,
             _ => Color.Default,
         };
+
+    private async Task LoadLogFilesAsync()
+    {
+        _logContents.Clear();
+        foreach (var session in _agentSessions)
+        {
+            try
+            {
+                if (File.Exists(session.TranscriptPath))
+                    _logContents[session.SessionId] = await File.ReadAllTextAsync(session.TranscriptPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logContents[session.SessionId] = $"Error reading log file: {ex.Message}";
+            }
+        }
+    }
 
     public void Dispose() => _refreshTimer?.Dispose();
 }
