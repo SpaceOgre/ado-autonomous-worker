@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -147,16 +148,13 @@ internal sealed class WorkItemPublishingHandler(
 
             if (result.Result.Success && !string.IsNullOrWhiteSpace(result.Result.StructuredPayload))
             {
-                using var doc = JsonDocument.Parse(result.Result.StructuredPayload);
-                var root = doc.RootElement;
-                var title = root.TryGetProperty("title", out var t) ? t.GetString() : null;
-                var description = root.TryGetProperty("description", out var d) ? d.GetString() : null;
-                if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(description))
+                var prPayload = JsonSerializer.Deserialize<PrDescriptionPayload>(result.Result.StructuredPayload);
+                if (!string.IsNullOrWhiteSpace(prPayload?.Title) && !string.IsNullOrWhiteSpace(prPayload?.Description))
                 {
                     logger.LogInformation(
                         "Execution {ExecutionId}: PR description generated for {RepoKind}.",
                         context.ExecutionId, repoKind);
-                    return (title, description);
+                    return (prPayload.Title, prPayload.Description);
                 }
             }
         }
@@ -176,6 +174,10 @@ internal sealed class WorkItemPublishingHandler(
             $"#{childTask.WorkItemId}: {workItem.Title}",
             $"Resolved: #{childTask.WorkItemId}"
         );
+
+    private sealed record PrDescriptionPayload(
+        [property: JsonPropertyName("title")] string? Title,
+        [property: JsonPropertyName("description")] string? Description);
 
     private static string BuildPrDescriptionPrompt(
         WorkItemDetails workItem,

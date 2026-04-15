@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -151,14 +152,9 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         {
             try
             {
-                using var document = JsonDocument.Parse(line);
-                if (document.RootElement.TryGetProperty("type", out var typeProperty) &&
-                    typeProperty.GetString() == "session_meta" &&
-                    document.RootElement.TryGetProperty("payload", out var payload) &&
-                    payload.TryGetProperty("id", out var idProperty))
-                {
-                    return idProperty.GetString();
-                }
+                var evt = JsonSerializer.Deserialize<CodexSessionMetaEvent>(line);
+                if (evt?.Type == "session_meta" && evt.Payload?.Id is { } id)
+                    return id;
             }
             catch (JsonException)
             {
@@ -179,22 +175,14 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
 
             try
             {
-                using var doc = JsonDocument.Parse(line);
-                var root = doc.RootElement;
-
-                if (!root.TryGetProperty("type", out var type) || type.GetString() != "turn.completed")
+                var evt = JsonSerializer.Deserialize<CodexTurnEvent>(line);
+                if (evt?.Type != "turn.completed" || evt.Usage is null)
                     continue;
 
-                if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
-                    continue;
-
-                var inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
-                var cachedTokens = usage.TryGetProperty("cached_input_tokens", out var ct) ? ct.GetInt32() : 0;
-                var outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
-
-                return inputTokens == 0 && outputTokens == 0
+                var usage = evt.Usage;
+                return usage.InputTokens == 0 && usage.OutputTokens == 0
                     ? null
-                    : new AgentUsage(null, inputTokens, outputTokens, cachedTokens, null);
+                    : new AgentUsage(null, usage.InputTokens, usage.OutputTokens, usage.CachedInputTokens, null);
             }
             catch (JsonException)
             {
@@ -203,6 +191,22 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
 
         return null;
     }
+
+    private sealed record CodexSessionMetaEvent(
+        [property: JsonPropertyName("type")] string? Type,
+        [property: JsonPropertyName("payload")] CodexSessionMetaPayload? Payload);
+
+    private sealed record CodexSessionMetaPayload(
+        [property: JsonPropertyName("id")] string? Id);
+
+    private sealed record CodexTurnEvent(
+        [property: JsonPropertyName("type")] string? Type,
+        [property: JsonPropertyName("usage")] CodexUsage? Usage);
+
+    private sealed record CodexUsage(
+        [property: JsonPropertyName("input_tokens")] int InputTokens,
+        [property: JsonPropertyName("output_tokens")] int OutputTokens,
+        [property: JsonPropertyName("cached_input_tokens")] int CachedInputTokens);
 
     private static string GetCommandPath(AgentRoleConfig config, string fallback)
     {

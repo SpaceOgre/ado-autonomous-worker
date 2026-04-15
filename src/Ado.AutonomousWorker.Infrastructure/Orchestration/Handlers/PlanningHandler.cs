@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -90,21 +91,30 @@ internal sealed class PlanningHandler(
 
         try
         {
-            using var document = JsonDocument.Parse(payload);
-            var scope = Enum.Parse<WorkItemScope>(
-                document.RootElement.GetProperty("scope").GetString() ?? "Fullstack", ignoreCase: true);
+            var plan = JsonSerializer.Deserialize<PlanPayload>(payload);
+            if (plan is null)
+                return null;
 
+            var scope = Enum.Parse<WorkItemScope>(plan.Scope ?? "Fullstack", ignoreCase: true);
             return new PlanResult(
                 scope,
-                document.RootElement.GetProperty("repositories").EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray(),
-                document.RootElement.GetProperty("validationTargets").EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray(),
-                document.RootElement.GetProperty("testIntent").EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray(),
-                document.RootElement.GetProperty("risks").EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray(),
-                document.RootElement.GetProperty("summary").GetString() ?? "Planning completed.");
+                plan.Repositories?.ToArray() ?? [],
+                plan.ValidationTargets?.ToArray() ?? [],
+                plan.TestIntent?.ToArray() ?? [],
+                plan.Risks?.ToArray() ?? [],
+                plan.Summary ?? "Planning completed.");
         }
         catch (Exception)
         {
             return null;
         }
     }
+
+    private sealed record PlanPayload(
+        [property: JsonPropertyName("scope")] string? Scope,
+        [property: JsonPropertyName("repositories")] IReadOnlyList<string>? Repositories,
+        [property: JsonPropertyName("validationTargets")] IReadOnlyList<string>? ValidationTargets,
+        [property: JsonPropertyName("testIntent")] IReadOnlyList<string>? TestIntent,
+        [property: JsonPropertyName("risks")] IReadOnlyList<string>? Risks,
+        [property: JsonPropertyName("summary")] string? Summary);
 }

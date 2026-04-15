@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -77,9 +78,8 @@ internal sealed class PrFixCodingHandler(
         {
             try
             {
-                using var doc = JsonDocument.Parse(codeStart.Result.StructuredPayload);
-                if (doc.RootElement.TryGetProperty("commitMessage", out var cm))
-                    context.CommitMessage = cm.GetString();
+                var commitPayload = JsonSerializer.Deserialize<PrFixCommitPayload>(codeStart.Result.StructuredPayload);
+                context.CommitMessage = commitPayload?.CommitMessage;
             }
             catch (JsonException ex)
             {
@@ -126,6 +126,9 @@ internal sealed class PrFixCodingHandler(
         - When done, output JSON: { "commitMessage": "<concise one-line summary of the fixes>" }
         """;
     }
+
+    private sealed record PrFixCommitPayload(
+        [property: JsonPropertyName("commitMessage")] string? CommitMessage);
 
     private static string FormatPrThreads(IReadOnlyList<PrReviewThread> threads)
     {

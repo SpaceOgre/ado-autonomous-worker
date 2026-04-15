@@ -32,19 +32,10 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        foreach (var item in document.RootElement.GetProperty("value").EnumerateArray())
-        {
-            if (item.TryGetProperty("attributes", out var attributes) &&
-                attributes.TryGetProperty("timeFrame", out var timeFrame) &&
-                string.Equals(timeFrame.GetString(), "current", StringComparison.OrdinalIgnoreCase) &&
-                item.TryGetProperty("path", out var path))
-            {
-                return path.GetString();
-            }
-        }
-
-        return null;
+        var result = await response.Content.ReadFromJsonAsync<AdoIterationsResponse>(cancellationToken);
+        return result?.Value
+            .FirstOrDefault(i => string.Equals(i.Attributes?.TimeFrame, "current", StringComparison.OrdinalIgnoreCase))
+            ?.Path;
     }
 
     public Task<IReadOnlyList<WorkItemSummary>> QueryAiWorkAsync(CancellationToken cancellationToken)
@@ -89,63 +80,42 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var root = document.RootElement;
-        var fields = root.GetProperty("fields");
-        var tags = ParseTags(fields.TryGetProperty("System.Tags", out var tagElement) ? tagElement.GetString() : null);
+        var workItem = await response.Content.ReadFromJsonAsync<AdoWorkItemResponse>(cancellationToken)
+            ?? throw new InvalidOperationException($"Azure DevOps returned null for work item {workItemId}.");
+
+        var fields = workItem.Fields;
+        var tags = ParseTags(fields.Tags);
         var childIds = new List<int>();
         var parentIds = new List<int>();
 
-        if (root.TryGetProperty("relations", out var relationsElement))
+        foreach (var relation in workItem.Relations ?? [])
         {
-            foreach (var relation in relationsElement.EnumerateArray())
-            {
-                if (!relation.TryGetProperty("rel", out var relElement))
-                {
-                    continue;
-                }
+            if (relation.Rel is null || relation.Url is null)
+                continue;
+            var relatedId = TryParseWorkItemId(relation.Url);
+            if (relatedId is null)
+                continue;
 
-                if (!relation.TryGetProperty("url", out var urlElement))
-                {
-                    continue;
-                }
-
-                var relatedId = TryParseWorkItemId(urlElement.GetString());
-                if (relatedId is null)
-                {
-                    continue;
-                }
-
-                var relationType = relElement.GetString();
-                if (string.Equals(relationType, "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
-                {
-                    childIds.Add(relatedId.Value);
-                }
-                else if (string.Equals(relationType, "System.LinkTypes.Hierarchy-Reverse", StringComparison.OrdinalIgnoreCase))
-                {
-                    parentIds.Add(relatedId.Value);
-                }
-            }
+            if (string.Equals(relation.Rel, "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
+                childIds.Add(relatedId.Value);
+            else if (string.Equals(relation.Rel, "System.LinkTypes.Hierarchy-Reverse", StringComparison.OrdinalIgnoreCase))
+                parentIds.Add(relatedId.Value);
         }
 
-        var children = childIds.Count == 0
-            ? []
-            : await GetChildTasksAsync(childIds, cancellationToken);
-        var parentFeatureTitle = parentIds.Count == 0
-            ? null
-            : await TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
+        var children = childIds.Count == 0 ? [] : await GetChildTasksAsync(childIds, cancellationToken);
+        var parentFeatureTitle = parentIds.Count == 0 ? null : await TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
         var comments = await GetWorkItemCommentsAsync(workItemId, cancellationToken);
 
         return new WorkItemDetails
         {
-            WorkItemId = root.TryGetProperty("id", out var idElement) ? idElement.GetInt32() : workItemId,
-            WorkItemType = ParseWorkItemType(fields.TryGetProperty("System.WorkItemType", out var typeElement) ? typeElement.GetString() : null),
-            Title = fields.TryGetProperty("System.Title", out var titleElement) ? titleElement.GetString() ?? string.Empty : string.Empty,
-            State = fields.TryGetProperty("System.State", out var stateElement) ? stateElement.GetString() ?? string.Empty : string.Empty,
-            AssignedTo = TryReadIdentityString(fields, "System.AssignedTo"),
-            IterationPath = fields.TryGetProperty("System.IterationPath", out var iterationElement) ? iterationElement.GetString() ?? string.Empty : string.Empty,
-            Description = fields.TryGetProperty("System.Description", out var descriptionElement) ? descriptionElement.GetString() ?? string.Empty : string.Empty,
-            AcceptanceCriteria = fields.TryGetProperty("Microsoft.VSTS.Common.AcceptanceCriteria", out var acceptanceElement) ? acceptanceElement.GetString() ?? string.Empty : string.Empty,
+            WorkItemId = workItem.Id,
+            WorkItemType = ParseWorkItemType(fields.WorkItemType),
+            Title = fields.Title ?? string.Empty,
+            State = fields.State ?? string.Empty,
+            AssignedTo = ReadIdentityString(fields.AssignedTo),
+            IterationPath = fields.IterationPath ?? string.Empty,
+            Description = fields.Description ?? string.Empty,
+            AcceptanceCriteria = fields.AcceptanceCriteria ?? string.Empty,
             ParentFeatureTitle = parentFeatureTitle,
             Comments = comments,
             Tags = tags,
@@ -183,8 +153,9 @@ public sealed class AzureDevOpsClient(
         var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var childTaskId = document.RootElement.GetProperty("id").GetInt32();
+        var created = await response.Content.ReadFromJsonAsync<AdoCreatedItemResponse>(cancellationToken)
+            ?? throw new InvalidOperationException("Azure DevOps did not return a work item ID for the new child task.");
+        var childTaskId = created.Id;
 
         await UpdateWorkItemStateAsync(childTaskId, "Active", cancellationToken);
         await PatchFieldsAsync(childTaskId, [PatchRelation(parentWorkItemId)], cancellationToken);
@@ -207,12 +178,12 @@ public sealed class AzureDevOpsClient(
 
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var root = document.RootElement;
-        var prId = root.GetProperty("pullRequestId").GetInt32();
-        var url = new Uri(root.GetProperty("url").GetString() ?? throw new InvalidOperationException("Azure DevOps did not return a pull request URL."));
-        var projectId = root.GetProperty("repository").GetProperty("project").GetProperty("id").GetString();
-        var repoId = root.GetProperty("repository").GetProperty("id").GetString();
+        var pr = await response.Content.ReadFromJsonAsync<AdoPullRequest>(cancellationToken)
+            ?? throw new InvalidOperationException("Azure DevOps did not return a pull request.");
+        var prId = pr.PullRequestId;
+        var url = new Uri(pr.Url ?? throw new InvalidOperationException("Azure DevOps did not return a pull request URL."));
+        var projectId = pr.Repository?.Project?.Id;
+        var repoId = pr.Repository?.Id;
         var artifactUri = projectId is null || repoId is null
             ? null
             : $"vstfs:///Git/PullRequestId/{projectId}%2f{repoId}%2f{prId}";
@@ -262,14 +233,8 @@ public sealed class AzureDevOpsClient(
         var response = await _httpClient.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("value", out var prArray))
-        {
-            _logger.LogDebug("QueryAiPrFixAsync: response has no 'value' array");
-            return [];
-        }
-
-        var prList = prArray.EnumerateArray().ToList();
+        var result = await response.Content.ReadFromJsonAsync<AdoPullRequestListResponse>(cancellationToken);
+        var prList = result?.Value ?? [];
         _logger.LogDebug("QueryAiPrFixAsync: {Count} active PRs returned", prList.Count);
 
         var results = new List<QueueItem>();
@@ -290,11 +255,8 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("value", out var prArray))
-            return null;
-
-        foreach (var pr in prArray.EnumerateArray())
+        var result = await response.Content.ReadFromJsonAsync<AdoPullRequestListResponse>(cancellationToken);
+        foreach (var pr in result?.Value ?? [])
         {
             var items = await ParsePrFixItemsAsync(pr, cancellationToken);
             if (items.Count > 0)
@@ -304,27 +266,21 @@ public sealed class AzureDevOpsClient(
         return null;
     }
 
-    private async Task<IReadOnlyList<QueueItem>> ParsePrFixItemsAsync(JsonElement pr, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<QueueItem>> ParsePrFixItemsAsync(AdoPullRequest pr, CancellationToken cancellationToken)
     {
-        var prId = pr.TryGetProperty("pullRequestId", out var prIdEl) ? prIdEl.GetInt32() : 0;
-
-        // Only process PRs that have both the "AI-Generated" and "AI-Rework" labels
+        var prId = pr.PullRequestId;
         var hasAiGenerated = false;
         var hasAiRework = false;
         var labelNames = new List<string>();
-        if (pr.TryGetProperty("labels", out var labelsElement))
+
+        foreach (var label in pr.Labels ?? [])
         {
-            foreach (var label in labelsElement.EnumerateArray())
-            {
-                if (!label.TryGetProperty("name", out var labelName))
-                    continue;
-                var name = labelName.GetString() ?? string.Empty;
-                labelNames.Add(name);
-                if (string.Equals(name, "AI-Generated", StringComparison.OrdinalIgnoreCase))
-                    hasAiGenerated = true;
-                else if (string.Equals(name, "AI-Rework", StringComparison.OrdinalIgnoreCase))
-                    hasAiRework = true;
-            }
+            var name = label.Name ?? string.Empty;
+            labelNames.Add(name);
+            if (string.Equals(name, "AI-Generated", StringComparison.OrdinalIgnoreCase))
+                hasAiGenerated = true;
+            else if (string.Equals(name, "AI-Rework", StringComparison.OrdinalIgnoreCase))
+                hasAiRework = true;
         }
 
         _logger.LogDebug("PR #{PrId}: labels=[{Labels}] hasAiGenerated={HasAiGenerated} hasAiRework={HasAiRework}",
@@ -336,8 +292,8 @@ public sealed class AzureDevOpsClient(
             return [];
         }
 
-        var repositoryName = pr.GetProperty("repository").GetProperty("name").GetString() ?? string.Empty;
-        var sourceBranch = pr.GetProperty("sourceRefName").GetString() ?? string.Empty;
+        var repositoryName = pr.Repository?.Name ?? string.Empty;
+        var sourceBranch = pr.SourceRefName ?? string.Empty;
         var branchName = sourceBranch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
             ? sourceBranch["refs/heads/".Length..]
             : sourceBranch;
@@ -351,7 +307,6 @@ public sealed class AzureDevOpsClient(
             _logger.LogDebug("PR #{PrId}: skipped (no linked work items)", prId);
             return [];
         }
-
 
         var summaries = await GetWorkItemSummariesAsync(workItemIds, cancellationToken);
         return summaries
@@ -370,56 +325,27 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("value", out var threadsArray))
-            return [];
-
+        var result = await response.Content.ReadFromJsonAsync<AdoPrThreadListResponse>(cancellationToken);
         var threads = new List<PrReviewThread>();
-        foreach (var thread in threadsArray.EnumerateArray())
+
+        foreach (var thread in result?.Value ?? [])
         {
-            var threadId = thread.TryGetProperty("id", out var threadIdEl) ? threadIdEl.GetInt32() : 0;
-            var status = thread.TryGetProperty("status", out var statusEl) ? statusEl.GetString() ?? "unknown" : "unknown";
-
-            string? filePath = null;
-            int? lineNumber = null;
-            if (thread.TryGetProperty("threadContext", out var threadContext) && threadContext.ValueKind != JsonValueKind.Null)
-            {
-                filePath = threadContext.TryGetProperty("filePath", out var filePathEl) ? filePathEl.GetString() : null;
-                if (threadContext.TryGetProperty("rightFileEnd", out var rightFileEnd) &&
-                    rightFileEnd.ValueKind != JsonValueKind.Null &&
-                    rightFileEnd.TryGetProperty("line", out var lineEl))
-                {
-                    lineNumber = lineEl.GetInt32();
-                }
-            }
-
-            if (!thread.TryGetProperty("comments", out var commentsArray))
-                continue;
-
             var comments = new List<PrReviewComment>();
-            foreach (var comment in commentsArray.EnumerateArray())
+            foreach (var comment in thread.Comments ?? [])
             {
-                // Skip system-generated comments
-                if (comment.TryGetProperty("commentType", out var commentTypeEl) &&
-                    string.Equals(commentTypeEl.GetString(), "system", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(comment.CommentType, "system", StringComparison.OrdinalIgnoreCase))
                     continue;
-
-                var commentId = comment.TryGetProperty("id", out var commentIdEl) ? commentIdEl.GetInt32() : 0;
-                var content = comment.TryGetProperty("content", out var contentEl) ? contentEl.GetString() ?? string.Empty : string.Empty;
-                var author = string.Empty;
-                if (comment.TryGetProperty("author", out var authorEl))
-                {
-                    author = authorEl.TryGetProperty("displayName", out var displayNameEl)
-                        ? displayNameEl.GetString() ?? string.Empty
-                        : string.Empty;
-                }
-
-                if (!string.IsNullOrWhiteSpace(content))
-                    comments.Add(new PrReviewComment(commentId, author, content));
+                if (!string.IsNullOrWhiteSpace(comment.Content))
+                    comments.Add(new PrReviewComment(comment.Id, comment.Author?.DisplayName ?? string.Empty, comment.Content));
             }
 
             if (comments.Count > 0)
-                threads.Add(new PrReviewThread(threadId, filePath, lineNumber, status, comments));
+                threads.Add(new PrReviewThread(
+                    thread.Id,
+                    thread.ThreadContext?.FilePath,
+                    thread.ThreadContext?.RightFileEnd?.Line,
+                    thread.Status ?? "unknown",
+                    comments));
         }
 
         return threads;
@@ -432,21 +358,17 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("value", out var valueArray))
+        var result = await response.Content.ReadFromJsonAsync<AdoPullRequestListResponse>(cancellationToken);
+        var pr = result?.Value?.FirstOrDefault();
+        if (pr is null)
             return null;
 
-        foreach (var pr in valueArray.EnumerateArray())
-        {
-            var repoName = pr.GetProperty("repository").GetProperty("name").GetString() ?? string.Empty;
-            var sourceRef = pr.GetProperty("sourceRefName").GetString() ?? string.Empty;
-            var branch = sourceRef.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
-                ? sourceRef["refs/heads/".Length..]
-                : sourceRef;
-            return (repoName, branch);
-        }
-
-        return null;
+        var repoName = pr.Repository?.Name ?? string.Empty;
+        var sourceRef = pr.SourceRefName ?? string.Empty;
+        var branch = sourceRef.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? sourceRef["refs/heads/".Length..]
+            : sourceRef;
+        return (repoName, branch);
     }
 
     public async Task RemovePullRequestLabelAsync(string repositoryName, int pullRequestId, string labelName, CancellationToken cancellationToken)
@@ -465,16 +387,18 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("value", out var valueArray))
+        var result = await response.Content.ReadFromJsonAsync<AdoPrWorkItemsResponse>(cancellationToken);
+        if (result?.Value is null)
             return [];
 
-        return valueArray.EnumerateArray()
+        return result.Value
             .Select(item =>
             {
-                if (!item.TryGetProperty("id", out var idEl)) return (int?)null;
-                if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt32(out var n)) return n;
-                if (idEl.ValueKind == JsonValueKind.String && int.TryParse(idEl.GetString(), out var s)) return s;
+                var idEl = item.Id;
+                if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt32(out var n))
+                    return (int?)n;
+                if (idEl.ValueKind == JsonValueKind.String && int.TryParse(idEl.GetString(), out var s))
+                    return s;
                 return null;
             })
             .Where(id => id.HasValue)
@@ -499,11 +423,8 @@ public sealed class AzureDevOpsClient(
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var ids = document.RootElement.GetProperty("workItems")
-            .EnumerateArray()
-            .Select(item => item.GetProperty("id").GetInt32())
-            .ToArray();
+        var wiql = await response.Content.ReadFromJsonAsync<AdoWiqlResponse>(cancellationToken);
+        var ids = wiql?.WorkItems?.Select(w => w.Id).ToArray() ?? [];
 
         return ids.Length == 0
             ? []
@@ -533,23 +454,18 @@ public sealed class AzureDevOpsClient(
 
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var items = new List<WorkItemSummary>();
-        foreach (var item in document.RootElement.GetProperty("value").EnumerateArray())
-        {
-            var fields = item.GetProperty("fields");
-            items.Add(new WorkItemSummary(
-                fields.GetProperty("System.Id").GetInt32(),
-                ParseWorkItemType(fields.TryGetProperty("System.WorkItemType", out var typeElement) ? typeElement.GetString() : null),
-                fields.GetProperty("System.Title").GetString() ?? string.Empty,
-                fields.GetProperty("System.State").GetString() ?? string.Empty,
-                TryReadIdentityString(fields, "System.AssignedTo"),
-                fields.TryGetProperty("Microsoft.VSTS.Common.StackRank", out var rankElement) ? ParseStackRank(rankElement) : double.MaxValue,
-                fields.TryGetProperty("Microsoft.VSTS.Common.Priority", out var priorityElement) ? ParsePriority(priorityElement) : null,
-                ParseTags(fields.TryGetProperty("System.Tags", out var tagsElement) ? tagsElement.GetString() : null)));
-        }
-
-        return items;
+        var batch = await response.Content.ReadFromJsonAsync<AdoWorkItemBatchResponse>(cancellationToken);
+        return (batch?.Value ?? [])
+            .Select(item => new WorkItemSummary(
+                item.Fields.Id,
+                ParseWorkItemType(item.Fields.WorkItemType),
+                item.Fields.Title ?? string.Empty,
+                item.Fields.State ?? string.Empty,
+                ReadIdentityString(item.Fields.AssignedTo),
+                ParseStackRank(item.Fields.StackRank),
+                ParsePriority(item.Fields.Priority),
+                ParseTags(item.Fields.Tags)))
+            .ToList();
     }
 
     private async Task<IReadOnlyList<ChildTaskRecord>> GetChildTasksAsync(IReadOnlyList<int> ids, CancellationToken cancellationToken)
@@ -565,25 +481,18 @@ public sealed class AzureDevOpsClient(
 
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var children = new List<ChildTaskRecord>();
-        foreach (var item in document.RootElement.GetProperty("value").EnumerateArray())
-        {
-            var fields = item.GetProperty("fields");
-            var title = fields.GetProperty("System.Title").GetString() ?? string.Empty;
-            var tags = ParseTags(fields.TryGetProperty("System.Tags", out var tagsElement) ? tagsElement.GetString() : null);
-            var repoKind = tags.Contains("Frontend", StringComparer.OrdinalIgnoreCase) || title.Contains("frontend", StringComparison.OrdinalIgnoreCase)
-                ? RepoKind.Frontend
-                : RepoKind.Backend;
-
-            children.Add(new ChildTaskRecord(
-                fields.GetProperty("System.Id").GetInt32(),
-                repoKind,
-                title,
-                fields.GetProperty("System.State").GetString() ?? string.Empty));
-        }
-
-        return children;
+        var batch = await response.Content.ReadFromJsonAsync<AdoWorkItemBatchResponse>(cancellationToken);
+        return (batch?.Value ?? [])
+            .Select(item =>
+            {
+                var title = item.Fields.Title ?? string.Empty;
+                var tags = ParseTags(item.Fields.Tags);
+                var repoKind = tags.Contains("Frontend", StringComparer.OrdinalIgnoreCase) || title.Contains("frontend", StringComparison.OrdinalIgnoreCase)
+                    ? RepoKind.Frontend
+                    : RepoKind.Backend;
+                return new ChildTaskRecord(item.Fields.Id, repoKind, title, item.Fields.State ?? string.Empty);
+            })
+            .ToList();
     }
 
     private async Task<string?> TryGetParentFeatureTitleAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken)
@@ -599,24 +508,10 @@ public sealed class AzureDevOpsClient(
 
         response.EnsureSuccessStatusCode();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        foreach (var item in document.RootElement.GetProperty("value").EnumerateArray())
-        {
-            var fields = item.GetProperty("fields");
-            if (!string.Equals(
-                    fields.TryGetProperty("System.WorkItemType", out var typeElement) ? typeElement.GetString() : null,
-                    "Feature",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            return fields.TryGetProperty("System.Title", out var titleElement)
-                ? titleElement.GetString()
-                : null;
-        }
-
-        return null;
+        var batch = await response.Content.ReadFromJsonAsync<AdoWorkItemBatchResponse>(cancellationToken);
+        return (batch?.Value ?? [])
+            .FirstOrDefault(item => string.Equals(item.Fields.WorkItemType, "Feature", StringComparison.OrdinalIgnoreCase))
+            ?.Fields.Title;
     }
 
     private async Task<IReadOnlyList<string>> GetWorkItemCommentsAsync(int workItemId, CancellationToken cancellationToken)
@@ -628,34 +523,19 @@ public sealed class AzureDevOpsClient(
         {
             var route = $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?$top=200&api-version=7.1-preview.3";
             if (!string.IsNullOrWhiteSpace(continuationToken))
-            {
                 route = $"{route}&continuationToken={Uri.EscapeDataString(continuationToken)}";
-            }
 
             var response = await _httpClient.GetAsync(route, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-            if (document.RootElement.TryGetProperty("comments", out var commentsElement))
+            var page = await response.Content.ReadFromJsonAsync<AdoWorkItemCommentsResponse>(cancellationToken);
+            foreach (var comment in page?.Comments ?? [])
             {
-                foreach (var commentElement in commentsElement.EnumerateArray())
-                {
-                    if (!commentElement.TryGetProperty("text", out var textElement))
-                    {
-                        continue;
-                    }
-
-                    var text = textElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        comments.Add(text.Trim());
-                    }
-                }
+                if (!string.IsNullOrWhiteSpace(comment.Text))
+                    comments.Add(comment.Text.Trim());
             }
 
-            continuationToken = document.RootElement.TryGetProperty("continuationToken", out var continuationElement)
-                ? continuationElement.GetString()
-                : null;
+            continuationToken = page?.ContinuationToken;
         }
         while (!string.IsNullOrWhiteSpace(continuationToken));
 
@@ -704,13 +584,8 @@ public sealed class AzureDevOpsClient(
         },
     };
 
-    private static string? TryReadIdentityString(JsonElement fields, string propertyName)
+    private static string? ReadIdentityString(JsonElement element)
     {
-        if (!fields.TryGetProperty(propertyName, out var element))
-        {
-            return null;
-        }
-
         return element.ValueKind switch
         {
             JsonValueKind.String => element.GetString(),

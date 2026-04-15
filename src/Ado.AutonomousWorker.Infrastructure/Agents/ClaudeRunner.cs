@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
@@ -147,28 +148,21 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
 
         try
         {
-            using var document = JsonDocument.Parse(raw.Trim());
-            var root = document.RootElement;
+            var envelope = JsonSerializer.Deserialize<ClaudeResultEnvelope>(raw.Trim());
+            if (envelope is null)
+                return (raw.Trim(), null, null);
 
-            var summary = root.TryGetProperty("result", out var r) ? r.GetString()?.Trim() ?? raw.Trim() : raw.Trim();
+            var summary = envelope.Result?.Trim() ?? raw.Trim();
 
             string? structuredPayload = null;
-            if (hasSchema && root.TryGetProperty("structured_output", out var so))
-                structuredPayload = so.GetRawText();
+            if (hasSchema && envelope.StructuredOutput.ValueKind != JsonValueKind.Undefined)
+                structuredPayload = envelope.StructuredOutput.GetRawText();
 
-            var model = root.TryGetProperty("model", out var m) ? m.GetString() : null;
-            int inputTokens = 0, outputTokens = 0, cachedTokens = 0;
-            if (root.TryGetProperty("usage", out var usage))
-            {
-                inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
-                outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
-                cachedTokens = usage.TryGetProperty("cache_read_input_tokens", out var ct) ? ct.GetInt32() : 0;
-            }
-
-            var costUsd = root.TryGetProperty("total_cost_usd", out var c) ? (decimal?)c.GetDecimal() : null;
-
-            var agentUsage = (inputTokens > 0 || outputTokens > 0 || model is not null)
-                ? new AgentUsage(model, inputTokens, outputTokens, cachedTokens, costUsd)
+            var inputTokens = envelope.Usage?.InputTokens ?? 0;
+            var outputTokens = envelope.Usage?.OutputTokens ?? 0;
+            var cachedTokens = envelope.Usage?.CacheReadInputTokens ?? 0;
+            var agentUsage = (inputTokens > 0 || outputTokens > 0 || envelope.Model is not null)
+                ? new AgentUsage(envelope.Model, inputTokens, outputTokens, cachedTokens, envelope.TotalCostUsd)
                 : null;
 
             return (summary, structuredPayload, agentUsage);
@@ -178,6 +172,18 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             return (raw.Trim(), null, null);
         }
     }
+
+    private sealed record ClaudeResultEnvelope(
+        [property: JsonPropertyName("result")] string? Result,
+        [property: JsonPropertyName("model")] string? Model,
+        [property: JsonPropertyName("usage")] ClaudeUsage? Usage,
+        [property: JsonPropertyName("total_cost_usd")] decimal? TotalCostUsd,
+        [property: JsonPropertyName("structured_output")] JsonElement StructuredOutput);
+
+    private sealed record ClaudeUsage(
+        [property: JsonPropertyName("input_tokens")] int InputTokens,
+        [property: JsonPropertyName("output_tokens")] int OutputTokens,
+        [property: JsonPropertyName("cache_read_input_tokens")] int CacheReadInputTokens);
 
     private static string GetCommandPath(AgentRoleConfig config)
     {

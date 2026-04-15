@@ -47,8 +47,7 @@ public static class AgentOutputNormalizer
 
         try
         {
-            using var document = JsonDocument.Parse(content);
-            var root = document.RootElement;
+            var root = JsonSerializer.Deserialize<JsonElement>(content);
             var type = TryGetString(root, "type");
             if (ShouldIgnoreCodexType(type))
             {
@@ -144,8 +143,7 @@ public static class AgentOutputNormalizer
     {
         try
         {
-            using var document = JsonDocument.Parse(content);
-            var root = document.RootElement;
+            var root = JsonSerializer.Deserialize<JsonElement>(content);
             var messages = new List<string>();
 
             AddIfPresent(messages, TryGetString(root, "message"));

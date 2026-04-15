@@ -68,20 +68,20 @@ internal sealed class TaskOrchestrator(
 
         PhaseContext context = prTarget is not null
             ? new PhaseContext.PrFixContext
-              {
-                  ExecutionId = executionId,
-                  WorkItem = workItem,
-                  IsExplicitResume = false,
-                  Journal = executionJournal,
-                  PrTarget = prTarget,
-              }
+            {
+                ExecutionId = executionId,
+                WorkItem = workItem,
+                IsExplicitResume = false,
+                Journal = executionJournal,
+                PrTarget = prTarget,
+            }
             : new PhaseContext.WorkItemContext
-              {
-                  ExecutionId = executionId,
-                  WorkItem = workItem,
-                  IsExplicitResume = false,
-                  Journal = executionJournal,
-              };
+            {
+                ExecutionId = executionId,
+                WorkItem = workItem,
+                IsExplicitResume = false,
+                Journal = executionJournal,
+            };
 
         await RunWithMachineAsync(context, TaskPhase.Queued, cancellationToken);
         return executionId;
