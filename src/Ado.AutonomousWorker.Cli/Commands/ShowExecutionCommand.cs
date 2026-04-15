@@ -170,7 +170,13 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         }
 
         var relatedExecutions = await stateStore.ListExecutionsByWorkItemAsync(execution.WorkItemId, cancellationToken);
-        var siblings = relatedExecutions.Where(e => e.ExecutionId != execution.ExecutionId).ToList();
+        var prRelated = await stateStore.ListRelatedExecutionsByPrAsync(execution.ExecutionId, cancellationToken);
+        var siblings = relatedExecutions
+            .Concat(prRelated)
+            .Where(e => e.ExecutionId != execution.ExecutionId)
+            .DistinctBy(e => e.ExecutionId)
+            .OrderByDescending(e => e.UpdatedAt)
+            .ToList();
         if (siblings.Count > 0)
         {
             AnsiConsole.WriteLine();
@@ -187,7 +193,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     sibling.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
             }
 
-            AnsiConsole.Write(CliStyle.SectionRule($"Related Executions for #{execution.WorkItemId}", "grey"));
+            AnsiConsole.Write(CliStyle.SectionRule("Related Executions", "grey"));
             AnsiConsole.Write(relatedTable);
         }
 

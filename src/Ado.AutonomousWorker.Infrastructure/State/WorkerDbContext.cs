@@ -13,6 +13,7 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
     public DbSet<ExecutionPlanEntity> ExecutionPlans => Set<ExecutionPlanEntity>();
     public DbSet<AgentOutputChunkEntity> AgentOutputChunks => Set<AgentOutputChunkEntity>();
     public DbSet<AgentUsageEntity> AgentUsages => Set<AgentUsageEntity>();
+    public DbSet<ExecutionPrLinkEntity> ExecutionPrLinks => Set<ExecutionPrLinkEntity>();
 
     // SQLite does not support DateTimeOffset natively in ORDER BY; store as ISO 8601 text instead.
     // ISO 8601 strings sort lexicographically in the same order as DateTimeOffset chronologically.
@@ -101,6 +102,14 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
             entity.Property(e => e.Sequence).HasColumnName("sequence");
             entity.Property(e => e.Timestamp).HasColumnName("timestamp").HasConversion(DateTimeOffsetConverter);
             entity.Property(e => e.Content).HasColumnName("content");
+        });
+
+        modelBuilder.Entity<ExecutionPrLinkEntity>(entity =>
+        {
+            entity.ToTable("execution_pr_links");
+            entity.HasKey(e => new { e.ExecutionId, e.PullRequestId });
+            entity.Property(e => e.ExecutionId).HasColumnName("execution_id");
+            entity.Property(e => e.PullRequestId).HasColumnName("pull_request_id");
         });
 
         modelBuilder.Entity<AgentUsageEntity>(entity =>

@@ -67,6 +67,7 @@ internal sealed class WorkItemPublishingHandler(
             }
 
             await azureDevOpsClient.LinkPullRequestAsync(childTask.WorkItemId, pullRequest, cancellationToken);
+            await stateStore.LinkPullRequestToExecutionAsync(context.ExecutionId, pullRequest.PullRequestId, cancellationToken);
             context.PublishedRepositories.Add(new RepositoryPublishResult(
                 repoKind, childTask, workspace.BranchName, commitSha,
                 repoProfile.ValidationCommands.ToArray(), pullRequest));

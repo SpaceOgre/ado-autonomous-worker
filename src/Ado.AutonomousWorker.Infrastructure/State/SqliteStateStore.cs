@@ -14,39 +14,6 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         await context.Database.EnsureCreatedAsync(cancellationToken);
-
-        // Ensure the agent_usage table exists for databases created before this table was added.
-        // EnsureCreatedAsync only creates tables when the database is first created, not on schema changes.
-        await context.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS agent_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                execution_id TEXT NOT NULL,
-                phase INTEGER NOT NULL,
-                role INTEGER NOT NULL,
-                provider INTEGER NOT NULL,
-                actual_model TEXT,
-                input_tokens INTEGER NOT NULL DEFAULT 0,
-                output_tokens INTEGER NOT NULL DEFAULT 0,
-                cached_input_tokens INTEGER NOT NULL DEFAULT 0,
-                cost_usd TEXT,
-                timestamp TEXT NOT NULL
-            )
-            """,
-            cancellationToken);
-
-        // Add pull_request_id column introduced for AiPrFix executions.
-        // Check first to avoid an EF Core fail-level log from a duplicate-column exception.
-        var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync(cancellationToken);
-        await using var checkCmd = connection.CreateCommand();
-        checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('executions') WHERE name='pull_request_id'";
-        var columnCount = (long)(await checkCmd.ExecuteScalarAsync(cancellationToken))!;
-        if (columnCount == 0)
-            await context.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE executions ADD COLUMN pull_request_id INTEGER",
-                cancellationToken);
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
@@ -349,6 +316,45 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
                 u.CachedInputTokens,
                 u.CostUsd == null ? (decimal?)null : decimal.Parse(u.CostUsd, CultureInfo.InvariantCulture),
                 u.Timestamp))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task LinkPullRequestToExecutionAsync(string executionId, int pullRequestId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var exists = await context.ExecutionPrLinks
+            .AnyAsync(l => l.ExecutionId == executionId && l.PullRequestId == pullRequestId, cancellationToken);
+        if (!exists)
+        {
+            context.ExecutionPrLinks.Add(new ExecutionPrLinkEntity
+            {
+                ExecutionId = executionId,
+                PullRequestId = pullRequestId,
+            });
+            await context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(
+        string executionId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Find all executions that share at least one PR with the given execution.
+        var prIds = await context.ExecutionPrLinks
+            .Where(l => l.ExecutionId == executionId)
+            .Select(l => l.PullRequestId)
+            .ToListAsync(cancellationToken);
+
+        if (prIds.Count == 0)
+            return [];
+
+        return await context.Executions
+            .AsNoTracking()
+            .Where(e => e.ExecutionId != executionId &&
+                        context.ExecutionPrLinks.Any(l => l.ExecutionId == e.ExecutionId && prIds.Contains(l.PullRequestId)))
+            .OrderByDescending(e => e.UpdatedAt)
+            .Select(e => ToDomain(e))
             .ToListAsync(cancellationToken);
     }
 

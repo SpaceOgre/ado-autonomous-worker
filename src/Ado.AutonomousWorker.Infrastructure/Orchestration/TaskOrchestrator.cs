@@ -57,6 +57,8 @@ internal sealed class TaskOrchestrator(
             PullRequestId: prTarget?.PullRequestId);
 
         await stateStore.SaveExecutionAsync(record, cancellationToken);
+        if (prTarget is not null)
+            await stateStore.LinkPullRequestToExecutionAsync(executionId, prTarget.PullRequestId, cancellationToken);
         await executionJournal.AppendEventAsync(
             executionId,
             TaskPhase.Queued,

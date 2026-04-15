@@ -120,5 +120,10 @@ public sealed class CliCompletionServiceTests
         public Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(int workItemId, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>(
                 _executions.Where(e => e.WorkItemId == workItemId).ToList());
+
+        public Task LinkPullRequestToExecutionAsync(string executionId, int pullRequestId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(string executionId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>([]);
     }
 }
