@@ -29,18 +29,10 @@ earlyStorageOptions.NormalizePaths();
 Directory.CreateDirectory(earlyStorageOptions.LogRoot);
 var logFilePath = Path.Combine(earlyStorageOptions.LogRoot, "worker-.log");
 
-var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
-var configuredMsLogLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
-var consoleLevel = configuredMsLogLevel switch
-{
-    LogLevel.Trace => LogEventLevel.Verbose,
-    LogLevel.Debug => LogEventLevel.Debug,
-    LogLevel.Information => LogEventLevel.Information,
-    LogLevel.Warning => LogEventLevel.Warning,
-    LogLevel.Error => LogEventLevel.Error,
-    LogLevel.Critical => LogEventLevel.Fatal,
-    _ => LogEventLevel.Warning
-};
+var configuredLevel = builder.Configuration["Serilog:ConsoleLevel"];
+var consoleLevel = Enum.TryParse<LogEventLevel>(configuredLevel, ignoreCase: true, out var parsed)
+    ? parsed
+    : LogEventLevel.Warning;
 
 var serilogLogger = new LoggerConfiguration()
     .MinimumLevel.Information()
