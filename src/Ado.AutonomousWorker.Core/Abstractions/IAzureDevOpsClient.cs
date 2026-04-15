@@ -28,7 +28,7 @@ public interface IAzureDevOpsClient
 
     Task AddCommentAsync(int workItemId, string comment, CancellationToken cancellationToken);
 
-    /// <summary>Returns QueueItems (Kind=AiPrFix) for PRs that have both "AI-Generated" and "AI-Rework" labels.</summary>
+    /// <summary>Returns QueueItems (Kind=AiPrFix) for PRs that have the "AI-Rework" label.</summary>
     Task<IReadOnlyList<QueueItem>> QueryAiPrFixAsync(CancellationToken cancellationToken);
 
     /// <summary>Returns a single QueueItem (Kind=AiPrFix) for the given PR ID, or null if the PR lacks required labels or has no linked work items.</summary>

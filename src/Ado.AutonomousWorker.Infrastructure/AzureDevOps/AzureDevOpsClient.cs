@@ -269,7 +269,6 @@ public sealed class AzureDevOpsClient(
     private async Task<IReadOnlyList<QueueItem>> ParsePrFixItemsAsync(AdoPullRequest pr, CancellationToken cancellationToken)
     {
         var prId = pr.PullRequestId;
-        var hasAiGenerated = false;
         var hasAiRework = false;
         var labelNames = new List<string>();
 
@@ -277,18 +276,16 @@ public sealed class AzureDevOpsClient(
         {
             var name = label.Name ?? string.Empty;
             labelNames.Add(name);
-            if (string.Equals(name, "AI-Generated", StringComparison.OrdinalIgnoreCase))
-                hasAiGenerated = true;
-            else if (string.Equals(name, "AI-Rework", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name, "AI-Rework", StringComparison.OrdinalIgnoreCase))
                 hasAiRework = true;
         }
 
-        _logger.LogDebug("PR #{PrId}: labels=[{Labels}] hasAiGenerated={HasAiGenerated} hasAiRework={HasAiRework}",
-            prId, string.Join(", ", labelNames), hasAiGenerated, hasAiRework);
+        _logger.LogDebug("PR #{PrId}: labels=[{Labels}] hasAiRework={HasAiRework}",
+            prId, string.Join(", ", labelNames), hasAiRework);
 
-        if (!hasAiGenerated || !hasAiRework)
+        if (!hasAiRework)
         {
-            _logger.LogDebug("PR #{PrId}: skipped (missing required labels)", prId);
+            _logger.LogDebug("PR #{PrId}: skipped (missing required AI-Rework label)", prId);
             return [];
         }
 
