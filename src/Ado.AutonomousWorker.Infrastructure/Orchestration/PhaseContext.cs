@@ -2,32 +2,44 @@ using Ado.AutonomousWorker.Core.Models;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration;
 
-internal sealed class PhaseContext
+/// <summary>Identifies the pull request to be targeted by an AiPrFix execution.</summary>
+internal sealed record PrTarget(int PullRequestId, string RepositoryName, string BranchName);
+
+internal abstract record PhaseContext
 {
     public required string ExecutionId { get; init; }
     public required WorkItemDetails WorkItem { get; init; }
     public required bool IsExplicitResume { get; init; }
     public required ExecutionJournal Journal { get; init; }
 
-    // Set by EligibilityHandler
-    public string? CurrentSprintPath { get; set; }
-
-    // Set by PlanningHandler; pre-loaded from stateStore on resume when startPhase > Planning
-    public PlanResult? Plan { get; set; }
-
-    // Set by CodingHandler via PrepareAsync; rebuilt on every run (PrepareAsync is idempotent)
+    // Mutable state written by handlers during the pipeline
     public IReadOnlyList<RepositoryExecution> RepositoryExecutions { get; set; } = [];
-
-    // Set by CodingHandler after StartSessionAsync; pre-loaded from stateStore on resume when startPhase >= Reviewing
     public AgentSessionHandle? CodeSession { get; set; }
-
-    // Set by ReviewingHandler; pre-loaded from stateStore on resume when startPhase >= ApplyingReview
     public ReviewResult? LatestReview { get; set; }
-
-    // Set by ReviewingHandler before transitioning to ApplyingReview.
-    // Null on resume at ApplyingReview — ApplyingReviewHandler re-derives from LatestReview in that case.
     public IReadOnlyList<ReviewFinding>? AcceptedFindings { get; set; }
-
-    // Populated by PublishingHandler; used for the ADO success comment
     public List<RepositoryPublishResult> PublishedRepositories { get; } = [];
+
+    /// <summary>
+    /// Full AI Work / AI Rework flow: Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing.
+    /// </summary>
+    internal sealed record WorkItemContext : PhaseContext
+    {
+        /// <summary>Set by EligibilityHandler.</summary>
+        public string? CurrentSprintPath { get; set; }
+        /// <summary>Set by PlanningHandler; pre-loaded from stateStore on resume when startPhase > Planning.</summary>
+        public PlanResult? Plan { get; set; }
+    }
+
+    /// <summary>
+    /// PR Fix flow: Coding → Validating → Publishing. Planning and Reviewing are skipped.
+    /// </summary>
+    internal sealed record PrFixContext : PhaseContext
+    {
+        /// <summary>Identifies the pull request being fixed.</summary>
+        public required PrTarget PrTarget { get; init; }
+        /// <summary>Set by EligibilityHandler — active review threads to address.</summary>
+        public IReadOnlyList<PrReviewThread> PrThreads { get; set; } = [];
+        /// <summary>Set by CodingHandler (from structured output); used by PublishingHandler for the commit.</summary>
+        public string? CommitMessage { get; set; }
+    }
 }

@@ -6,15 +6,16 @@ using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
-internal sealed class EligibilityHandler(
+internal sealed class WorkItemEligibilityHandler(
     IAzureDevOpsClient azureDevOpsClient,
     IRulesEngine rulesEngine,
     IOptions<AzureDevOpsOptions> azureDevOpsOptions,
-    ILogger<EligibilityHandler> logger) : IPhaseHandler
+    ILogger<WorkItemEligibilityHandler> logger) : WorkItemHandler
 {
-    public TaskPhase Phase => TaskPhase.Queued;
+    public override TaskPhase Phase => TaskPhase.Queued;
 
-    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(
+        PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
     {
         var workItem = context.WorkItem;
 

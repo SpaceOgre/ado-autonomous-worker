@@ -11,4 +11,5 @@ internal sealed class ExecutionEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public string? PlanProviderSessionId { get; set; }
+    public int? PullRequestId { get; set; }
 }

@@ -27,4 +27,16 @@ public interface IAzureDevOpsClient
     Task LinkPullRequestAsync(int workItemId, PullRequestInfo pullRequest, CancellationToken cancellationToken);
 
     Task AddCommentAsync(int workItemId, string comment, CancellationToken cancellationToken);
+
+    /// <summary>Returns QueueItems (Kind=AiPrFix) for PRs that have both "AI-Generated" and "AI-Rework" labels.</summary>
+    Task<IReadOnlyList<QueueItem>> QueryAiPrFixAsync(CancellationToken cancellationToken);
+
+    /// <summary>Returns all review threads for a PR (caller filters active ones).</summary>
+    Task<IReadOnlyList<PrReviewThread>> GetPullRequestThreadsAsync(string repositoryName, int pullRequestId, CancellationToken cancellationToken);
+
+    /// <summary>Fetches the repository name and source branch for a PR by ID (used on resume to reconstruct PrFixContext).</summary>
+    Task<(string RepositoryName, string BranchName)?> GetPullRequestLocationAsync(int pullRequestId, CancellationToken cancellationToken);
+
+    /// <summary>Removes a label from a PR by name (case-insensitive).</summary>
+    Task RemovePullRequestLabelAsync(string repositoryName, int pullRequestId, string labelName, CancellationToken cancellationToken);
 }

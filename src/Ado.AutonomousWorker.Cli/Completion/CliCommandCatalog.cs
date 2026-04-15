@@ -4,6 +4,7 @@ public static class CliCommandCatalog
 {
     public static readonly IReadOnlyList<string> TopLevelCommands =
     [
+        "ado",
         "agent",
         "bootstrap",
         "completion",
@@ -21,6 +22,7 @@ public static class CliCommandCatalog
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> BranchCommands =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
+            ["ado"] = ["comment-test"],
             ["agent"] = ["test"],
             ["completion"] = ["powershell"],
             ["execution"] = ["show"],

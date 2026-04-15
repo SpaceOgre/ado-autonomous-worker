@@ -2,12 +2,13 @@ using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
+using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
-internal sealed class CodingHandler(
+internal sealed class WorkItemCodingHandler(
     IAzureDevOpsClient azureDevOpsClient,
     IWorkspaceManager workspaceManager,
     IAgentRunnerFactory agentRunnerFactory,
@@ -18,18 +19,18 @@ internal sealed class CodingHandler(
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
     IOptions<WorkerOptions> workerOptions,
-    ILogger<CodingHandler> logger) : IPhaseHandler
+    ILogger<WorkItemCodingHandler> logger) : WorkItemHandler
 {
-    public TaskPhase Phase => TaskPhase.Coding;
+    public override TaskPhase Phase => TaskPhase.Coding;
 
-    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(
+        PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
     {
         var plan = context.Plan
             ?? throw new InvalidOperationException("Plan must be set before entering Coding phase.");
         var workItem = context.WorkItem;
         var executionArtifactRoot = storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, context.ExecutionId);
 
-        // --- Prepare worktrees ---
         await context.Journal.AppendEventAsync(
             context.ExecutionId, TaskPhase.Coding, $"Preparing repositories for scope {plan.Scope}.", cancellationToken);
 
@@ -38,13 +39,11 @@ internal sealed class CodingHandler(
 
         foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
         {
-            // Bugs cannot have child Tasks in this ADO project (they sit at the same level).
-            // When the parent is a Bug, work directly against the Bug itself.
             var childTask = workItem.WorkItemType == WorkItemType.Bug
                 ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
                 : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
                     ?? await CreateChildTaskAsync(workItem, repoKind, cancellationToken);
-            var repoProfile = GetRepositoryProfile(repoKind);
+            var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
             var workspace = await workspaceManager.CreateRepoExecutionAsync(
                 workItem.WorkItemId, childTask.WorkItemId, repoKind, slug, context.IsExplicitResume, cancellationToken);
             var artifactDirectory = Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant());
@@ -57,7 +56,6 @@ internal sealed class CodingHandler(
 
         context.RepositoryExecutions = repositoryExecutions;
 
-        // --- Run coding agent ---
         var scopeLabel = RepositoryWorkflowHelpers.FormatRepoKinds(repositoryExecutions.Select(r => r.RepoKind));
         var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory(
             repositoryExecutions.Select(r => r.Workspace.WorkingDirectory));
@@ -106,13 +104,6 @@ internal sealed class CodingHandler(
         return new ChildTaskRecord(childTaskId, repoKind, $"{repoKind} - {parent.Title}", "Active");
     }
 
-    private RepositoryProfile GetRepositoryProfile(RepoKind repoKind) => repoKind switch
-    {
-        RepoKind.Backend => repositoryOptions.Value.Backend,
-        RepoKind.Frontend => repositoryOptions.Value.Frontend,
-        _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
-    };
-
     private static string BuildCodePrompt(
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
@@ -151,5 +142,4 @@ internal sealed class CodingHandler(
         - Leave every listed repository in a reviewable state for validation and PR creation.
         """;
     }
-
 }

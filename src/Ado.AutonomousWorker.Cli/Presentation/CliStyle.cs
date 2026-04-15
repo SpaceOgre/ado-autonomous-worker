@@ -55,14 +55,13 @@ public static class CliStyle
 
     public static string QueueKind(QueueItemKind kind)
     {
-        var color = kind switch
+        return kind switch
         {
-            QueueItemKind.AiRework => "orange1",
-            QueueItemKind.AiWork => "aqua",
-            _ => "white",
+            QueueItemKind.AiWork => "[aqua]AI Work[/]",
+            QueueItemKind.AiRework => "[orange1]AI Rework[/]",
+            QueueItemKind.AiPrFix => "[blue]PR Fix[/]",
+            _ => $"[white]{Markup.Escape(kind.ToString())}[/]",
         };
-
-        return $"[{color}]{Markup.Escape(kind.ToString())}[/]";
     }
 
     public static string WorkItemTypeLabel(WorkItemType type)

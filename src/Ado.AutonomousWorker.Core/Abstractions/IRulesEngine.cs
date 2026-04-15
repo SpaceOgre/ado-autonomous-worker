@@ -5,7 +5,7 @@ namespace Ado.AutonomousWorker.Core.Abstractions;
 
 public interface IRulesEngine
 {
-    IReadOnlyList<QueueItem> OrderQueue(IReadOnlyList<WorkItemSummary> aiWorkItems, IReadOnlyList<WorkItemSummary> aiReworkItems);
+    IReadOnlyList<QueueItem> OrderQueue(IReadOnlyList<WorkItemSummary> aiWorkItems, IReadOnlyList<WorkItemSummary> aiReworkItems, IReadOnlyList<QueueItem>? aiPrFixItems = null);
 
     bool IsEligible(WorkItemDetails workItem, string defaultAssignee);
 

@@ -13,11 +13,11 @@ internal sealed class ApplyingReviewHandler(
     ExecutionJournal executionJournal,
     IOptions<AgentOptions> agentOptions,
     IOptions<StorageOptions> storageOptions,
-    ILogger<ApplyingReviewHandler> logger) : IPhaseHandler
+    ILogger<ApplyingReviewHandler> logger) : WorkItemHandler
 {
-    public TaskPhase Phase => TaskPhase.ApplyingReview;
+    public override TaskPhase Phase => TaskPhase.ApplyingReview;
 
-    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
     {
         var codeSession = context.CodeSession
             ?? throw new InvalidOperationException("CodeSession must be set before entering ApplyingReview phase.");

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
-internal sealed class PublishingHandler(
+internal sealed class WorkItemPublishingHandler(
     IAzureDevOpsClient azureDevOpsClient,
     IWorkspaceManager workspaceManager,
     IRulesEngine rulesEngine,
@@ -18,11 +18,12 @@ internal sealed class PublishingHandler(
     ProcessCommandRunner commandRunner,
     IOptions<AgentOptions> agentOptions,
     IOptions<WorkerOptions> workerOptions,
-    ILogger<PublishingHandler> logger) : IPhaseHandler
+    ILogger<WorkItemPublishingHandler> logger) : WorkItemHandler
 {
-    public TaskPhase Phase => TaskPhase.Publishing;
+    public override TaskPhase Phase => TaskPhase.Publishing;
 
-    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(
+        PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
     {
         foreach (var repositoryExecution in context.RepositoryExecutions)
         {
@@ -35,16 +36,14 @@ internal sealed class PublishingHandler(
             await context.Journal.AppendEventAsync(
                 context.ExecutionId, TaskPhase.Publishing, $"Creating commit and PR for {repoKind}.", cancellationToken);
 
-            await RunGitAsync(workspace.WorkingDirectory, artifactDirectory, "git-add.log", ["add", "-A"], cancellationToken);
-            await RunGitAllowingNoChangesAsync(workspace.WorkingDirectory, artifactDirectory, "git-commit.log",
+            await GitPublishHelper.RunGitAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-add.log", ["add", "-A"], cancellationToken);
+            await GitPublishHelper.RunGitAllowingNoChangesAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-commit.log",
                 ["commit", "-m", $"#{childTask.WorkItemId}: {context.WorkItem.Title}"], cancellationToken);
-            var commitSha = await GetCommitShaAsync(workspace.WorkingDirectory, artifactDirectory, cancellationToken);
+            var commitSha = await GitPublishHelper.GetCommitShaAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, cancellationToken);
 
-            // Generate PR title and description using the coding agent after the commit is made,
-            // so the diff accurately reflects what was implemented.
             var (prTitle, prDescription) = await GeneratePrDescriptionAsync(context, repositoryExecution, cancellationToken);
 
-            await RunGitAsync(workspace.WorkingDirectory, artifactDirectory, "git-push.log",
+            await GitPublishHelper.RunGitAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-push.log",
                 ["push", "-u", "origin", workspace.BranchName], cancellationToken);
 
             var pullRequest = await azureDevOpsClient.CreateDraftPullRequestAsync(
@@ -87,7 +86,7 @@ internal sealed class PublishingHandler(
     }
 
     private async Task<(string Title, string Description)> GeneratePrDescriptionAsync(
-        PhaseContext context,
+        PhaseContext.WorkItemContext context,
         RepositoryExecution repoExecution,
         CancellationToken cancellationToken)
     {
@@ -237,47 +236,5 @@ internal sealed class PublishingHandler(
         - Be specific about files and components.
         - Keep the description concise but informative.
         """;
-    }
-
-    private async Task RunGitAsync(string workingDirectory, string artifactDirectory,
-        string artifactName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
-    {
-        var result = await commandRunner.RunAsync(
-            "git", ["-C", workingDirectory, .. arguments],
-            workingDirectory, Path.Combine(artifactDirectory, artifactName),
-            environmentVariables: null, activityName: null, outputCallback: null, cancellationToken);
-
-        if (!result.Success)
-            throw new InvalidOperationException(result.StandardError);
-    }
-
-    private async Task RunGitAllowingNoChangesAsync(string workingDirectory, string artifactDirectory,
-        string artifactName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
-    {
-        var result = await commandRunner.RunAsync(
-            "git", ["-C", workingDirectory, .. arguments],
-            workingDirectory, Path.Combine(artifactDirectory, artifactName),
-            environmentVariables: null, activityName: null, outputCallback: null, cancellationToken);
-
-        if (!result.Success &&
-            !result.StandardOutput.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase) &&
-            !result.StandardError.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(result.StandardError);
-        }
-    }
-
-    private async Task<string> GetCommitShaAsync(string workingDirectory, string artifactDirectory,
-        CancellationToken cancellationToken)
-    {
-        var result = await commandRunner.RunAsync(
-            "git", ["-C", workingDirectory, "rev-parse", "HEAD"],
-            workingDirectory, Path.Combine(artifactDirectory, "git-rev-parse.log"),
-            environmentVariables: null, activityName: null, outputCallback: null, cancellationToken);
-
-        if (!result.Success)
-            throw new InvalidOperationException(result.StandardError);
-
-        return result.StandardOutput.Trim();
     }
 }

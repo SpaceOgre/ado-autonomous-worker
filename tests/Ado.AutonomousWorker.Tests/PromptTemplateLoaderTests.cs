@@ -59,7 +59,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
     public void BuildCodePrompt_IncludesDescriptionAndAcceptanceCriteria()
     {
         var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
-            "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.CodingHandler",
+            "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
             throwOnError: true);
         Assert.NotNull(repositoryWorkflowServiceType);
 
@@ -114,7 +114,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
     public void BuildCodePrompt_IncludesParentFeatureAndComments()
     {
         var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
-            "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.CodingHandler",
+            "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
             throwOnError: true);
         Assert.NotNull(repositoryWorkflowServiceType);
 

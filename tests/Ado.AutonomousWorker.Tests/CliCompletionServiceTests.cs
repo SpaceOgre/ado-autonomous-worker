@@ -116,5 +116,9 @@ public sealed class CliCompletionServiceTests
 
         public Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<AgentUsageRecord>>([]);
+
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(int workItemId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>(
+                _executions.Where(e => e.WorkItemId == workItemId).ToList());
     }
 }

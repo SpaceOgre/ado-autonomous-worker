@@ -10,12 +10,23 @@ public sealed partial class RulesEngine : IRulesEngine
     private static readonly string[] BackendKeywords = ["api", "database", "service", "migration", "endpoint"];
     private static readonly string[] FrontendKeywords = ["ui", "component", "page", "styling", "screen"];
 
-    public IReadOnlyList<QueueItem> OrderQueue(IReadOnlyList<WorkItemSummary> aiWorkItems, IReadOnlyList<WorkItemSummary> aiReworkItems)
+    public IReadOnlyList<QueueItem> OrderQueue(
+        IReadOnlyList<WorkItemSummary> aiWorkItems,
+        IReadOnlyList<WorkItemSummary> aiReworkItems,
+        IReadOnlyList<QueueItem>? aiPrFixItems = null)
     {
-        var ordered = aiReworkItems
+        // AiPrFix items are placed first in the rework tier — they are more specific than plain AiRework
+        // for the same work item (an already-submitted PR just needs comment fixes).
+        var prFixOrdered = (aiPrFixItems ?? [])
             .OrderBy(item => item.StackRank)
-            .ThenBy(item => item.Priority ?? int.MaxValue)
-            .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiRework, item.StackRank, item.Priority, item.State, item.AssignedTo, ClassifyScopeFromTags(item.Tags)))
+            .ThenBy(item => item.Priority ?? int.MaxValue);
+
+        var ordered = prFixOrdered
+            .Concat(
+                aiReworkItems
+                    .OrderBy(item => item.StackRank)
+                    .ThenBy(item => item.Priority ?? int.MaxValue)
+                    .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiRework, item.StackRank, item.Priority, item.State, item.AssignedTo, ClassifyScopeFromTags(item.Tags))))
             .Concat(
                 aiWorkItems
                     .OrderBy(item => item.StackRank)

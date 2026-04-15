@@ -8,8 +8,21 @@ internal sealed class TaskStateMachine(
     ExecutionJournal journal,
     ILogger<TaskStateMachine> logger)
 {
-    private readonly Dictionary<TaskPhase, IPhaseHandler> _handlers =
-        handlers.ToDictionary(h => h.Phase);
+    private readonly ILookup<TaskPhase, IPhaseHandler> _handlers =
+        handlers.ToLookup(h => h.Phase);
+
+    private IPhaseHandler Resolve(TaskPhase phase, PhaseContext context)
+    {
+        var candidates = _handlers[phase].Where(h => h.Accepts(context)).ToList();
+        return candidates.Count switch
+        {
+            1 => candidates[0],
+            0 => throw new InvalidOperationException(
+                $"No handler accepts context type '{context.GetType().Name}' for phase {phase}."),
+            _ => throw new InvalidOperationException(
+                $"Multiple handlers accept context type '{context.GetType().Name}' for phase {phase}.")
+        };
+    }
 
     public async Task RunAsync(PhaseContext context, TaskPhase startPhase, CancellationToken cancellationToken)
     {
@@ -17,8 +30,7 @@ internal sealed class TaskStateMachine(
 
         while (true)
         {
-            if (!_handlers.TryGetValue(phase, out var handler))
-                throw new InvalidOperationException($"No handler registered for phase {phase}.");
+            var handler = Resolve(phase, context);
 
             logger.LogInformation(
                 "Execution {ExecutionId}: executing phase {Phase}.",

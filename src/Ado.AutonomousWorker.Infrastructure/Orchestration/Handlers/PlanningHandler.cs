@@ -16,11 +16,11 @@ internal sealed class PlanningHandler(
     IOptions<AgentOptions> agentOptions,
     IOptions<WorkerOptions> workerOptions,
     IOptions<StorageOptions> storageOptions,
-    ILogger<PlanningHandler> logger) : IPhaseHandler
+    ILogger<PlanningHandler> logger) : WorkItemHandler
 {
-    public TaskPhase Phase => TaskPhase.Planning;
+    public override TaskPhase Phase => TaskPhase.Planning;
 
-    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
     {
         var workItem = context.WorkItem;
         var config = agentOptions.Value.Plan;

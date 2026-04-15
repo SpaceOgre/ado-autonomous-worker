@@ -10,6 +10,7 @@ internal sealed partial class ValidatingHandler(
     ILogger<ValidatingHandler> logger) : IPhaseHandler
 {
     public TaskPhase Phase => TaskPhase.Validating;
+    public bool Accepts(PhaseContext context) => true;
 
     public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {

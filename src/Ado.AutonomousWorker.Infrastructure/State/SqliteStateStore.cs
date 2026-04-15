@@ -34,6 +34,19 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             )
             """,
             cancellationToken);
+
+        // Add pull_request_id column introduced for AiPrFix executions.
+        // Catch and ignore "duplicate column name" if column was already added.
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE executions ADD COLUMN pull_request_id INTEGER",
+                cancellationToken);
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+        {
+            // Column already exists — migration already applied.
+        }
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
@@ -82,6 +95,17 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         return await context.Executions
             .AsNoTracking()
             .Where(e => e.Status == (int)ExecutionStatus.Running)
+            .OrderByDescending(e => e.UpdatedAt)
+            .Select(e => ToDomain(e))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(int workItemId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Executions
+            .AsNoTracking()
+            .Where(e => e.WorkItemId == workItemId)
             .OrderByDescending(e => e.UpdatedAt)
             .Select(e => ToDomain(e))
             .ToListAsync(cancellationToken);
@@ -339,6 +363,7 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         CreatedAt = record.CreatedAt,
         UpdatedAt = record.UpdatedAt,
         PlanProviderSessionId = record.ProviderPlanSessionId,
+        PullRequestId = record.PullRequestId,
     };
 
     private static TaskExecutionRecord ToDomain(ExecutionEntity entity) => new(
@@ -350,7 +375,8 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         (ExecutionStatus)entity.Status,
         entity.CreatedAt,
         entity.UpdatedAt,
-        entity.PlanProviderSessionId);
+        entity.PlanProviderSessionId,
+        entity.PullRequestId);
 
     private static string Serialize(IReadOnlyList<string> values) =>
         JsonSerializer.Serialize(values);

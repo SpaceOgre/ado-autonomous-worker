@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Does
 
-`Ado.AutonomousWorker` is a .NET 10 console application (CLI tool) that automates end-to-end AI-assisted development for Azure DevOps work items tagged `AI-Work` or `AI-Rework` in the PRIIS backlog. It orchestrates three AI roles — **Plan**, **Code**, and **Review** — against isolated git worktrees, then publishes draft PRs linked to the parent work item.
+`Ado.AutonomousWorker` is a .NET 10 console application (CLI tool) that automates end-to-end AI-assisted development for Azure DevOps work items tagged `AI-Work` or `AI-Rework` in the PRIIS backlog. It orchestrates three AI roles — **Plan**, **Code**, and **Review** — against isolated git worktrees, then publishes draft PRs linked to the parent work item. It also monitors existing AI-generated PRs for reviewer feedback (`AI-Rework` PR label) and automatically addresses review comments via a lightweight `AiPrFix` queue kind.
 
 ## Maintenance Rules
 
@@ -59,6 +59,21 @@ Local configuration goes in `src/Ado.AutonomousWorker.Cli/appsettings.local.json
 | `Ado.AutonomousWorker.Infrastructure` | All real implementations (agents, state, ADO client, workspaces) |
 | `Ado.AutonomousWorker.Tests` | xUnit tests for pure/unit-testable components |
 
+### Queue Kinds
+
+| Kind | `QueueItemKind` | Trigger | Phase flow |
+|---|---|---|---|
+| AI Work | `0` | Work item tagged `AI-Work` | Queued → Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing |
+| AI Rework | `1` | Work item tagged `AI-Rework` | Same as AI Work |
+| PR Fix | `2` | PR has both `AI-Generated` and `AI-Rework` labels | Queued → Coding → Validating → Publishing |
+
+**PR Fix** (`AiPrFix`) skips Planning and Reviewing because:
+- The existing PR branch already defines the scope.
+- The reviewer's comments are the quality signal — running a separate AI review would be redundant.
+- On success, the `AI-Rework` PR label is removed and `AI-Done` is added to the work item.
+- On failure, the `AI-Rework` PR label is intentionally left intact (so the developer sees it still needs attention), and no `AI-Failed` tag is added to the work item (which may already be `AI-Done` from a prior run).
+- Resume (`task resume`) reconstructs the `PrFixContext` (repo name, branch) via `GetPullRequestLocationAsync` using the stored `PullRequestId`.
+
 ### Task Lifecycle — `TaskPhase` enum
 
 ```
@@ -66,6 +81,10 @@ Queued → Planning → Coding → Reviewing → ApplyingReview → Validating �
                                                                                    → Failed
                                                                                    → Skipped
 ```
+
+For `AiPrFix`, Planning and Reviewing are bypassed at the handler level:
+- `EligibilityHandler` transitions directly to `Coding` when `context.PrFix is not null`.
+- `ReviewingHandler` transitions directly to `Validating` when `context.PrFix is not null`.
 
 The orchestrator (`TaskOrchestrator`) is phase-aware and can **resume** from any post-Coding phase without re-running earlier phases. On resume it rebuilds `RepositoryExecutions` from the persisted plan and existing worktrees (`preserveExistingWorkspace: true`), so Reviewing, Validating, and Publishing all have the correct repo contexts. Phase state is persisted in SQLite.
 
@@ -94,7 +113,7 @@ Each work item execution creates a **git worktree** under the configured `Worktr
 
 `SqliteStateStore` stores execution records, phase events, plan results, review results, and agent output chunks in `.data/worker.db`. The schema is created on first run.
 
-### ADO Tag Lifecycle
+### ADO Tag / PR Label Lifecycle
 
 | Tag | Meaning |
 |---|---|
@@ -104,7 +123,14 @@ Each work item execution creates a **git worktree** under the configured `Worktr
 | `AI-Failed` | Terminal failure; requires human intervention |
 | `AI-TooLarge` | Acceptance criteria exceeded size limit |
 
-After a successful run, `AI-Work`/`AI-Rework` is removed and `AI-Done` is added. A success comment with PR links is posted to the work item.
+| PR Label | Set when | Cleared when |
+|---|---|---|
+| `AI-Generated` | PR is created by the worker | — |
+| `AI-Rework` | Manually by reviewer to request AI fixes | PR Fix run completes successfully |
+
+After a successful AI Work / AI Rework run, `AI-Work`/`AI-Rework` is removed and `AI-Done` is added. A success comment with PR links is posted to the work item.
+
+After a successful PR Fix run, `AI-Done` is added to the work item and the `AI-Rework` PR label is removed. A brief success comment (commit SHA, branch, PR number) is posted to the work item.
 
 ### Prompt Templates
 

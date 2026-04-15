@@ -119,6 +119,90 @@ public sealed partial class WorkspaceManager(
         return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
     }
 
+    public async Task<RepoExecutionContext> CheckoutPrBranchAsync(
+        int parentWorkItemId, int childTaskId, RepoKind repoKind,
+        string branchName, bool preserveExistingWorkspace,
+        CancellationToken cancellationToken)
+    {
+        var profile = GetProfile(repoKind);
+        var worktreePath = Path.Combine(profile.WorktreeRoot, $"{parentWorkItemId}-{childTaskId}-{repoKind.ToString().ToLowerInvariant()}");
+        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(parentWorkItemId, childTaskId);
+        Directory.CreateDirectory(artifactFolder);
+
+        if (!Directory.Exists(profile.BaseClonePath))
+            throw new DirectoryNotFoundException($"Base clone path '{profile.BaseClonePath}' was not found for {repoKind}.");
+
+        if (Directory.Exists(worktreePath) && preserveExistingWorkspace)
+        {
+            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, repoKind, cancellationToken);
+            logger.LogInformation(
+                "Reusing existing {RepoKind} PR worktree at {Path} on branch {BranchName}.",
+                repoKind, worktreePath, branchName);
+            return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
+        }
+
+        // Fetch the remote branch so the local clone knows about it
+        var fetchResult = await RunGitAsync(
+            profile.BaseClonePath,
+            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-fetch.log"),
+            ["fetch", "origin", branchName],
+            cancellationToken);
+
+        if (!fetchResult.Success)
+            throw new InvalidOperationException($"Failed to fetch branch '{branchName}' for {repoKind}: {fetchResult.StandardError}");
+
+        if (!Directory.Exists(worktreePath))
+        {
+            var addLogPath = Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-add.log");
+            // Checkout the existing remote branch (no -B — we are tracking an existing PR branch)
+            var addResult = await RunGitAsync(
+                profile.BaseClonePath,
+                addLogPath,
+                ["worktree", "add", worktreePath, $"origin/{branchName}"],
+                cancellationToken);
+
+            if (!addResult.Success)
+            {
+                logger.LogWarning(
+                    "PR worktree add failed for {RepoKind} at {Path}. Attempting prune before retry. Error: {Error}",
+                    repoKind, worktreePath, addResult.StandardError.Trim());
+
+                var pruneResult = await RunGitAsync(
+                    profile.BaseClonePath,
+                    Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-prune.log"),
+                    ["worktree", "prune"],
+                    cancellationToken);
+
+                if (!pruneResult.Success)
+                    throw new InvalidOperationException($"Failed to prune worktrees for {repoKind}: {pruneResult.StandardError}");
+
+                addResult = await RunGitAsync(
+                    profile.BaseClonePath,
+                    addLogPath,
+                    ["worktree", "add", "-f", worktreePath, $"origin/{branchName}"],
+                    cancellationToken);
+
+                if (!addResult.Success)
+                    throw new InvalidOperationException($"Failed to create PR worktree for {repoKind}: {addResult.StandardError}");
+            }
+
+            // The worktree was created pointing to origin/{branchName} (detached). Create a local tracking branch.
+            var checkoutResult = await RunGitAsync(
+                worktreePath,
+                Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log"),
+                ["checkout", "-B", branchName, $"origin/{branchName}"],
+                cancellationToken);
+
+            if (!checkoutResult.Success)
+                throw new InvalidOperationException($"Failed to create local tracking branch '{branchName}': {checkoutResult.StandardError}");
+        }
+
+        logger.LogInformation(
+            "Prepared {RepoKind} PR worktree at {Path} on branch {BranchName}.",
+            repoKind, worktreePath, branchName);
+        return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
+    }
+
     public async Task CleanupAsync(RepoExecutionContext context, CancellationToken cancellationToken)
     {
         var profile = GetProfile(context.RepoKind);

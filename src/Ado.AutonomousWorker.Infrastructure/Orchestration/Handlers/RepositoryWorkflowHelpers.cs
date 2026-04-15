@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
@@ -75,6 +76,13 @@ internal static class RepositoryWorkflowHelpers
             .Replace("ç", "c");
         return Regex.Replace(transliterated, "[^a-z0-9]+", "-").Trim('-');
     }
+
+    internal static RepositoryProfile GetProfile(this RepositoryOptions options, RepoKind repoKind) => repoKind switch
+    {
+        RepoKind.Backend => options.Backend,
+        RepoKind.Frontend => options.Frontend,
+        _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
+    };
 
     public static string FormatWorkItemLabel(WorkItemType workItemType) => workItemType switch
     {

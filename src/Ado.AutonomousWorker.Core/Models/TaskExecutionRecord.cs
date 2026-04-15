@@ -11,4 +11,5 @@ public sealed record TaskExecutionRecord(
     ExecutionStatus Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? ProviderPlanSessionId = null);
+    string? ProviderPlanSessionId = null,
+    int? PullRequestId = null);

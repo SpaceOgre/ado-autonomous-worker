@@ -30,6 +30,17 @@ public static class AgentOutputSchemas
     }
     """;
 
+    public const string PrFixCommit = """
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commitMessage": { "type": "string" }
+      },
+      "required": ["commitMessage"]
+    }
+    """;
+
     public const string Review = """
     {
       "type": "object",

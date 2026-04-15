@@ -4,7 +4,17 @@ A `.NET 10` console application for automating repetitive Azure DevOps work arou
 
 ## How It Works
 
-The worker picks up work items tagged `AI-Work` (or `AI-Rework`) from the Azure DevOps backlog, runs them through a three-phase AI pipeline, and publishes a draft PR linked back to the work item.
+The worker picks up work items tagged `AI-Work` (or `AI-Rework`) from the Azure DevOps backlog, runs them through a phase-based AI pipeline, and publishes a draft PR linked back to the work item. It also monitors existing AI-generated PRs for reviewer feedback and addresses review comments automatically.
+
+### Queue kinds
+
+| Kind | Trigger | Phase flow | On success | On failure |
+|---|---|---|---|---|
+| **AI Work** | Work item tagged `AI-Work` | Queued → Planning → Coding → Reviewing → Validating → Publishing | Tag `AI-Done`, post success comment | Tag `AI-Failed`, post failure comment |
+| **AI Rework** | Work item tagged `AI-Rework` | Same as AI Work | Same as AI Work | Same as AI Work |
+| **PR Fix** | PR has both `AI-Generated` and `AI-Rework` labels | Queued → Coding → Validating → Publishing | Remove `AI-Rework` label from PR, tag `AI-Done` | Leave `AI-Rework` label intact (so developer knows it still needs attention), post failure comment |
+
+PR Fix skips Planning and Reviewing — the existing PR branch defines the scope and the reviewer's comments are the quality signal.
 
 ```mermaid
 flowchart TD
@@ -102,6 +112,13 @@ stateDiagram-v2
 | `AI-Done` | Run completes successfully | — |
 | `AI-Failed` | Run hits a terminal error | — |
 | `AI-TooLarge` | Acceptance criteria exceeds size limit | — |
+
+### PR Label Lifecycle
+
+| Label | Set when | Cleared when |
+|---|---|---|
+| `AI-Generated` | PR is created by the worker | — |
+| `AI-Rework` | Manually by reviewer to request AI fixes | PR Fix run completes successfully |
 
 ## Features
 

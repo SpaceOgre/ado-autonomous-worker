@@ -169,6 +169,28 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             AnsiConsole.Write(usageTable);
         }
 
+        var relatedExecutions = await stateStore.ListExecutionsByWorkItemAsync(execution.WorkItemId, cancellationToken);
+        var siblings = relatedExecutions.Where(e => e.ExecutionId != execution.ExecutionId).ToList();
+        if (siblings.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            var relatedTable = new Table().Border(TableBorder.Rounded)
+                .AddColumns("Execution Id", "Kind", "Phase", "Status", "Updated");
+
+            foreach (var sibling in siblings)
+            {
+                relatedTable.AddRow(
+                    sibling.ExecutionId,
+                    CliStyle.QueueKind(sibling.Kind),
+                    CliStyle.Phase(sibling.Phase),
+                    CliStyle.Status(sibling.Status),
+                    sibling.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+            }
+
+            AnsiConsole.Write(CliStyle.SectionRule($"Related Executions for #{execution.WorkItemId}", "grey"));
+            AnsiConsole.Write(relatedTable);
+        }
+
         return 0;
     }
 

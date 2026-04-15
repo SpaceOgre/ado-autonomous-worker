@@ -11,4 +11,7 @@ public sealed record QueueItem(
     int? Priority,
     string State,
     string? AssignedTo,
-    WorkItemScope Scope = WorkItemScope.Fullstack);
+    WorkItemScope Scope = WorkItemScope.Fullstack,
+    int? PullRequestId = null,
+    string? PrRepositoryName = null,
+    string? PrBranchName = null);

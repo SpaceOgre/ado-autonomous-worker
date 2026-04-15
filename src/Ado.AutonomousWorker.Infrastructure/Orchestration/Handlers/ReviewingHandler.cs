@@ -15,11 +15,11 @@ internal sealed class ReviewingHandler(
     IOptions<AgentOptions> agentOptions,
     IOptions<StorageOptions> storageOptions,
     IOptions<WorkerOptions> workerOptions,
-    ILogger<ReviewingHandler> logger) : IPhaseHandler
+    ILogger<ReviewingHandler> logger) : WorkItemHandler
 {
-    public TaskPhase Phase => TaskPhase.Reviewing;
+    public override TaskPhase Phase => TaskPhase.Reviewing;
 
-    public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
     {
         var workItem = context.WorkItem;
         var repositoryExecutions = context.RepositoryExecutions;

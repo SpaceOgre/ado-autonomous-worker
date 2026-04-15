@@ -15,6 +15,8 @@ public interface IStateStore
 
     Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(int workItemId, CancellationToken cancellationToken);
+
     Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken);
 
     Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken);

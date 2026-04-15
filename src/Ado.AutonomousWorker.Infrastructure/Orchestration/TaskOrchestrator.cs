@@ -24,15 +24,16 @@ internal sealed class TaskOrchestrator(
     {
         await PrepareRuntimeAsync(cancellationToken);
 
-        var aiWork = await azureDevOpsClient.QueryAiWorkAsync(cancellationToken);
+        var aiWork   = await azureDevOpsClient.QueryAiWorkAsync(cancellationToken);
         var aiRework = await azureDevOpsClient.QueryAiReworkAsync(cancellationToken);
-        var queue = rulesEngine.OrderQueue(aiWork, aiRework)
+        var aiPrFix  = await azureDevOpsClient.QueryAiPrFixAsync(cancellationToken);
+        var queue    = rulesEngine.OrderQueue(aiWork, aiRework, aiPrFix)
             .Take(workerOptions.Value.MaxItemsPerRun)
             .ToArray();
 
         logger.LogInformation(
-            "Queue loaded: {AiWorkCount} AI-Work, {AiReworkCount} AI-Rework, {SelectedCount} selected.",
-            aiWork.Count, aiRework.Count, queue.Length);
+            "Queue loaded: {AiWorkCount} AI-Work, {AiReworkCount} AI-Rework, {AiPrFixCount} AI-PR-Fix, {SelectedCount} selected.",
+            aiWork.Count, aiRework.Count, aiPrFix.Count, queue.Length);
 
         var executions = new List<string>();
         foreach (var item in queue)
@@ -40,27 +41,36 @@ internal sealed class TaskOrchestrator(
             logger.LogInformation(
                 "Queue item selected: #{WorkItemId} {WorkItemType} '{Title}' ({Kind}).",
                 item.WorkItemId, item.WorkItemType, item.Title, item.Kind);
-            executions.Add(await RunTaskAsync(item.WorkItemId, cancellationToken));
+
+            var prTarget = item.PullRequestId is not null
+                ? new PrTarget(item.PullRequestId.Value, item.PrRepositoryName!, item.PrBranchName!)
+                : null;
+            executions.Add(await RunTaskAsync(item.WorkItemId, prTarget, cancellationToken));
         }
 
         return executions;
     }
 
     public async Task<string> RunTaskAsync(int workItemId, CancellationToken cancellationToken)
+        => await RunTaskAsync(workItemId, prTarget: null, cancellationToken);
+
+    private async Task<string> RunTaskAsync(int workItemId, PrTarget? prTarget, CancellationToken cancellationToken)
     {
         await PrepareRuntimeAsync(cancellationToken);
 
         var workItem = await azureDevOpsClient.GetWorkItemAsync(workItemId, cancellationToken);
+        var kind = prTarget is not null ? QueueItemKind.AiPrFix : workItem.Kind;
         var executionId = Guid.NewGuid().ToString("N");
         var record = new TaskExecutionRecord(
             executionId,
             workItem.WorkItemId,
             workItem.Title,
-            workItem.Kind,
+            kind,
             TaskPhase.Queued,
             ExecutionStatus.Running,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            PullRequestId: prTarget?.PullRequestId);
 
         await stateStore.SaveExecutionAsync(record, cancellationToken);
         await executionJournal.AppendEventAsync(
@@ -69,16 +79,25 @@ internal sealed class TaskOrchestrator(
             $"Created execution for work item #{workItem.WorkItemId}.",
             cancellationToken);
         logger.LogInformation(
-            "Execution {ExecutionId} created for #{WorkItemId} '{Title}'.",
-            executionId, workItem.WorkItemId, workItem.Title);
+            "Execution {ExecutionId} created for #{WorkItemId} '{Title}' ({Kind}).",
+            executionId, workItem.WorkItemId, workItem.Title, kind);
 
-        var context = new PhaseContext
-        {
-            ExecutionId = executionId,
-            WorkItem = workItem,
-            IsExplicitResume = false,
-            Journal = executionJournal,
-        };
+        PhaseContext context = prTarget is not null
+            ? new PhaseContext.PrFixContext
+              {
+                  ExecutionId = executionId,
+                  WorkItem = workItem,
+                  IsExplicitResume = false,
+                  Journal = executionJournal,
+                  PrTarget = prTarget,
+              }
+            : new PhaseContext.WorkItemContext
+              {
+                  ExecutionId = executionId,
+                  WorkItem = workItem,
+                  IsExplicitResume = false,
+                  Journal = executionJournal,
+              };
 
         await RunWithMachineAsync(context, TaskPhase.Queued, cancellationToken);
         return executionId;
@@ -104,18 +123,49 @@ internal sealed class TaskOrchestrator(
             "Resuming execution {ExecutionId} for #{WorkItemId} at phase {Phase}.",
             executionId, execution.WorkItemId, startPhase);
 
-        var context = new PhaseContext
-        {
-            ExecutionId = executionId,
-            WorkItem = workItem,
-            IsExplicitResume = true,
-            Journal = executionJournal,
-        };
+        PhaseContext context;
 
-        if (startPhase > TaskPhase.Planning)
+        if (execution.Kind == QueueItemKind.AiPrFix && execution.PullRequestId is not null)
         {
-            context.Plan = await stateStore.GetPlanAsync(executionId, cancellationToken)
-                ?? throw new InvalidOperationException("Cannot resume without a persisted plan.");
+            var location = await azureDevOpsClient.GetPullRequestLocationAsync(
+                execution.PullRequestId.Value, cancellationToken);
+            var prTarget = location is not null
+                ? new PrTarget(execution.PullRequestId.Value, location.Value.RepositoryName, location.Value.BranchName)
+                : throw new InvalidOperationException(
+                    $"Cannot resume AiPrFix execution '{executionId}': PR #{execution.PullRequestId} was not found.");
+
+            context = new PhaseContext.PrFixContext
+            {
+                ExecutionId = executionId,
+                WorkItem = workItem,
+                IsExplicitResume = true,
+                Journal = executionJournal,
+                PrTarget = prTarget,
+            };
+        }
+        else
+        {
+            var wiContext = new PhaseContext.WorkItemContext
+            {
+                ExecutionId = executionId,
+                WorkItem = workItem,
+                IsExplicitResume = true,
+                Journal = executionJournal,
+            };
+
+            if (startPhase > TaskPhase.Planning)
+            {
+                wiContext.Plan = await stateStore.GetPlanAsync(executionId, cancellationToken)
+                    ?? throw new InvalidOperationException("Cannot resume without a persisted plan.");
+            }
+
+            if (startPhase > TaskPhase.Coding && wiContext.Plan is not null)
+            {
+                wiContext.RepositoryExecutions = await RebuildRepositoryExecutionsAsync(
+                    workItem, wiContext.Plan, executionId, cancellationToken);
+            }
+
+            context = wiContext;
         }
 
         if (startPhase >= TaskPhase.Reviewing)
@@ -127,12 +177,6 @@ internal sealed class TaskOrchestrator(
         if (startPhase >= TaskPhase.ApplyingReview)
         {
             context.LatestReview = await stateStore.GetLatestReviewResultAsync(executionId, cancellationToken);
-        }
-
-        if (startPhase > TaskPhase.Coding && context.Plan is not null)
-        {
-            context.RepositoryExecutions = await RebuildRepositoryExecutionsAsync(
-                workItem, context.Plan, executionId, cancellationToken);
         }
 
         await RunWithMachineAsync(context, startPhase, cancellationToken);
@@ -155,10 +199,17 @@ internal sealed class TaskOrchestrator(
             logger.LogError(ex,
                 "Execution {ExecutionId} failed for work item {WorkItemId}",
                 context.ExecutionId, context.WorkItem.WorkItemId);
-            await azureDevOpsClient.UpdateTagsAsync(
-                context.WorkItem.WorkItemId,
-                rulesEngine.BuildFailureTags(context.WorkItem),
-                cancellationToken);
+
+            // For AiPrFix failures, do not modify work item tags — leave the "AI-Rework" PR label
+            // intact so the developer knows the fix still needs attention.
+            if (context is not PhaseContext.PrFixContext)
+            {
+                await azureDevOpsClient.UpdateTagsAsync(
+                    context.WorkItem.WorkItemId,
+                    rulesEngine.BuildFailureTags(context.WorkItem),
+                    cancellationToken);
+            }
+
             await azureDevOpsClient.AddCommentAsync(
                 context.WorkItem.WorkItemId,
                 WorkItemCommentFormatter.BuildFailureComment(context.ExecutionId, ex),

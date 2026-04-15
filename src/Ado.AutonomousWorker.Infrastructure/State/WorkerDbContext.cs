@@ -35,6 +35,7 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasConversion(DateTimeOffsetConverter);
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasConversion(DateTimeOffsetConverter);
             entity.Property(e => e.PlanProviderSessionId).HasColumnName("plan_provider_session_id");
+            entity.Property(e => e.PullRequestId).HasColumnName("pull_request_id");
         });
 
         modelBuilder.Entity<ExecutionEventEntity>(entity =>
