@@ -187,14 +187,44 @@ public sealed partial class WorkspaceManager(
             }
 
             // The worktree was created pointing to origin/{branchName} (detached). Create a local tracking branch.
+            var checkoutLogPath = Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log");
             var checkoutResult = await RunGitAsync(
                 worktreePath,
-                Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log"),
+                checkoutLogPath,
                 ["checkout", "-B", branchName, $"origin/{branchName}"],
                 cancellationToken);
 
             if (!checkoutResult.Success)
-                throw new InvalidOperationException($"Failed to create local tracking branch '{branchName}': {checkoutResult.StandardError}");
+            {
+                // If another worktree already holds the branch, force-remove it and retry.
+                var conflictPath = ExtractConflictingWorktreePath(checkoutResult.StandardError);
+                if (conflictPath is not null)
+                {
+                    logger.LogWarning(
+                        "Branch '{BranchName}' is held by existing worktree at '{ConflictPath}'. Force-removing it.",
+                        branchName, conflictPath);
+
+                    var removeResult = await RunGitAsync(
+                        profile.BaseClonePath,
+                        Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-remove-conflict.log"),
+                        ["worktree", "remove", "--force", conflictPath],
+                        cancellationToken);
+
+                    if (!removeResult.Success)
+                        throw new InvalidOperationException(
+                            $"Failed to remove conflicting worktree '{conflictPath}': {removeResult.StandardError}");
+
+                    checkoutResult = await RunGitAsync(
+                        worktreePath,
+                        checkoutLogPath,
+                        ["checkout", "-B", branchName, $"origin/{branchName}"],
+                        cancellationToken);
+                }
+
+                if (!checkoutResult.Success)
+                    throw new InvalidOperationException(
+                        $"Failed to create local tracking branch '{branchName}': {checkoutResult.StandardError}");
+            }
         }
 
         logger.LogInformation(
@@ -283,6 +313,17 @@ public sealed partial class WorkspaceManager(
         RepoKind.Frontend => repositoryOptions.Value.Frontend,
         _ => throw new InvalidOperationException($"Unknown repo kind '{kind}'."),
     };
+
+    // Parses "fatal: 'branchName' is already used by worktree at 'path'" from git stderr.
+    private static string? ExtractConflictingWorktreePath(string stderr)
+    {
+        const string marker = "is already used by worktree at '";
+        var idx = stderr.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+        var start = idx + marker.Length;
+        var end = stderr.IndexOf('\'', start);
+        return end > start ? stderr[start..end] : null;
+    }
 
     [GeneratedRegex("[^a-z0-9-]+", RegexOptions.IgnoreCase)]
     private static partial Regex UnsafeCharactersRegex();

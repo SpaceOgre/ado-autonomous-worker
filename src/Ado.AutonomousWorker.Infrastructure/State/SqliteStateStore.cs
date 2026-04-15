@@ -36,17 +36,17 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             cancellationToken);
 
         // Add pull_request_id column introduced for AiPrFix executions.
-        // Catch and ignore "duplicate column name" if column was already added.
-        try
-        {
+        // Check first to avoid an EF Core fail-level log from a duplicate-column exception.
+        var connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+            await connection.OpenAsync(cancellationToken);
+        await using var checkCmd = connection.CreateCommand();
+        checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('executions') WHERE name='pull_request_id'";
+        var columnCount = (long)(await checkCmd.ExecuteScalarAsync(cancellationToken))!;
+        if (columnCount == 0)
             await context.Database.ExecuteSqlRawAsync(
                 "ALTER TABLE executions ADD COLUMN pull_request_id INTEGER",
                 cancellationToken);
-        }
-        catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
-        {
-            // Column already exists — migration already applied.
-        }
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
