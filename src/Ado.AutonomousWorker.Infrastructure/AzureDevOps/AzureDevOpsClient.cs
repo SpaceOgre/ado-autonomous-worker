@@ -256,79 +256,111 @@ public sealed class AzureDevOpsClient(
 
     public async Task<IReadOnlyList<QueueItem>> QueryAiPrFixAsync(CancellationToken cancellationToken)
     {
+        var url = $"{_options.Project}/_apis/git/pullrequests?searchCriteria.status=active&searchCriteria.includeLinks=true&api-version={ApiVersion}";
+        _logger.LogDebug("QueryAiPrFixAsync: GET {Url}", url);
+
+        var response = await _httpClient.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (!document.RootElement.TryGetProperty("value", out var prArray))
+        {
+            _logger.LogDebug("QueryAiPrFixAsync: response has no 'value' array");
+            return [];
+        }
+
+        var prList = prArray.EnumerateArray().ToList();
+        _logger.LogDebug("QueryAiPrFixAsync: {Count} active PRs returned", prList.Count);
+
+        var results = new List<QueueItem>();
+        foreach (var pr in prList)
+        {
+            var items = await ParsePrFixItemsAsync(pr, cancellationToken);
+            results.AddRange(items);
+        }
+
+        _logger.LogDebug("QueryAiPrFixAsync: {Count} PR fix items found", results.Count);
+        return results;
+    }
+
+    public async Task<QueueItem?> GetPrFixItemAsync(int pullRequestId, CancellationToken cancellationToken)
+    {
         var response = await _httpClient.GetAsync(
-            $"{_options.Project}/_apis/git/pullrequests?searchCriteria.labels=AI-Rework&searchCriteria.status=active&api-version={ApiVersion}",
+            $"{_options.Project}/_apis/git/pullrequests?searchCriteria.pullRequestId={pullRequestId}&searchCriteria.includeLinks=true&api-version={ApiVersion}",
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
         if (!document.RootElement.TryGetProperty("value", out var prArray))
-            return [];
+            return null;
 
-        var results = new List<QueueItem>();
         foreach (var pr in prArray.EnumerateArray())
         {
-            // Only process PRs that also have the "AI-Generated" label
-            var hasAiGenerated = false;
-            if (pr.TryGetProperty("labels", out var labelsElement))
+            var items = await ParsePrFixItemsAsync(pr, cancellationToken);
+            if (items.Count > 0)
+                return items[0];
+        }
+
+        return null;
+    }
+
+    private async Task<IReadOnlyList<QueueItem>> ParsePrFixItemsAsync(JsonElement pr, CancellationToken cancellationToken)
+    {
+        var prId = pr.TryGetProperty("pullRequestId", out var prIdEl) ? prIdEl.GetInt32() : 0;
+
+        // Only process PRs that have both the "AI-Generated" and "AI-Rework" labels
+        var hasAiGenerated = false;
+        var hasAiRework = false;
+        var labelNames = new List<string>();
+        if (pr.TryGetProperty("labels", out var labelsElement))
+        {
+            foreach (var label in labelsElement.EnumerateArray())
             {
-                foreach (var label in labelsElement.EnumerateArray())
-                {
-                    if (label.TryGetProperty("name", out var labelName) &&
-                        string.Equals(labelName.GetString(), "AI-Generated", StringComparison.OrdinalIgnoreCase))
-                    {
-                        hasAiGenerated = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!hasAiGenerated)
-                continue;
-
-            var pullRequestId = pr.GetProperty("pullRequestId").GetInt32();
-            var repositoryName = pr.GetProperty("repository").GetProperty("name").GetString() ?? string.Empty;
-            var sourceBranch = pr.GetProperty("sourceRefName").GetString() ?? string.Empty;
-            // Strip "refs/heads/" prefix
-            var branchName = sourceBranch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
-                ? sourceBranch["refs/heads/".Length..]
-                : sourceBranch;
-
-            var scope = DeriveScope(repositoryName);
-
-            // Extract linked work item IDs
-            if (!pr.TryGetProperty("workItemRefs", out var workItemRefs))
-                continue;
-
-            var workItemIds = workItemRefs.EnumerateArray()
-                .Select(r => r.TryGetProperty("id", out var idEl) && int.TryParse(idEl.GetString(), out var wid) ? (int?)wid : null)
-                .Where(id => id.HasValue)
-                .Select(id => id!.Value)
-                .ToArray();
-
-            if (workItemIds.Length == 0)
-                continue;
-
-            var summaries = await GetWorkItemSummariesAsync(workItemIds, cancellationToken);
-            foreach (var summary in summaries)
-            {
-                results.Add(new QueueItem(
-                    summary.WorkItemId,
-                    summary.WorkItemType,
-                    summary.Title,
-                    QueueItemKind.AiPrFix,
-                    summary.StackRank,
-                    summary.Priority,
-                    summary.State,
-                    summary.AssignedTo,
-                    scope,
-                    pullRequestId,
-                    repositoryName,
-                    branchName));
+                if (!label.TryGetProperty("name", out var labelName))
+                    continue;
+                var name = labelName.GetString() ?? string.Empty;
+                labelNames.Add(name);
+                if (string.Equals(name, "AI-Generated", StringComparison.OrdinalIgnoreCase))
+                    hasAiGenerated = true;
+                else if (string.Equals(name, "AI-Rework", StringComparison.OrdinalIgnoreCase))
+                    hasAiRework = true;
             }
         }
 
-        return results;
+        _logger.LogDebug("PR #{PrId}: labels=[{Labels}] hasAiGenerated={HasAiGenerated} hasAiRework={HasAiRework}",
+            prId, string.Join(", ", labelNames), hasAiGenerated, hasAiRework);
+
+        if (!hasAiGenerated || !hasAiRework)
+        {
+            _logger.LogDebug("PR #{PrId}: skipped (missing required labels)", prId);
+            return [];
+        }
+
+        var repositoryName = pr.GetProperty("repository").GetProperty("name").GetString() ?? string.Empty;
+        var sourceBranch = pr.GetProperty("sourceRefName").GetString() ?? string.Empty;
+        var branchName = sourceBranch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? sourceBranch["refs/heads/".Length..]
+            : sourceBranch;
+        var scope = DeriveScope(repositoryName);
+
+        var workItemIds = await GetPrWorkItemIdsAsync(repositoryName, prId, cancellationToken);
+        _logger.LogDebug("PR #{PrId}: work items resolved to ids=[{Ids}]", prId, string.Join(", ", workItemIds));
+
+        if (workItemIds.Length == 0)
+        {
+            _logger.LogDebug("PR #{PrId}: skipped (no linked work items)", prId);
+            return [];
+        }
+
+
+        var summaries = await GetWorkItemSummariesAsync(workItemIds, cancellationToken);
+        return summaries
+            .Select(s => new QueueItem(
+                s.WorkItemId, s.WorkItemType, s.Title,
+                QueueItemKind.AiPrFix,
+                s.StackRank, s.Priority, s.State, s.AssignedTo,
+                scope, prId, repositoryName, branchName))
+            .ToArray();
     }
 
     public async Task<IReadOnlyList<PrReviewThread>> GetPullRequestThreadsAsync(string repositoryName, int pullRequestId, CancellationToken cancellationToken)
@@ -424,6 +456,30 @@ public sealed class AzureDevOpsClient(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/labels/{encodedLabel}?api-version={ApiVersion}",
             cancellationToken);
         response.EnsureSuccessStatusCode();
+    }
+
+    private async Task<int[]> GetPrWorkItemIdsAsync(string repositoryName, int pullRequestId, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.GetAsync(
+            $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/workitems?api-version={ApiVersion}",
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (!document.RootElement.TryGetProperty("value", out var valueArray))
+            return [];
+
+        return valueArray.EnumerateArray()
+            .Select(item =>
+            {
+                if (!item.TryGetProperty("id", out var idEl)) return (int?)null;
+                if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt32(out var n)) return n;
+                if (idEl.ValueKind == JsonValueKind.String && int.TryParse(idEl.GetString(), out var s)) return s;
+                return null;
+            })
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToArray();
     }
 
     private WorkItemScope DeriveScope(string repositoryName)

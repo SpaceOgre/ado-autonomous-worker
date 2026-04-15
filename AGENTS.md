@@ -36,6 +36,7 @@ dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj -
 dotnet tool run ado-worker -- queue
 dotnet tool run ado-worker -- run
 dotnet tool run ado-worker -- task run --id <workItemId>
+dotnet tool run ado-worker -- task run --pr <pullRequestId>
 dotnet tool run ado-worker -- task resume --execution-id <executionId>
 dotnet tool run ado-worker -- task resume --last
 dotnet tool run ado-worker -- task set-phase --last --phase Reviewing
@@ -82,9 +83,11 @@ Queued → Planning → Coding → Reviewing → ApplyingReview → Validating �
                                                                                    → Skipped
 ```
 
-For `AiPrFix`, Planning and Reviewing are bypassed at the handler level:
-- `EligibilityHandler` transitions directly to `Coding` when `context.PrFix is not null`.
-- `ReviewingHandler` transitions directly to `Validating` when `context.PrFix is not null`.
+For `AiPrFix`, Planning and Reviewing are bypassed via dedicated handler classes:
+- `PrFixEligibilityHandler` transitions directly to `Coding` (no eligibility or acceptance-criteria checks).
+- `PrFixCodingHandler` transitions directly to `Validating`, so `ReviewingHandler` and `PlanningHandler` are never reached.
+
+The handler dispatch uses `IPhaseHandler.Accepts(PhaseContext)` resolved via `ILookup<TaskPhase, IPhaseHandler>` in `TaskStateMachine`. Abstract bases `WorkItemHandler` and `PrFixHandler` perform the typed cast once; concrete handlers extend the right base and receive a typed context parameter.
 
 The orchestrator (`TaskOrchestrator`) is phase-aware and can **resume** from any post-Coding phase without re-running earlier phases. On resume it rebuilds `RepositoryExecutions` from the persisted plan and existing worktrees (`preserveExistingWorkspace: true`), so Reviewing, Validating, and Publishing all have the correct repo contexts. Phase state is persisted in SQLite.
 

@@ -145,6 +145,7 @@ ado-worker execution show --last
 ado-worker completion powershell
 ado-worker run
 ado-worker task run --id 12345
+ado-worker task run --pr 42
 ado-worker task resume --execution-id <execution-id>
 ado-worker task resume --last
 ado-worker task set-phase --last --phase Reviewing
@@ -159,6 +160,8 @@ ado-worker ui run-preview
 
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
+
+`ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive.
 
 `ado-worker run` first previews the exact queue slice it will execute, including the current ordering and `MaxItemsPerRun` cap, and then starts immediately.
 

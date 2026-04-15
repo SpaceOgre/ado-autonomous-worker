@@ -12,15 +12,41 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
     {
         [Description("The Azure DevOps work item id to execute immediately.")]
         [CommandOption("--id <WORK_ITEM_ID>")]
-        public required int WorkItemId { get; init; }
+        public int? WorkItemId { get; init; }
+
+        [Description("The pull request id to run as an AiPrFix execution (work item resolved automatically).")]
+        [CommandOption("--pr <PULL_REQUEST_ID>")]
+        public int? PullRequestId { get; init; }
+
+        public override ValidationResult Validate()
+        {
+            if (WorkItemId is null && PullRequestId is null)
+                return ValidationResult.Error("Specify either --id <WORK_ITEM_ID> or --pr <PULL_REQUEST_ID>.");
+            if (WorkItemId is not null && PullRequestId is not null)
+                return ValidationResult.Error("--id and --pr are mutually exclusive.");
+            return ValidationResult.Success();
+        }
     }
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var executionId = await liveDisplay.RunForWorkItemAsync(
-            settings.WorkItemId,
-            token => taskOrchestrator.RunTaskAsync(settings.WorkItemId, token),
-            cancellationToken);
+        string executionId;
+
+        if (settings.PullRequestId is not null)
+        {
+            executionId = await liveDisplay.RunForWorkItemAsync(
+                $"PR fix #{settings.PullRequestId}",
+                workItemId: 0,
+                token => taskOrchestrator.RunPrFixAsync(settings.PullRequestId.Value, token),
+                cancellationToken);
+        }
+        else
+        {
+            executionId = await liveDisplay.RunForWorkItemAsync(
+                settings.WorkItemId!.Value,
+                token => taskOrchestrator.RunTaskAsync(settings.WorkItemId.Value, token),
+                cancellationToken);
+        }
 
         AnsiConsole.MarkupLine($"[green]Execution finished.[/] Id: {executionId}");
         return 0;

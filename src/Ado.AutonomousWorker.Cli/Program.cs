@@ -18,7 +18,9 @@ builder.Configuration
     .AddEnvironmentVariables("AdoWorker_");
 
 builder.Logging.ClearProviders();
-builder.Logging.SetMinimumLevel(LogLevel.Warning);
+var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
+var minimumLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
+builder.Logging.SetMinimumLevel(minimumLevel);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
 builder.Logging.AddSimpleConsole(options =>

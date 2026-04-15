@@ -6,8 +6,9 @@ public sealed class QueueInspector(IAzureDevOpsClient azureDevOpsClient, IRulesE
 {
     public async Task<IReadOnlyList<Ado.AutonomousWorker.Core.Models.QueueItem>> GetQueueAsync(CancellationToken cancellationToken)
     {
-        var aiWork = await azureDevOpsClient.QueryAiWorkAsync(cancellationToken);
+        var aiWork   = await azureDevOpsClient.QueryAiWorkAsync(cancellationToken);
         var aiRework = await azureDevOpsClient.QueryAiReworkAsync(cancellationToken);
-        return rulesEngine.OrderQueue(aiWork, aiRework);
+        var aiPrFix  = await azureDevOpsClient.QueryAiPrFixAsync(cancellationToken);
+        return rulesEngine.OrderQueue(aiWork, aiRework, aiPrFix);
     }
 }

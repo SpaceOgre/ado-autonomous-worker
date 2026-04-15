@@ -31,6 +31,9 @@ public interface IAzureDevOpsClient
     /// <summary>Returns QueueItems (Kind=AiPrFix) for PRs that have both "AI-Generated" and "AI-Rework" labels.</summary>
     Task<IReadOnlyList<QueueItem>> QueryAiPrFixAsync(CancellationToken cancellationToken);
 
+    /// <summary>Returns a single QueueItem (Kind=AiPrFix) for the given PR ID, or null if the PR lacks required labels or has no linked work items.</summary>
+    Task<QueueItem?> GetPrFixItemAsync(int pullRequestId, CancellationToken cancellationToken);
+
     /// <summary>Returns all review threads for a PR (caller filters active ones).</summary>
     Task<IReadOnlyList<PrReviewThread>> GetPullRequestThreadsAsync(string repositoryName, int pullRequestId, CancellationToken cancellationToken);
 

@@ -52,7 +52,7 @@ public static class CliCommandCatalog
             ["task"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["resume"] = ["--execution-id", "--last"],
-                ["run"] = ["--id"],
+                ["run"] = ["--id", "--pr"],
                 ["set-phase"] = ["--execution-id", "--last", "--phase"],
             },
             ["ui"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)

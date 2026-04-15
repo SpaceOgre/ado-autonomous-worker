@@ -15,44 +15,28 @@ internal sealed class TaskOrchestrator(
     IWorkspaceManager workspaceManager,
     ExecutionJournal executionJournal,
     TaskStateMachine stateMachine,
-    IOptions<WorkerOptions> workerOptions,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
     ILogger<TaskOrchestrator> logger) : ITaskOrchestrator
 {
-    public async Task<IReadOnlyList<string>> RunQueueAsync(CancellationToken cancellationToken)
+    public Task<string> RunTaskAsync(QueueItem item, CancellationToken cancellationToken)
     {
-        await PrepareRuntimeAsync(cancellationToken);
-
-        var aiWork   = await azureDevOpsClient.QueryAiWorkAsync(cancellationToken);
-        var aiRework = await azureDevOpsClient.QueryAiReworkAsync(cancellationToken);
-        var aiPrFix  = await azureDevOpsClient.QueryAiPrFixAsync(cancellationToken);
-        var queue    = rulesEngine.OrderQueue(aiWork, aiRework, aiPrFix)
-            .Take(workerOptions.Value.MaxItemsPerRun)
-            .ToArray();
-
-        logger.LogInformation(
-            "Queue loaded: {AiWorkCount} AI-Work, {AiReworkCount} AI-Rework, {AiPrFixCount} AI-PR-Fix, {SelectedCount} selected.",
-            aiWork.Count, aiRework.Count, aiPrFix.Count, queue.Length);
-
-        var executions = new List<string>();
-        foreach (var item in queue)
-        {
-            logger.LogInformation(
-                "Queue item selected: #{WorkItemId} {WorkItemType} '{Title}' ({Kind}).",
-                item.WorkItemId, item.WorkItemType, item.Title, item.Kind);
-
-            var prTarget = item.PullRequestId is not null
-                ? new PrTarget(item.PullRequestId.Value, item.PrRepositoryName!, item.PrBranchName!)
-                : null;
-            executions.Add(await RunTaskAsync(item.WorkItemId, prTarget, cancellationToken));
-        }
-
-        return executions;
+        var prTarget = item.PullRequestId is not null
+            ? new PrTarget(item.PullRequestId.Value, item.PrRepositoryName!, item.PrBranchName!)
+            : null;
+        return RunTaskAsync(item.WorkItemId, prTarget, cancellationToken);
     }
 
-    public async Task<string> RunTaskAsync(int workItemId, CancellationToken cancellationToken)
-        => await RunTaskAsync(workItemId, prTarget: null, cancellationToken);
+    public Task<string> RunTaskAsync(int workItemId, CancellationToken cancellationToken)
+        => RunTaskAsync(workItemId, prTarget: null, cancellationToken);
+
+    public async Task<string> RunPrFixAsync(int pullRequestId, CancellationToken cancellationToken)
+    {
+        var item = await azureDevOpsClient.GetPrFixItemAsync(pullRequestId, cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"PR #{pullRequestId} does not have the required AI-Generated + AI-Rework labels or has no linked work items.");
+        return await RunTaskAsync(item, cancellationToken);
+    }
 
     private async Task<string> RunTaskAsync(int workItemId, PrTarget? prTarget, CancellationToken cancellationToken)
     {

@@ -50,7 +50,7 @@ public sealed class RunCommand(
             var executionId = await liveDisplay.RunForWorkItemAsync(
                 title,
                 item.WorkItemId,
-                token => taskOrchestrator.RunTaskAsync(item.WorkItemId, token),
+                token => taskOrchestrator.RunTaskAsync(item, token),
                 cancellationToken);
 
             executionIds.Add(executionId);
