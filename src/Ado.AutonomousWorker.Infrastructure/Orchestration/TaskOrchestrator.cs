@@ -34,7 +34,7 @@ internal sealed class TaskOrchestrator(
     {
         var item = await azureDevOpsClient.GetPrFixItemAsync(pullRequestId, cancellationToken)
             ?? throw new InvalidOperationException(
-                $"PR #{pullRequestId} does not have the required AI-Generated + AI-Rework labels or has no linked work items.");
+                $"PR #{pullRequestId} does not have the required AI-Rework label or has no linked work items.");
         return await RunTaskAsync(item, cancellationToken);
     }
 
