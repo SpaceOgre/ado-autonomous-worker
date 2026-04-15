@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
 using Spectre.Console.Cli;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -21,10 +22,24 @@ builder.Configuration
     .AddJsonFile(userConfigPath, optional: true, reloadOnChange: false)
     .AddEnvironmentVariables("AdoWorker_");
 
+var earlyStorageOptions = new StorageOptions();
+builder.Configuration.GetSection("Storage").Bind(earlyStorageOptions);
+earlyStorageOptions.NormalizePaths();
+Directory.CreateDirectory(earlyStorageOptions.LogRoot);
+var logFilePath = Path.Combine(earlyStorageOptions.LogRoot, "worker-.log");
+
+var serilogLogger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.File(
+        logFilePath,
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
 builder.Logging.ClearProviders();
 var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
-var minimumLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
-builder.Logging.SetMinimumLevel(minimumLevel);
+var consoleMinimumLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
+builder.Logging.SetMinimumLevel(LogLevel.Information);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
 builder.Logging.AddSimpleConsole(options =>
@@ -32,6 +47,9 @@ builder.Logging.AddSimpleConsole(options =>
     options.TimestampFormat = "HH:mm:ss ";
     options.SingleLine = true;
 });
+builder.Logging.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
+    null, consoleMinimumLevel);
+builder.Logging.AddSerilog(serilogLogger, dispose: true);
 
 builder.Services.AddAutonomousWorker(builder.Configuration);
 builder.Services.AddSingleton<BootstrapCommand>();
