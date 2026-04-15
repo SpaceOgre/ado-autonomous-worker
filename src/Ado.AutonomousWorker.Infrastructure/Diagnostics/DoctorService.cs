@@ -12,6 +12,7 @@ public sealed class DoctorService(
     IWorkspaceManager workspaceManager,
     ProcessCommandRunner commandRunner,
     IOptions<AgentOptions> agentOptions,
+    IOptions<AzureDevOpsOptions> azureDevOpsOptions,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions)
 {
@@ -44,14 +45,25 @@ public sealed class DoctorService(
             repositoryOptions.Value.Frontend.BaseClonePath));
         checks.Add(await CheckRepoBranchAsync("Frontend Branch", repositoryOptions.Value.Frontend, cancellationToken));
 
-        try
+        if (string.IsNullOrWhiteSpace(azureDevOpsOptions.Value.PersonalAccessToken))
         {
-            var sprint = await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken);
-            checks.Add(new DoctorCheckResult("Azure DevOps", !string.IsNullOrWhiteSpace(sprint), sprint ?? "No sprint returned"));
+            var configPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc");
+            checks.Add(new DoctorCheckResult(
+                "Azure DevOps",
+                false,
+                $"PersonalAccessToken is not set. Edit {configPath} to configure it."));
         }
-        catch (Exception ex)
+        else
         {
-            checks.Add(new DoctorCheckResult("Azure DevOps", false, ex.Message));
+            try
+            {
+                var sprint = await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken);
+                checks.Add(new DoctorCheckResult("Azure DevOps", !string.IsNullOrWhiteSpace(sprint), sprint ?? "No sprint returned"));
+            }
+            catch (Exception ex)
+            {
+                checks.Add(new DoctorCheckResult("Azure DevOps", false, ex.Message));
+            }
         }
 
         return checks;

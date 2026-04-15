@@ -2,6 +2,12 @@ namespace Ado.AutonomousWorker.Core.Configuration;
 
 public sealed class StorageOptions
 {
+    /// <summary>The default %LOCALAPPDATA%\Ado.AutonomousWorker directory used for data and user config.</summary>
+    public static string DefaultAppFolder =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Ado.AutonomousWorker");
+
     public string DataRoot { get; set; } = ".data";
 
     public string DatabasePath { get; set; } = ".data\\worker.db";
@@ -27,10 +33,7 @@ public sealed class StorageOptions
 
     public void NormalizePaths()
     {
-        var defaultRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Ado.AutonomousWorker");
-
+        var defaultRoot = DefaultAppFolder;
         DataRoot = NormalizeRoot(DataRoot, defaultRoot);
         DatabasePath = NormalizeChildPath(DatabasePath, "worker.db", DataRoot);
         LogRoot = NormalizeChildPath(LogRoot, "logs", DataRoot);

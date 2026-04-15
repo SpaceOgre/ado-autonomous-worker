@@ -2,6 +2,7 @@ using Ado.AutonomousWorker.Cli;
 using Ado.AutonomousWorker.Cli.Commands;
 using Ado.AutonomousWorker.Cli.Completion;
 using Ado.AutonomousWorker.Cli.Presentation;
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,10 +12,13 @@ using Spectre.Console.Cli;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+var userConfigPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc");
+
 builder.Configuration
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
     .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
+    .AddJsonFile(userConfigPath, optional: true, reloadOnChange: false)
     .AddEnvironmentVariables("AdoWorker_");
 
 builder.Logging.ClearProviders();
