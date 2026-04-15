@@ -26,7 +26,7 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
         AnsiConsole.MarkupLine("[dim]Press Ctrl+C to stop.[/]");
         AnsiConsole.WriteLine();
 
-        var (fileName, arguments) = ResolveDashboardProcess();
+        var (fileName, arguments, workingDirectory) = ResolveDashboardProcess();
 
         if (fileName is null)
         {
@@ -40,6 +40,7 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
             FileName = fileName,
             UseShellExecute = false,
             CreateNoWindow = false,
+            WorkingDirectory = workingDirectory ?? string.Empty,
         };
 
         foreach (var arg in arguments)
@@ -88,7 +89,7 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
         return process.HasExited ? process.ExitCode : 0;
     }
 
-    private static (string? FileName, IReadOnlyList<string> Arguments) ResolveDashboardProcess()
+    private static (string? FileName, IReadOnlyList<string> Arguments, string? WorkingDirectory) ResolveDashboardProcess()
     {
         // 1. Look for a published dashboard DLL next to this executable (installed tool scenario).
         var cliDir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
@@ -97,7 +98,7 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
             var dllPath = Path.Combine(cliDir, "Ado.AutonomousWorker.Dashboard.dll");
             if (File.Exists(dllPath))
             {
-                return ("dotnet", [dllPath]);
+                return ("dotnet", [dllPath], cliDir);
             }
         }
 
@@ -109,13 +110,13 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
             var projectPath = Path.Combine(current, "src", "Ado.AutonomousWorker.Dashboard", "Ado.AutonomousWorker.Dashboard.csproj");
             if (File.Exists(projectPath))
             {
-                return ("dotnet", ["run", "--project", projectPath, "--no-launch-profile"]);
+                return ("dotnet", ["run", "--project", projectPath, "--no-launch-profile"], current);
             }
 
             current = Path.GetDirectoryName(current);
         }
 
-        return (null, []);
+        return (null, [], null);
     }
 
     private static async Task WaitForPortAsync(int port, CancellationToken cancellationToken)

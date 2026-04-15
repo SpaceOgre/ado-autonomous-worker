@@ -159,7 +159,7 @@ else
             {
                 @foreach (var session in _agentSessions)
                 {
-                    var sessionChunks = _agentChunks.Where(c => c.SessionId == session.SessionId).OrderBy(c => c.Sequence).ToList();
+                    var sessionChunks = _chunksBySession.GetValueOrDefault(session.SessionId, []);
                     <MudExpansionPanels Class="mb-2">
                         <MudExpansionPanel>
                             <TitleContent>
@@ -275,9 +275,19 @@ else
     private System.Threading.Timer? _refreshTimer;
     private List<BreadcrumbItem> _breadcrumbs = [];
     private Dictionary<string, string?> _logContents = [];
+    private Dictionary<string, List<AgentOutputChunk>> _chunksBySession = [];
+    private CancellationTokenSource _cts = new();
 
     protected override async Task OnParametersSetAsync()
     {
+        // Cancel any in-flight reads and dispose the previous timer before loading new data.
+        await _cts.CancelAsync();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+
         _loading = true;
         await StateStore.InitializeAsync(CancellationToken.None);
         await LoadDataAsync();
@@ -295,6 +305,13 @@ else
             {
                 await LoadDataAsync();
                 StateHasChanged();
+
+                // Stop polling once the execution is no longer running.
+                if (_execution?.Status != ExecutionStatus.Running)
+                {
+                    _refreshTimer?.Dispose();
+                    _refreshTimer = null;
+                }
             }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         }
     }
@@ -321,7 +338,11 @@ else
         _review = await reviewTask;
         _usageRecords = (await usageTask).ToList();
 
-        await LoadLogFilesAsync();
+        _chunksBySession = _agentChunks
+            .GroupBy(c => c.SessionId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Sequence).ToList());
+
+        await LoadLogFilesAsync(_cts.Token);
 
         _loading = false;
     }
@@ -372,15 +393,40 @@ else
             _ => Color.Default,
         };
 
-    private async Task LoadLogFilesAsync()
+    private const int LogTailBytes = 512 * 1024; // 512 KB
+
+    private async Task LoadLogFilesAsync(CancellationToken cancellationToken)
     {
         _logContents.Clear();
         foreach (var session in _agentSessions)
         {
+            if (cancellationToken.IsCancellationRequested) break;
             try
             {
-                if (File.Exists(session.TranscriptPath))
-                    _logContents[session.SessionId] = await File.ReadAllTextAsync(session.TranscriptPath);
+                var info = new FileInfo(session.TranscriptPath);
+                if (!info.Exists) continue;
+
+                string content;
+                if (info.Length <= LogTailBytes)
+                {
+                    content = await File.ReadAllTextAsync(session.TranscriptPath, cancellationToken);
+                }
+                else
+                {
+                    // File exceeds limit — read the last LogTailBytes only.
+                    var buffer = new byte[LogTailBytes];
+                    await using var fs = new FileStream(session.TranscriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    fs.Seek(-LogTailBytes, SeekOrigin.End);
+                    var bytesRead = await fs.ReadAsync(buffer.AsMemory(0, LogTailBytes), cancellationToken);
+                    content = $"[Showing last {LogTailBytes / 1024} KB of {info.Length / 1024} KB log]\n\n"
+                              + System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                }
+
+                _logContents[session.SessionId] = content;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -389,5 +435,10 @@ else
         }
     }
 
-    public void Dispose() => _refreshTimer?.Dispose();
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }

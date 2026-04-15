@@ -66,6 +66,27 @@ public sealed class CliCompletionServiceTests
         Assert.Equal(["--status"], suggestions);
     }
 
+    [Fact]
+    public async Task GetSuggestionsAsync_SuggestsDashboardTopLevel()
+    {
+        var service = new CliCompletionService(new FakeStateStore());
+
+        var suggestions = await service.GetSuggestionsAsync(string.Empty, [], CancellationToken.None);
+
+        Assert.Contains("dashboard", suggestions);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_SuggestsDashboardOptions()
+    {
+        var service = new CliCompletionService(new FakeStateStore());
+
+        var suggestions = await service.GetSuggestionsAsync("--", ["dashboard"], CancellationToken.None);
+
+        Assert.Contains("--port", suggestions);
+        Assert.Contains("--no-open", suggestions);
+    }
+
     private sealed class FakeStateStore(IReadOnlyList<TaskExecutionRecord>? executions = null) : IStateStore
     {
         private readonly IReadOnlyList<TaskExecutionRecord> _executions = executions ?? [];
