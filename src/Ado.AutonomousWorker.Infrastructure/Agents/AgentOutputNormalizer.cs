@@ -6,7 +6,7 @@ namespace Ado.AutonomousWorker.Infrastructure.Agents;
 
 public static class AgentOutputNormalizer
 {
-    public static IReadOnlyList<string> NormalizeClaudeLine(ProcessOutputLine line, bool structuredOutput)
+    public static IReadOnlyList<string> NormalizeClaudeLine(ProcessOutputLine line)
     {
         var content = line.Content.Trim();
         if (string.IsNullOrWhiteSpace(content))
@@ -19,12 +19,80 @@ public static class AgentOutputNormalizer
             return [$"[stderr] {content}"];
         }
 
-        if (structuredOutput && LooksLikeJson(content))
+        if (LooksLikeJson(content))
         {
-            return NormalizeClaudeStructuredJson(content);
+            return NormalizeClaudeJsonLine(content);
         }
 
         return [content];
+    }
+
+    // Normalize a single line from --output-format stream-json output.
+    // Each line is a JSON event; we extract human-readable text and discard bookkeeping events.
+    private static IReadOnlyList<string> NormalizeClaudeJsonLine(string content)
+    {
+        try
+        {
+            var root = JsonSerializer.Deserialize<JsonElement>(content);
+            var type = TryGetString(root, "type");
+
+            return type switch
+            {
+                // The assistant event carries text the model is writing and tool calls it is making.
+                "assistant" => NormalizeAssistantMessage(root),
+                // system (init), result (final envelope), and user (tool results sent back to
+                // the model) are bookkeeping lines that carry no human-readable progress.
+                "system" or "result" or "user" => [],
+                // Unknown event shape — fall through to the generic key extractor.
+                _ => NormalizeClaudeStructuredJson(content),
+            };
+        }
+        catch (JsonException)
+        {
+            return [content];
+        }
+    }
+
+    // Extract displayable text from a Claude stream-json "assistant" event.
+    // The event shape is:
+    //   {"type":"assistant","message":{"content":[{"type":"text","text":"..."},{"type":"tool_use","name":"Bash","input":{...}}]}}
+    private static IReadOnlyList<string> NormalizeAssistantMessage(JsonElement root)
+    {
+        if (!root.TryGetProperty("message", out var message))
+            return [];
+
+        if (!message.TryGetProperty("content", out var content))
+            return [];
+
+        var messages = new List<string>();
+
+        if (content.ValueKind == JsonValueKind.String)
+        {
+            AddIfPresent(messages, content.GetString());
+        }
+        else if (content.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in content.EnumerateArray())
+            {
+                var itemType = TryGetString(item, "type");
+                switch (itemType)
+                {
+                    case "text":
+                        AddIfPresent(messages, TryGetString(item, "text"));
+                        break;
+                    case "tool_use":
+                        var toolName = TryGetString(item, "name");
+                        if (!string.IsNullOrWhiteSpace(toolName))
+                            messages.Add($"Using tool: {toolName}");
+                        break;
+                }
+            }
+        }
+
+        return messages
+            .Select(m => m.Trim())
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .ToArray();
     }
 
     public static IReadOnlyList<string> NormalizeCodexLine(ProcessOutputLine line)
