@@ -1,0 +1,25 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Error — ADO Autonomous Worker</PageTitle>
+
+<MudContainer>
+    <MudAlert Severity="Severity.Error" Class="mt-4">
+        <MudText Typo="Typo.h6">An error occurred while processing your request.</MudText>
+        @if (ShowRequestId)
+        {
+            <MudText Typo="Typo.body2">Request ID: <code>@RequestId</code></MudText>
+        }
+    </MudAlert>
+</MudContainer>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

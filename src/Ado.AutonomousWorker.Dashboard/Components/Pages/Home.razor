@@ -1,0 +1,137 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject IStateStore StateStore
+
+<PageTitle>Dashboard — ADO Autonomous Worker</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @if (_activeExecutions.Count > 0)
+    {
+        <MudText Typo="Typo.h6" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="mr-1" />Active (@_activeExecutions.Count)
+        </MudText>
+        <MudTable Items="_activeExecutions" Hover="true" Dense="true" Class="mb-6" RowClassFunc="@RowClass">
+            <HeaderContent>
+                <MudTh>Work Item</MudTh>
+                <MudTh>Title</MudTh>
+                <MudTh>Kind</MudTh>
+                <MudTh>Phase</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.WorkItemId</MudTd>
+                <MudTd>@context.Title</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+                <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-6">No tasks are currently running.</MudAlert>
+    }
+
+    <MudText Typo="Typo.h6" Class="mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-1" />Recent Executions
+    </MudText>
+    <MudTable Items="_recentExecutions" Hover="true" Dense="true" RowClassFunc="@RowClass">
+        <HeaderContent>
+            <MudTh>Work Item</MudTh>
+            <MudTh>Title</MudTh>
+            <MudTh>Kind</MudTh>
+            <MudTh>Phase</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Updated</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.WorkItemId</MudTd>
+            <MudTd>@context.Title</MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+            <MudTd>@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No executions found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private List<TaskExecutionRecord> _activeExecutions = [];
+    private List<TaskExecutionRecord> _recentExecutions = [];
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StateStore.InitializeAsync(CancellationToken.None);
+        await LoadDataAsync();
+        _refreshTimer = new System.Threading.Timer(_ => InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _activeExecutions = (await StateStore.ListActiveExecutionsAsync(CancellationToken.None))
+            .OrderByDescending(e => e.UpdatedAt).ToList();
+
+        var all = await StateStore.ListExecutionsAsync(CancellationToken.None);
+        _recentExecutions = all
+            .Where(e => e.Status != ExecutionStatus.Running)
+            .OrderByDescending(e => e.UpdatedAt)
+            .Take(20)
+            .ToList();
+
+        _loading = false;
+    }
+
+    private static Color KindColor(QueueItemKind kind) => kind switch
+    {
+        QueueItemKind.AiWork => Color.Primary,
+        QueueItemKind.AiRework => Color.Warning,
+        QueueItemKind.AiPrFix => Color.Secondary,
+        _ => Color.Default,
+    };
+
+    private static Color PhaseColor(TaskPhase phase) => phase switch
+    {
+        TaskPhase.Queued => Color.Default,
+        TaskPhase.Planning => Color.Info,
+        TaskPhase.Coding => Color.Primary,
+        TaskPhase.Reviewing => Color.Warning,
+        TaskPhase.ApplyingReview => Color.Warning,
+        TaskPhase.Validating => Color.Info,
+        TaskPhase.Publishing => Color.Success,
+        _ => Color.Default,
+    };
+
+    private static Color StatusColor(ExecutionStatus status) => status switch
+    {
+        ExecutionStatus.Running => Color.Primary,
+        ExecutionStatus.Completed => Color.Success,
+        ExecutionStatus.Failed => Color.Error,
+        ExecutionStatus.Skipped => Color.Default,
+        _ => Color.Default,
+    };
+
+    private static string RowClass(TaskExecutionRecord record, int _) =>
+        record.Status == ExecutionStatus.Failed ? "mud-theme-error" : string.Empty;
+
+    public void Dispose() => _refreshTimer?.Dispose();
+}

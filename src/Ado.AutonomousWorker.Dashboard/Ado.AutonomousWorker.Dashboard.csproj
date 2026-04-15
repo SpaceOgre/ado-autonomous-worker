@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <RootNamespace>Ado.AutonomousWorker.Dashboard</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ado.AutonomousWorker.Core\Ado.AutonomousWorker.Core.csproj" />
+    <ProjectReference Include="..\Ado.AutonomousWorker.Infrastructure\Ado.AutonomousWorker.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MudBlazor" Version="9.3.0" />
+  </ItemGroup>
+
+</Project>

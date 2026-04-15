@@ -133,6 +133,9 @@ stateDiagram-v2
 
 ```powershell
 ado-worker bootstrap
+ado-worker dashboard
+ado-worker dashboard --port 8080
+ado-worker dashboard --no-open
 ado-worker reset
 ado-worker reset --force
 ado-worker doctor
@@ -160,6 +163,8 @@ ado-worker ui run-preview
 
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
+
+`ado-worker dashboard` starts a local Blazor web dashboard (default port 5173) and opens it in the browser. The dashboard shows active tasks, recent executions, events, agent output, plan and review results, and token usage. Pass `--port` to change the port or `--no-open` to suppress the automatic browser launch. The dashboard reads the same SQLite database as the CLI.
 
 `ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive.
 

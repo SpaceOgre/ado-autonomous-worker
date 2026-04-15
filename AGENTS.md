@@ -23,6 +23,9 @@ Forgetting any of these will leave tab-completion, the README, or agent guidance
 # Build
 dotnet build src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj
 
+# Build the dashboard
+dotnet build src/Ado.AutonomousWorker.Dashboard/Ado.AutonomousWorker.Dashboard.csproj
+
 # Run all tests
 dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj
 
@@ -35,6 +38,8 @@ dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj -
 # Run the tool after local install
 dotnet tool run ado-worker -- queue
 dotnet tool run ado-worker -- run
+dotnet tool run ado-worker -- dashboard
+dotnet tool run ado-worker -- dashboard --port 8080
 dotnet tool run ado-worker -- task run --id <workItemId>
 dotnet tool run ado-worker -- task run --pr <pullRequestId>
 dotnet tool run ado-worker -- task resume --execution-id <executionId>
@@ -45,6 +50,9 @@ dotnet tool run ado-worker -- agent test
 dotnet tool run ado-worker -- agent test --role review
 dotnet tool run ado-worker -- agent test --role pr
 dotnet tool run ado-worker -- doctor
+
+# Run the dashboard standalone (development)
+dotnet run --project src/Ado.AutonomousWorker.Dashboard
 ```
 
 Local configuration goes in `src/Ado.AutonomousWorker.Cli/appsettings.local.json` (git-ignored). The PAT and local repo paths live there.
@@ -57,6 +65,7 @@ Local configuration goes in `src/Ado.AutonomousWorker.Cli/appsettings.local.json
 |---|---|
 | `Ado.AutonomousWorker.Cli` | CLI entry point, commands, DI wiring, Spectre.Console UI |
 | `Ado.AutonomousWorker.Core` | Domain abstractions, models, enums, `RulesEngine` |
+| `Ado.AutonomousWorker.Dashboard` | Blazor Server web dashboard (MudBlazor) for viewing executions, logs, and agent output |
 | `Ado.AutonomousWorker.Infrastructure` | All real implementations (agents, state, ADO client, workspaces) |
 | `Ado.AutonomousWorker.Tests` | xUnit tests for pure/unit-testable components |
 
