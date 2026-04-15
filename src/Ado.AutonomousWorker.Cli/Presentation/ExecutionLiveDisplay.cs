@@ -108,7 +108,7 @@ public sealed class ExecutionLiveDisplay(
         var loopIteration = 0;
         ViewData? cached = null;
 
-        await AnsiConsole.Live(CreateWaitingView(title, tick, startedAt, useUnicode))
+        await AnsiConsole.Live(BuildView(title, null, tick, startedAt, useUnicode))
             .AutoClear(false)
             .Overflow(VerticalOverflow.Visible)
             .StartAsync(async liveCtx =>
@@ -161,34 +161,40 @@ public sealed class ExecutionLiveDisplay(
         DateTimeOffset startedAt,
         bool useUnicode)
     {
-        if (data is null)
+        IRenderable header;
+        IReadOnlyList<ExecutionEventRecord> events = [];
+        IReadOnlyList<AgentOutputChunk> agentOutput = [];
+        TaskPhase phase = TaskPhase.Queued;
+
+        if (data is not null)
         {
-            return CreateWaitingView(title, tick, startedAt, useUnicode);
+            header = CreateCompactHeader(data.Execution, tick, startedAt, useUnicode, agentOptions.Value, data.UsageRecords);
+            events = data.Events;
+            agentOutput = data.AgentOutput;
+            phase = data.Execution.Phase;
+        }
+        else
+        {
+            var elapsed = DateTimeOffset.UtcNow - startedAt;
+            var elapsedText = elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");
+            header = new Markup(
+                $"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] " +
+                $"[grey]Waiting for execution data... (elapsed {elapsedText})[/]");
         }
 
+        // Always render the full panel structure so the height stays consistent across
+        // all states. A height jump (small→large) causes Spectre's cursor tracking to
+        // land short, leaving the previous frame's top line visible as a duplicate.
         var body = new Rows(
         [
-            CreateCompactHeader(data.Execution, tick, startedAt, useUnicode, agentOptions.Value, data.UsageRecords),
+            header,
             CliStyle.SectionRule("Recent Events", "deepskyblue1"),
-            CreateEventsTable(data.Events),
+            CreateEventsTable(events),
             CliStyle.SectionRule("Agent Output", "mediumspringgreen"),
-            CreateAgentOutputMarkup(data.AgentOutput, data.Execution.Phase, tick, useUnicode),
+            CreateAgentOutputMarkup(agentOutput, phase, tick, useUnicode),
         ]);
 
         return new Panel(body)
-        {
-            Header = new PanelHeader(title),
-            Border = BoxBorder.Rounded,
-        };
-    }
-
-    private static IRenderable CreateWaitingView(string title, int tick, DateTimeOffset startedAt, bool useUnicode)
-    {
-        var elapsed = DateTimeOffset.UtcNow - startedAt;
-        var elapsedText = elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");
-        var spinner = GetSpinnerFrame(tick, useUnicode);
-
-        return new Panel(new Markup($"[deepskyblue1]{Markup.Escape(spinner)}[/] Waiting for execution state... [grey](elapsed {elapsedText})[/]"))
         {
             Header = new PanelHeader(title),
             Border = BoxBorder.Rounded,
