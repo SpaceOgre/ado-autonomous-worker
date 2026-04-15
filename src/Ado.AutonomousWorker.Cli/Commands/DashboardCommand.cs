@@ -131,7 +131,11 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
                 await client.ConnectAsync("127.0.0.1", port, cts.Token);
                 return;
             }
-            catch
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (SocketException)
             {
                 await Task.Delay(250, cts.Token).ConfigureAwait(false);
             }
@@ -155,7 +159,10 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
                 Process.Start("xdg-open", url);
             }
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
+                                       or System.IO.IOException
+                                       or System.PlatformNotSupportedException
+                                       or InvalidOperationException)
         {
             // Best-effort: if we can't open the browser, the user can navigate manually.
         }
