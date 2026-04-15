@@ -196,34 +196,31 @@ public sealed partial class WorkspaceManager(
 
             if (!checkoutResult.Success)
             {
-                // If another worktree already holds the branch, force-remove it and retry.
+                // If another worktree already holds the branch, reuse it — it contains
+                // the agent's prior work and is exactly what the PR fix needs. Clean up
+                // the newly-created detached worktree that can't claim the branch.
                 var conflictPath = ExtractConflictingWorktreePath(checkoutResult.StandardError);
                 if (conflictPath is not null)
                 {
-                    logger.LogWarning(
-                        "Branch '{BranchName}' is held by existing worktree at '{ConflictPath}'. Force-removing it.",
+                    logger.LogInformation(
+                        "Branch '{BranchName}' is already checked out in existing worktree at '{ConflictPath}'. " +
+                        "Reusing it and discarding the newly-created detached worktree.",
                         branchName, conflictPath);
 
-                    var removeResult = await RunGitAsync(
+                    await RunGitAsync(
                         profile.BaseClonePath,
-                        Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-remove-conflict.log"),
-                        ["worktree", "remove", "--force", conflictPath],
+                        Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-worktree-remove-detached.log"),
+                        ["worktree", "remove", "--force", worktreePath],
                         cancellationToken);
 
-                    if (!removeResult.Success)
-                        throw new InvalidOperationException(
-                            $"Failed to remove conflicting worktree '{conflictPath}': {removeResult.StandardError}");
-
-                    checkoutResult = await RunGitAsync(
-                        worktreePath,
-                        checkoutLogPath,
-                        ["checkout", "-B", branchName, $"origin/{branchName}"],
-                        cancellationToken);
+                    logger.LogInformation(
+                        "Reusing existing {RepoKind} PR worktree at {Path} on branch {BranchName}.",
+                        repoKind, conflictPath, branchName);
+                    return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, conflictPath);
                 }
 
-                if (!checkoutResult.Success)
-                    throw new InvalidOperationException(
-                        $"Failed to create local tracking branch '{branchName}': {checkoutResult.StandardError}");
+                throw new InvalidOperationException(
+                    $"Failed to create local tracking branch '{branchName}': {checkoutResult.StandardError}");
             }
         }
 
