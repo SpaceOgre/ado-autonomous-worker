@@ -50,6 +50,7 @@ builder.Services.AddSingleton<ResetCommand>();
 builder.Services.AddSingleton<AgentTestCommand>();
 builder.Services.AddSingleton<AzureDevOpsCommentTestCommand>();
 builder.Services.AddSingleton<SetPhaseCommand>();
+builder.Services.AddSingleton<DeployCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 builder.Services.AddSingleton<TerminalTitleService>();
@@ -94,6 +95,7 @@ app.Configure(config =>
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
     config.AddCommand<RunCommand>("run").WithDescription("Preview the selected queue, then process it and stop on the first failure.");
+    config.AddCommand<DeployCommand>("deploy").WithDescription("Trigger frontend and backend pipelines, wait for success, then move sprint items to Ready for Test.");
     config.AddCommand<VersionCommand>("version").WithDescription("Show the installed ado-worker version and runtime information.");
     config.AddBranch("completion", completion =>
     {

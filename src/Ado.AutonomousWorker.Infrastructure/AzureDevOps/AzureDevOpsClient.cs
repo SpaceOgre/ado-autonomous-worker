@@ -635,4 +635,178 @@ public sealed class AzureDevOpsClient(
             _ => null,
         };
     }
+
+    // ── Deploy / pipeline ─────────────────────────────────────────────────────
+
+    public async Task<string?> TryGetPipelineNameAsync(int pipelineId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync(
+                $"{_options.Project}/_apis/pipelines/{pipelineId}?api-version={ApiVersion}",
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var result = await response.Content.ReadFromJsonAsync<AdoPipelineResponse>(cancellationToken);
+            return result?.Name;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "TryGetPipelineNameAsync failed for pipeline {PipelineId}", pipelineId);
+            return null;
+        }
+    }
+
+    public async Task<int> TriggerPipelineAsync(int pipelineId, string branch, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_options.Project}/_apis/pipelines/{pipelineId}/runs?api-version={ApiVersion}",
+            new
+            {
+                resources = new
+                {
+                    repositories = new
+                    {
+                        self = new { refName = $"refs/heads/{branch}" },
+                    },
+                },
+            },
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        var run = await response.Content.ReadFromJsonAsync<AdoPipelineRunResponse>(cancellationToken)
+            ?? throw new InvalidOperationException($"Azure DevOps did not return a run ID for pipeline {pipelineId}.");
+        return run.Id;
+    }
+
+    public async Task<(string State, string? Result)> GetPipelineRunStatusAsync(int pipelineId, int runId, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.GetAsync(
+            $"{_options.Project}/_apis/pipelines/{pipelineId}/runs/{runId}?api-version={ApiVersion}",
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var run = await response.Content.ReadFromJsonAsync<AdoPipelineRunResponse>(cancellationToken)
+            ?? throw new InvalidOperationException($"Azure DevOps returned null for pipeline {pipelineId} run {runId}.");
+
+        return (run.State ?? "unknown", run.Result);
+    }
+
+    public async Task<IReadOnlyList<WorkItemSummary>> QueryResolvedSprintItemsAsync(CancellationToken cancellationToken)
+    {
+        var sprintPath = await GetCurrentSprintPathAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(sprintPath))
+            return [];
+
+        var query = $"""
+        SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
+        FROM WorkItems
+        WHERE ([System.WorkItemType] = 'Task' OR [System.WorkItemType] = 'Bug')
+          AND [System.State] = 'Resolved'
+          AND [System.IterationPath] = '{sprintPath}'
+          AND [System.TeamProject] = '{_options.Project}'
+        ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
+        """;
+
+        return await QueryByWiqlAsync(query, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<(WorkItemSummary Story, IReadOnlyList<int> ChildIds)>> QueryActiveSprintUserStoriesWithChildrenAsync(CancellationToken cancellationToken)
+    {
+        var sprintPath = await GetCurrentSprintPathAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(sprintPath))
+            return [];
+
+        var query = $"""
+        SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
+        FROM WorkItems
+        WHERE [System.WorkItemType] = 'User Story'
+          AND [System.State] = 'Active'
+          AND [System.IterationPath] = '{sprintPath}'
+          AND [System.TeamProject] = '{_options.Project}'
+        ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
+        """;
+
+        var stories = await QueryByWiqlAsync(query, cancellationToken);
+        if (stories.Count == 0)
+            return [];
+
+        var ids = stories.Select(s => s.WorkItemId).ToArray();
+        var childMap = await GetChildWorkItemIdsAsync(ids, cancellationToken);
+
+        return stories
+            .Select(s => (s, childMap.TryGetValue(s.WorkItemId, out var children) ? children : (IReadOnlyList<int>)[]))
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyDictionary<int, string>> GetWorkItemStatesAsync(IReadOnlyList<int> workItemIds, CancellationToken cancellationToken)
+    {
+        if (workItemIds.Count == 0)
+            return new Dictionary<int, string>();
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_options.Project}/_apis/wit/workitemsbatch?api-version={ApiVersion}",
+            new
+            {
+                ids = workItemIds,
+                fields = new[] { "System.Id", "System.State" },
+            },
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        var batch = await response.Content.ReadFromJsonAsync<AdoWorkItemBatchResponse>(cancellationToken);
+        return (batch?.Value ?? [])
+            .ToDictionary(item => item.Fields.Id, item => item.Fields.State ?? string.Empty);
+    }
+
+    public Task UpdateWorkItemStateAndAssigneeAsync(int workItemId, string state, string assignee, CancellationToken cancellationToken)
+        => PatchFieldsAsync(workItemId,
+        [
+            PatchField("/fields/System.State", state),
+            PatchField("/fields/System.AssignedTo", assignee),
+        ], cancellationToken);
+
+    private async Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> GetChildWorkItemIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, IReadOnlyList<int>>();
+        using var semaphore = new SemaphoreSlim(8);
+
+        var tasks = parentIds.Select(async id =>
+        {
+            await semaphore.WaitAsync(cancellationToken);
+            try
+            {
+                var response = await _httpClient.GetAsync(
+                    $"{_options.Project}/_apis/wit/workitems/{id}?$expand=Relations&api-version={ApiVersion}",
+                    cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                    return (id, (IReadOnlyList<int>)[]);
+
+                var item = await response.Content.ReadFromJsonAsync<AdoWorkItemResponse>(cancellationToken);
+                var childIds = (item?.Relations ?? [])
+                    .Where(r => string.Equals(r.Rel, "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => TryParseWorkItemId(r.Url))
+                    .Where(cid => cid.HasValue)
+                    .Select(cid => cid!.Value)
+                    .ToArray();
+
+                return (id, (IReadOnlyList<int>)childIds);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        foreach (var (id, children) in results)
+            result[id] = children;
+
+        return result;
+    }
 }

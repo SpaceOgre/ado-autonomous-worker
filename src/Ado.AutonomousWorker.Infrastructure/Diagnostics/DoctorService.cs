@@ -14,7 +14,8 @@ public sealed class DoctorService(
     IOptions<AgentOptions> agentOptions,
     IOptions<AzureDevOpsOptions> azureDevOpsOptions,
     IOptions<RepositoryOptions> repositoryOptions,
-    IOptions<StorageOptions> storageOptions)
+    IOptions<StorageOptions> storageOptions,
+    IOptions<DeployOptions> deployOptions)
 {
     public async Task<IReadOnlyList<DoctorCheckResult>> RunAsync(CancellationToken cancellationToken)
     {
@@ -66,6 +67,26 @@ public sealed class DoctorService(
             }
         }
 
+        // Pipeline checks (only when pipeline IDs are configured)
+        var deploy = deployOptions.Value;
+        if (deploy.BackendPipelineId > 0)
+        {
+            checks.Add(await CheckPipelineAsync("Backend Pipeline", deploy.BackendPipelineId, cancellationToken));
+        }
+        else
+        {
+            checks.Add(new DoctorCheckResult("Backend Pipeline", false, "Deploy:BackendPipelineId is not configured."));
+        }
+
+        if (deploy.FrontendPipelineId > 0)
+        {
+            checks.Add(await CheckPipelineAsync("Frontend Pipeline", deploy.FrontendPipelineId, cancellationToken));
+        }
+        else
+        {
+            checks.Add(new DoctorCheckResult("Frontend Pipeline", false, "Deploy:FrontendPipelineId is not configured."));
+        }
+
         return checks;
     }
 
@@ -113,5 +134,20 @@ public sealed class DoctorService(
         var resolvedPath = CommandPathResolver.ResolveOrOriginal(commandPath);
         var exists = CommandPathResolver.Exists(commandPath);
         return new DoctorCheckResult(name, exists, resolvedPath);
+    }
+
+    private async Task<DoctorCheckResult> CheckPipelineAsync(string name, int pipelineId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pipelineName = await azureDevOpsClient.TryGetPipelineNameAsync(pipelineId, cancellationToken);
+            return pipelineName is not null
+                ? new DoctorCheckResult(name, true, $"id={pipelineId}  name={pipelineName}")
+                : new DoctorCheckResult(name, false, $"Pipeline id={pipelineId} not found in Azure DevOps.");
+        }
+        catch (Exception ex)
+        {
+            return new DoctorCheckResult(name, false, ex.Message);
+        }
     }
 }
