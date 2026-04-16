@@ -29,9 +29,21 @@ public sealed class DeployService(
         bool triggerBackend = true,
         bool triggerFrontend = true)
     {
-        var refName = tag is not null ? $"refs/tags/{tag}" : $"refs/heads/{_options.Branch}";
-        var refLabel = tag is not null ? $"tag '{tag}'" : $"branch '{_options.Branch}'";
+        if (tag is not null && string.IsNullOrWhiteSpace(tag))
+        {
+            throw new ArgumentException("Tag must not be empty or whitespace when provided.", nameof(tag));
+        }
 
+        if (string.IsNullOrWhiteSpace(_options.Branch))
+        {
+            throw new InvalidOperationException("Deploy configuration is invalid: Branch must not be empty or whitespace.");
+        }
+
+        var normalizedTag = tag?.Trim();
+        var normalizedBranch = _options.Branch.Trim();
+
+        var refName = normalizedTag is not null ? $"refs/tags/{normalizedTag}" : $"refs/heads/{normalizedBranch}";
+        var refLabel = normalizedTag is not null ? $"tag '{normalizedTag}'" : $"branch '{normalizedBranch}'";
         int? backendRunId = null;
         int? frontendRunId = null;
 
