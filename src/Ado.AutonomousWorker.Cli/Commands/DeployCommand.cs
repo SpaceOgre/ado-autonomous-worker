@@ -265,7 +265,7 @@ public sealed class DeployCommand(
         {
             foreach (var error in errors)
                 AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
-            throw new InvalidOperationException("Deploy configuration is incomplete. Check your appsettings.local.json or config.jsonc.");
+            throw new CommandAppException("Deploy configuration is incomplete. Check your appsettings.local.json or config.jsonc.");
         }
     }
 }
