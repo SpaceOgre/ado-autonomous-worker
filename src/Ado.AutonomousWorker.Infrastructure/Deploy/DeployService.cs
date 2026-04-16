@@ -20,22 +20,27 @@ public sealed class DeployService(
     /// <summary>
     /// Triggers the backend and frontend pipelines and waits for both to complete successfully.
     /// If <paramref name="tag"/> is provided, pipelines are triggered from that tag instead of the configured branch.
+    /// Optional <paramref name="backendPipelineId"/> and <paramref name="frontendPipelineId"/> override the configured definition IDs.
     /// Returns the run IDs for the triggered runs.
     /// </summary>
     public async Task<(int BackendRunId, int FrontendRunId)> TriggerPipelinesAsync(
         IProgress<string> progress,
         CancellationToken cancellationToken,
-        string? tag = null)
+        string? tag = null,
+        int? backendPipelineId = null,
+        int? frontendPipelineId = null)
     {
+        var effectiveBackendId = backendPipelineId ?? _options.BackendPipelineId;
+        var effectiveFrontendId = frontendPipelineId ?? _options.FrontendPipelineId;
         var refName = tag is not null ? $"refs/tags/{tag}" : $"refs/heads/{_options.Branch}";
         var refLabel = tag is not null ? $"tag '{tag}'" : $"branch '{_options.Branch}'";
 
-        progress.Report($"Triggering backend pipeline (id={_options.BackendPipelineId}) on {refLabel}…");
-        var backendRunId = await _adoClient.TriggerPipelineAsync(_options.BackendPipelineId, refName, cancellationToken);
+        progress.Report($"Triggering backend pipeline (id={effectiveBackendId}) on {refLabel}…");
+        var backendRunId = await _adoClient.TriggerPipelineAsync(effectiveBackendId, refName, cancellationToken);
         progress.Report($"Backend run #{backendRunId} started.");
 
-        progress.Report($"Triggering frontend pipeline (id={_options.FrontendPipelineId}) on {refLabel}…");
-        var frontendRunId = await _adoClient.TriggerPipelineAsync(_options.FrontendPipelineId, refName, cancellationToken);
+        progress.Report($"Triggering frontend pipeline (id={effectiveFrontendId}) on {refLabel}…");
+        var frontendRunId = await _adoClient.TriggerPipelineAsync(effectiveFrontendId, refName, cancellationToken);
         progress.Report($"Frontend run #{frontendRunId} started.");
 
         return (backendRunId, frontendRunId);

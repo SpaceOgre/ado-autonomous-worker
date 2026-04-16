@@ -25,6 +25,14 @@ public sealed class DeployCommand(
         [Description("Trigger the pipelines from this git tag instead of the default branch. Example: --tag v1.2.3")]
         [CommandOption("--tag <TAG>")]
         public string? Tag { get; init; }
+
+        [Description("Override the backend pipeline definition ID to trigger. Defaults to Deploy:BackendPipelineId in config.")]
+        [CommandOption("--backend-pipeline-id <ID>")]
+        public int? BackendPipelineId { get; init; }
+
+        [Description("Override the frontend pipeline definition ID to trigger. Defaults to Deploy:FrontendPipelineId in config.")]
+        [CommandOption("--frontend-pipeline-id <ID>")]
+        public int? FrontendPipelineId { get; init; }
     }
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -36,7 +44,7 @@ public sealed class DeployCommand(
             return await RunDryRunAsync(cancellationToken);
         }
 
-        return await RunDeployAsync(settings.Tag, cancellationToken);
+        return await RunDeployAsync(settings.Tag, settings.BackendPipelineId, settings.FrontendPipelineId, cancellationToken);
     }
 
     private async Task<int> RunDryRunAsync(CancellationToken cancellationToken)
@@ -73,17 +81,20 @@ public sealed class DeployCommand(
         return 0;
     }
 
-    private async Task<int> RunDeployAsync(string? tag, CancellationToken cancellationToken)
+    private async Task<int> RunDeployAsync(string? tag, int? backendPipelineIdOverride, int? frontendPipelineIdOverride, CancellationToken cancellationToken)
     {
-        ValidateConfig();
+        var backendPipelineId = backendPipelineIdOverride ?? _options.BackendPipelineId;
+        var frontendPipelineId = frontendPipelineIdOverride ?? _options.FrontendPipelineId;
+
+        ValidateConfig(backendPipelineId, frontendPipelineId);
 
         var refLabel = tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}";
 
         AnsiConsole.Write(CliStyle.SectionRule("Pipeline Configuration", "deepskyblue1"));
         var configTable = new Table().Border(TableBorder.Rounded)
             .AddColumns("Setting", "Value");
-        configTable.AddRow("Backend Pipeline ID", _options.BackendPipelineId.ToString());
-        configTable.AddRow("Frontend Pipeline ID", _options.FrontendPipelineId.ToString());
+        configTable.AddRow("Backend Pipeline ID", backendPipelineId.ToString());
+        configTable.AddRow("Frontend Pipeline ID", frontendPipelineId.ToString());
         configTable.AddRow("Trigger Ref", Markup.Escape(refLabel));
         configTable.AddRow("Ready-for-Test Assignee", Markup.Escape(_options.ReadyForTestAssignee));
         configTable.AddRow("Poll Interval", $"{_options.PollIntervalSeconds}s");
@@ -112,7 +123,7 @@ public sealed class DeployCommand(
                 progressMessages.Add(msg);
             });
 
-            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(progress, cancellationToken, tag);
+            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(progress, cancellationToken, tag, backendPipelineId, frontendPipelineId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -234,13 +245,13 @@ public sealed class DeployCommand(
         AnsiConsole.WriteLine();
     }
 
-    private void ValidateConfig()
+    private void ValidateConfig(int backendPipelineId, int frontendPipelineId)
     {
         var errors = new List<string>();
-        if (_options.BackendPipelineId <= 0)
-            errors.Add("Deploy:BackendPipelineId is not configured.");
-        if (_options.FrontendPipelineId <= 0)
-            errors.Add("Deploy:FrontendPipelineId is not configured.");
+        if (backendPipelineId <= 0)
+            errors.Add("Backend pipeline ID is not configured. Set Deploy:BackendPipelineId in config or pass --backend-pipeline-id.");
+        if (frontendPipelineId <= 0)
+            errors.Add("Frontend pipeline ID is not configured. Set Deploy:FrontendPipelineId in config or pass --frontend-pipeline-id.");
         if (string.IsNullOrWhiteSpace(_options.ReadyForTestAssignee))
             errors.Add("Deploy:ReadyForTestAssignee is not configured.");
 
