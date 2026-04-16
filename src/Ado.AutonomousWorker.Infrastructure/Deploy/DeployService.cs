@@ -155,23 +155,22 @@ public sealed class DeployService(
 
         var storyChanges = new List<DeployWorkItemChange>();
 
+        // Precompute the union of all unknown child IDs across every story so we can
+        // fetch their states in a single batched API call instead of one call per story.
+        var allUnknownIds = stories
+            .SelectMany(s => s.ChildIds)
+            .Where(id => !resolvedIds.Contains(id))
+            .Distinct()
+            .ToArray();
+
+        var childStateMap = allUnknownIds.Length > 0
+            ? await _adoClient.GetWorkItemStatesAsync(allUnknownIds, cancellationToken)
+            : (IReadOnlyDictionary<int, string>)new Dictionary<int, string>();
+
         foreach (var (story, childIds) in stories)
         {
             if (childIds.Count == 0)
                 continue;
-
-            // Get current states for children we don't already know about
-            var unknownIds = childIds.Where(id => !resolvedIds.Contains(id)).ToArray();
-            IReadOnlyDictionary<int, string> childStates;
-
-            if (unknownIds.Length > 0)
-            {
-                childStates = await _adoClient.GetWorkItemStatesAsync(unknownIds, cancellationToken);
-            }
-            else
-            {
-                childStates = new Dictionary<int, string>();
-            }
 
             var allDone = childIds.All(id =>
             {
@@ -179,7 +178,7 @@ public sealed class DeployService(
                 if (resolvedIds.Contains(id))
                     return true;
                 // Already in an acceptable end state
-                if (childStates.TryGetValue(id, out var state))
+                if (childStateMap.TryGetValue(id, out var state))
                     return IsAcceptableChildState(state);
                 return false;
             });

@@ -87,7 +87,8 @@ public sealed class DeployCommand(
 
     private async Task<int> RunDeployAsync(string? tag, bool triggerBackend, bool triggerFrontend, CancellationToken cancellationToken)
     {
-        ValidateConfig(triggerBackend, triggerFrontend);
+        if (!ValidateConfig(triggerBackend, triggerFrontend))
+            return 1;
 
         var refLabel = tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}";
         var pipelineLabel = (triggerBackend, triggerFrontend) switch
@@ -251,7 +252,7 @@ public sealed class DeployCommand(
         AnsiConsole.WriteLine();
     }
 
-    private void ValidateConfig(bool triggerBackend, bool triggerFrontend)
+    private bool ValidateConfig(bool triggerBackend, bool triggerFrontend)
     {
         var errors = new List<string>();
         if (triggerBackend && _options.BackendPipelineId <= 0)
@@ -261,11 +262,12 @@ public sealed class DeployCommand(
         if (string.IsNullOrWhiteSpace(_options.ReadyForTestAssignee))
             errors.Add("Deploy:ReadyForTestAssignee is not configured.");
 
-        if (errors.Count > 0)
-        {
-            foreach (var error in errors)
-                AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
-            throw new CommandAppException("Deploy configuration is incomplete. Check your appsettings.local.json or config.jsonc.");
-        }
+        if (errors.Count == 0)
+            return true;
+
+        foreach (var error in errors)
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+        AnsiConsole.MarkupLine("[red]Deploy configuration is incomplete. Check your appsettings.local.json or config.jsonc.[/]");
+        return false;
     }
 }
