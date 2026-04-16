@@ -3,6 +3,7 @@ using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Rules;
 using Ado.AutonomousWorker.Infrastructure.Agents;
 using Ado.AutonomousWorker.Infrastructure.AzureDevOps;
+using Ado.AutonomousWorker.Infrastructure.Deploy;
 using Ado.AutonomousWorker.Infrastructure.Diagnostics;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 using Ado.AutonomousWorker.Infrastructure.Orchestration;
@@ -27,6 +28,7 @@ public static class DependencyInjection
         services.Configure<StorageOptions>(configuration.GetSection("Storage"));
         services.PostConfigure<StorageOptions>(options => options.NormalizePaths(storageBaseOverride));
         services.Configure<WorkerOptions>(configuration.GetSection("Worker"));
+        services.Configure<DeployOptions>(configuration.GetSection("Deploy"));
 
         services.AddDbContextFactory<WorkerDbContext>((provider, options) =>
         {
@@ -54,6 +56,7 @@ public static class DependencyInjection
         services.AddSingleton<ITaskOrchestrator, TaskOrchestrator>();
         services.AddSingleton<QueueInspector>();
         services.AddSingleton<DoctorService>();
+        services.AddSingleton<DeployService>();
         services.AddSingleton<ProcessCommandRunner>();
 
         services.AddTransient<CodexRunner>();
