@@ -66,11 +66,7 @@ public static class AgentOutputNormalizer
 
         var messages = new List<string>();
 
-        if (content.ValueKind == JsonValueKind.String)
-        {
-            AddIfPresent(messages, content.GetString());
-        }
-        else if (content.ValueKind == JsonValueKind.Array)
+        if (content.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in content.EnumerateArray())
             {

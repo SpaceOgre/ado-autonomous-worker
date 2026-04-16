@@ -145,12 +145,14 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
     // {"type":"result","subtype":"success","result":"<text>","model":"...","usage":{...},"total_cost_usd":0.001,...}
     // With --json-schema the result line also contains "structured_output":{...}.
     // Falls back to treating the entire raw string as a single JSON object for compat.
-    private static (string Summary, string? StructuredPayload, AgentUsage? Usage) ParseEnvelope(string raw, bool hasSchema)
+    internal static (string Summary, string? StructuredPayload, AgentUsage? Usage) ParseEnvelope(string raw, bool hasSchema)
     {
         if (string.IsNullOrWhiteSpace(raw))
             return (raw, null, null);
 
-        foreach (var line in raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        // Iterate in reverse: the result line is always last in stream-json output, so
+        // scanning from the end finds it on the first iteration.
+        foreach (var line in raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Reverse())
         {
             if (!line.StartsWith('{'))
                 continue;
@@ -163,6 +165,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             }
             catch (JsonException)
             {
+                // Skip malformed lines — the result line will be found on a later iteration.
             }
         }
 
