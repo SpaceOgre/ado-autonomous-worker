@@ -40,7 +40,7 @@ public static class CliCommandCatalog
             },
             ["deploy"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {
-                [string.Empty] = ["--dry-run", "--tag", "--backend-pipeline-id", "--frontend-pipeline-id"],
+                [string.Empty] = ["--dry-run", "--tag", "--backend", "--frontend"],
             },
             ["execution"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {

@@ -18,41 +18,48 @@ public sealed class DeployService(
     private const string ReadyForTestState = "Ready for Test";
 
     /// <summary>
-    /// Triggers the backend and frontend pipelines and waits for both to complete successfully.
-    /// If <paramref name="tag"/> is provided, pipelines are triggered from that tag instead of the configured branch.
-    /// Optional <paramref name="backendPipelineId"/> and <paramref name="frontendPipelineId"/> override the configured definition IDs.
-    /// Returns the run IDs for the triggered runs.
+    /// Triggers the selected pipelines on the configured branch or the given <paramref name="tag"/>.
+    /// Pass <paramref name="triggerBackend"/> and/or <paramref name="triggerFrontend"/> to control which pipelines run.
+    /// Returns the run IDs for triggered pipelines, or <c>null</c> for pipelines that were skipped.
     /// </summary>
-    public async Task<(int BackendRunId, int FrontendRunId)> TriggerPipelinesAsync(
+    public async Task<(int? BackendRunId, int? FrontendRunId)> TriggerPipelinesAsync(
         IProgress<string> progress,
         CancellationToken cancellationToken,
         string? tag = null,
-        int? backendPipelineId = null,
-        int? frontendPipelineId = null)
+        bool triggerBackend = true,
+        bool triggerFrontend = true)
     {
-        var effectiveBackendId = backendPipelineId ?? _options.BackendPipelineId;
-        var effectiveFrontendId = frontendPipelineId ?? _options.FrontendPipelineId;
         var refName = tag is not null ? $"refs/tags/{tag}" : $"refs/heads/{_options.Branch}";
         var refLabel = tag is not null ? $"tag '{tag}'" : $"branch '{_options.Branch}'";
 
-        progress.Report($"Triggering backend pipeline (id={effectiveBackendId}) on {refLabel}…");
-        var backendRunId = await _adoClient.TriggerPipelineAsync(effectiveBackendId, refName, cancellationToken);
-        progress.Report($"Backend run #{backendRunId} started.");
+        int? backendRunId = null;
+        int? frontendRunId = null;
 
-        progress.Report($"Triggering frontend pipeline (id={effectiveFrontendId}) on {refLabel}…");
-        var frontendRunId = await _adoClient.TriggerPipelineAsync(effectiveFrontendId, refName, cancellationToken);
-        progress.Report($"Frontend run #{frontendRunId} started.");
+        if (triggerBackend)
+        {
+            progress.Report($"Triggering backend pipeline (id={_options.BackendPipelineId}) on {refLabel}…");
+            backendRunId = await _adoClient.TriggerPipelineAsync(_options.BackendPipelineId, refName, cancellationToken);
+            progress.Report($"Backend run #{backendRunId} started.");
+        }
+
+        if (triggerFrontend)
+        {
+            progress.Report($"Triggering frontend pipeline (id={_options.FrontendPipelineId}) on {refLabel}…");
+            frontendRunId = await _adoClient.TriggerPipelineAsync(_options.FrontendPipelineId, refName, cancellationToken);
+            progress.Report($"Frontend run #{frontendRunId} started.");
+        }
 
         return (backendRunId, frontendRunId);
     }
 
     /// <summary>
-    /// Polls both pipeline runs until they finish or time out.
-    /// Throws <see cref="InvalidOperationException"/> if either run fails.
+    /// Polls the triggered pipeline runs until they finish or time out.
+    /// Pass <c>null</c> for a run ID to skip polling for that pipeline.
+    /// Throws <see cref="InvalidOperationException"/> if any triggered run fails or times out.
     /// </summary>
     public async Task WaitForPipelinesAsync(
-        int backendRunId,
-        int frontendRunId,
+        int? backendRunId,
+        int? frontendRunId,
         IProgress<string> progress,
         CancellationToken cancellationToken)
     {
@@ -60,8 +67,8 @@ public sealed class DeployService(
         var pollInterval = TimeSpan.FromSeconds(_options.PollIntervalSeconds);
         var deadline = DateTimeOffset.UtcNow + timeout;
 
-        var backendDone = false;
-        var frontendDone = false;
+        var backendDone = backendRunId is null;
+        var frontendDone = frontendRunId is null;
 
         while ((!backendDone || !frontendDone) && DateTimeOffset.UtcNow < deadline)
         {
@@ -69,7 +76,7 @@ public sealed class DeployService(
 
             if (!backendDone)
             {
-                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(_options.BackendPipelineId, backendRunId, cancellationToken);
+                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(_options.BackendPipelineId, backendRunId!.Value, cancellationToken);
                 _logger.LogDebug("Backend run #{RunId}: state={State} result={Result}", backendRunId, state, result);
 
                 if (IsFinished(state))
@@ -87,7 +94,7 @@ public sealed class DeployService(
 
             if (!frontendDone)
             {
-                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(_options.FrontendPipelineId, frontendRunId, cancellationToken);
+                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(_options.FrontendPipelineId, frontendRunId!.Value, cancellationToken);
                 _logger.LogDebug("Frontend run #{RunId}: state={State} result={Result}", frontendRunId, state, result);
 
                 if (IsFinished(state))

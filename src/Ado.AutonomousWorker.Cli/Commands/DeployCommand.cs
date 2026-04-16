@@ -26,13 +26,13 @@ public sealed class DeployCommand(
         [CommandOption("--tag <TAG>")]
         public string? Tag { get; init; }
 
-        [Description("Override the backend pipeline definition ID to trigger. Defaults to Deploy:BackendPipelineId in config.")]
-        [CommandOption("--backend-pipeline-id <ID>")]
-        public int? BackendPipelineId { get; init; }
+        [Description("Only trigger the backend pipeline. Cannot be combined with --frontend unless both are specified (which is the default).")]
+        [CommandOption("--backend")]
+        public bool BackendOnly { get; init; }
 
-        [Description("Override the frontend pipeline definition ID to trigger. Defaults to Deploy:FrontendPipelineId in config.")]
-        [CommandOption("--frontend-pipeline-id <ID>")]
-        public int? FrontendPipelineId { get; init; }
+        [Description("Only trigger the frontend pipeline. Cannot be combined with --backend unless both are specified (which is the default).")]
+        [CommandOption("--frontend")]
+        public bool FrontendOnly { get; init; }
     }
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -44,7 +44,11 @@ public sealed class DeployCommand(
             return await RunDryRunAsync(cancellationToken);
         }
 
-        return await RunDeployAsync(settings.Tag, settings.BackendPipelineId, settings.FrontendPipelineId, cancellationToken);
+        // If neither flag is set, trigger both (default). If one or both flags are set, trigger only those.
+        var triggerBackend = !settings.BackendOnly && !settings.FrontendOnly || settings.BackendOnly;
+        var triggerFrontend = !settings.BackendOnly && !settings.FrontendOnly || settings.FrontendOnly;
+
+        return await RunDeployAsync(settings.Tag, triggerBackend, triggerFrontend, cancellationToken);
     }
 
     private async Task<int> RunDryRunAsync(CancellationToken cancellationToken)
@@ -81,20 +85,26 @@ public sealed class DeployCommand(
         return 0;
     }
 
-    private async Task<int> RunDeployAsync(string? tag, int? backendPipelineIdOverride, int? frontendPipelineIdOverride, CancellationToken cancellationToken)
+    private async Task<int> RunDeployAsync(string? tag, bool triggerBackend, bool triggerFrontend, CancellationToken cancellationToken)
     {
-        var backendPipelineId = backendPipelineIdOverride ?? _options.BackendPipelineId;
-        var frontendPipelineId = frontendPipelineIdOverride ?? _options.FrontendPipelineId;
-
-        ValidateConfig(backendPipelineId, frontendPipelineId);
+        ValidateConfig(triggerBackend, triggerFrontend);
 
         var refLabel = tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}";
+        var pipelineLabel = (triggerBackend, triggerFrontend) switch
+        {
+            (true, true) => "both pipelines",
+            (true, false) => "backend pipeline only",
+            (false, true) => "frontend pipeline only",
+            _ => "no pipelines",
+        };
 
         AnsiConsole.Write(CliStyle.SectionRule("Pipeline Configuration", "deepskyblue1"));
         var configTable = new Table().Border(TableBorder.Rounded)
             .AddColumns("Setting", "Value");
-        configTable.AddRow("Backend Pipeline ID", backendPipelineId.ToString());
-        configTable.AddRow("Frontend Pipeline ID", frontendPipelineId.ToString());
+        if (triggerBackend)
+            configTable.AddRow("Backend Pipeline ID", _options.BackendPipelineId.ToString());
+        if (triggerFrontend)
+            configTable.AddRow("Frontend Pipeline ID", _options.FrontendPipelineId.ToString());
         configTable.AddRow("Trigger Ref", Markup.Escape(refLabel));
         configTable.AddRow("Ready-for-Test Assignee", Markup.Escape(_options.ReadyForTestAssignee));
         configTable.AddRow("Poll Interval", $"{_options.PollIntervalSeconds}s");
@@ -103,7 +113,7 @@ public sealed class DeployCommand(
         AnsiConsole.WriteLine();
 
         if (AnsiConsole.Profile.Capabilities.Interactive &&
-            !AnsiConsole.Confirm("Trigger both pipelines and wait for completion?"))
+            !AnsiConsole.Confirm($"Trigger {pipelineLabel} and wait for completion?"))
         {
             return 0;
         }
@@ -111,19 +121,15 @@ public sealed class DeployCommand(
         // ── Step 1: Trigger pipelines ─────────────────────────────────────
         AnsiConsole.Write(CliStyle.SectionRule("Triggering Pipelines", "deepskyblue1"));
 
-        int backendRunId;
-        int frontendRunId;
+        int? backendRunId;
+        int? frontendRunId;
 
         try
         {
-            var progressMessages = new List<string>();
             var progress = new Progress<string>(msg =>
-            {
-                AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}");
-                progressMessages.Add(msg);
-            });
+                AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
 
-            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(progress, cancellationToken, tag, backendPipelineId, frontendPipelineId);
+            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(progress, cancellationToken, tag, triggerBackend, triggerFrontend);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -161,7 +167,7 @@ public sealed class DeployCommand(
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[green]✓ Both pipelines completed successfully.[/]");
+        AnsiConsole.MarkupLine($"[green]✓ {Markup.Escape(char.ToUpper(pipelineLabel[0]) + pipelineLabel[1..])} completed successfully.[/]");
         AnsiConsole.WriteLine();
 
         // ── Step 3: Compute work item changes ─────────────────────────────
@@ -245,13 +251,13 @@ public sealed class DeployCommand(
         AnsiConsole.WriteLine();
     }
 
-    private void ValidateConfig(int backendPipelineId, int frontendPipelineId)
+    private void ValidateConfig(bool triggerBackend, bool triggerFrontend)
     {
         var errors = new List<string>();
-        if (backendPipelineId <= 0)
-            errors.Add("Backend pipeline ID is not configured. Set Deploy:BackendPipelineId in config or pass --backend-pipeline-id.");
-        if (frontendPipelineId <= 0)
-            errors.Add("Frontend pipeline ID is not configured. Set Deploy:FrontendPipelineId in config or pass --frontend-pipeline-id.");
+        if (triggerBackend && _options.BackendPipelineId <= 0)
+            errors.Add("Deploy:BackendPipelineId is not configured.");
+        if (triggerFrontend && _options.FrontendPipelineId <= 0)
+            errors.Add("Deploy:FrontendPipelineId is not configured.");
         if (string.IsNullOrWhiteSpace(_options.ReadyForTestAssignee))
             errors.Add("Deploy:ReadyForTestAssignee is not configured.");
 
