@@ -117,3 +117,29 @@ internal sealed record AdoWorkItemCommentsResponse(
 
 internal sealed record AdoWorkItemCommentItem(
     [property: JsonPropertyName("text")] string? Text);
+
+// Pipeline / release API responses
+internal sealed record AdoPipelineRunResponse(
+    [property: JsonPropertyName("id")] int Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("state")] string? State,
+    [property: JsonPropertyName("result")] string? Result,
+    [property: JsonPropertyName("url")] string? Url);
+
+internal sealed record AdoPipelineResponse(
+    [property: JsonPropertyName("id")] int Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("url")] string? Url);
+
+internal sealed record AdoSprintWorkItemsResponse(
+    [property: JsonPropertyName("workItems")] IReadOnlyList<AdoWorkItemRef>? WorkItems);
+
+internal sealed record AdoWorkItemRelationsResponse(
+    [property: JsonPropertyName("id")] int Id,
+    [property: JsonPropertyName("fields")] AdoWorkItemBaseFields Fields,
+    [property: JsonPropertyName("relations")] IReadOnlyList<AdoWorkItemRelation>? Relations);
+
+internal sealed record AdoWorkItemBaseFields(
+    [property: JsonPropertyName("System.WorkItemType")] string? WorkItemType,
+    [property: JsonPropertyName("System.Title")] string? Title,
+    [property: JsonPropertyName("System.State")] string? State);

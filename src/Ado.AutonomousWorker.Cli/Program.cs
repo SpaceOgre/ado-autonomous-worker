@@ -4,10 +4,12 @@ using Ado.AutonomousWorker.Cli.Completion;
 using Ado.AutonomousWorker.Cli.Presentation;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Infrastructure;
+using Ado.AutonomousWorker.Infrastructure.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
 using Spectre.Console.Cli;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -17,23 +19,16 @@ var userConfigPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc
 builder.Configuration
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
     .AddJsonFile(userConfigPath, optional: true, reloadOnChange: false)
     .AddEnvironmentVariables("AdoWorker_");
 
+var storageBaseOverride = StorageOptions.GetDevStorageOverride(builder.Environment.IsDevelopment());
 builder.Logging.ClearProviders();
-var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
-var minimumLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
-builder.Logging.SetMinimumLevel(minimumLevel);
-builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
-builder.Logging.AddSimpleConsole(options =>
-{
-    options.TimestampFormat = "HH:mm:ss ";
-    options.SingleLine = true;
-});
+builder.Logging.AddSerilog(WorkerLoggingSetup.CreateLogger(builder.Configuration, storageBaseOverride), dispose: true);
 
-builder.Services.AddAutonomousWorker(builder.Configuration);
+builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();
@@ -50,6 +45,7 @@ builder.Services.AddSingleton<ResetCommand>();
 builder.Services.AddSingleton<AgentTestCommand>();
 builder.Services.AddSingleton<AzureDevOpsCommentTestCommand>();
 builder.Services.AddSingleton<SetPhaseCommand>();
+builder.Services.AddSingleton<DeployCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
 builder.Services.AddSingleton<TerminalTitleService>();
@@ -94,6 +90,7 @@ app.Configure(config =>
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
     config.AddCommand<RunCommand>("run").WithDescription("Preview the selected queue, then process it and stop on the first failure.");
+    config.AddCommand<DeployCommand>("deploy").WithDescription("Trigger frontend and backend pipelines, wait for success, then move sprint items to Ready for Test.");
     config.AddCommand<VersionCommand>("version").WithDescription("Show the installed ado-worker version and runtime information.");
     config.AddBranch("completion", completion =>
     {

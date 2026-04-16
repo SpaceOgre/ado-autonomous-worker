@@ -34,18 +34,10 @@ public sealed class RunCommand(
             return 0;
         }
 
-        if (AnsiConsole.Profile.Capabilities.Interactive)
-        {
-            AnsiConsole.Clear();
-        }
-
-        RunPreambleDisplay.ShowRunHeader(queue, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun);
-
         var executionIds = new List<string>(queue.Length);
         for (var index = 0; index < queue.Length; index++)
         {
             var item = queue[index];
-            RunPreambleDisplay.BeginLiveRunScreen(index + 1, queue.Length, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun, item);
             var title = $"Queue {index + 1}/{queue.Length} - Work item #{item.WorkItemId}";
             var executionId = await liveDisplay.RunForWorkItemAsync(
                 title,

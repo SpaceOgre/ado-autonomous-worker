@@ -8,13 +8,13 @@ public sealed class StorageOptions
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Ado.AutonomousWorker");
 
-    public string DataRoot { get; set; } = ".data";
+    public string DataRoot { get; set; } = string.Empty;
 
-    public string DatabasePath { get; set; } = ".data\\worker.db";
+    public string DatabasePath { get; set; } = string.Empty;
 
-    public string LogRoot { get; set; } = ".data\\logs";
+    public string LogRoot { get; set; } = string.Empty;
 
-    public string ArtifactRoot { get; set; } = ".data\\artifacts";
+    public string ArtifactRoot { get; set; } = string.Empty;
 
     public string GetWorkItemArtifactRoot(int workItemId)
     {
@@ -31,9 +31,30 @@ public sealed class StorageOptions
         return Path.Combine(GetWorkItemArtifactRoot(workItemId), "tasks", childTaskId.ToString());
     }
 
-    public void NormalizePaths()
+    /// <summary>
+    /// Returns a .data path under the repository root for development runs,
+    /// found by walking up from the binary output directory until a .git marker is located.
+    /// Returns null in non-development environments.
+    /// </summary>
+    public static string? GetDevStorageOverride(bool isDevelopment)
     {
-        var defaultRoot = DefaultAppFolder;
+        if (!isDevelopment)
+            return null;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (dir.GetDirectories(".git").Length > 0)
+                return Path.Combine(dir.FullName, ".data");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Directory.GetCurrentDirectory(), ".data");
+    }
+
+    public void NormalizePaths(string? baseOverride = null)
+    {
+        var defaultRoot = string.IsNullOrWhiteSpace(baseOverride) ? DefaultAppFolder : baseOverride;
         DataRoot = NormalizeRoot(DataRoot, defaultRoot);
         DatabasePath = NormalizeChildPath(DatabasePath, "worker.db", DataRoot);
         LogRoot = NormalizeChildPath(LogRoot, "logs", DataRoot);
@@ -42,7 +63,7 @@ public sealed class StorageOptions
 
     private static string NormalizeRoot(string? value, string defaultRoot)
     {
-        if (string.IsNullOrWhiteSpace(value) || string.Equals(value, ".data", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(value))
         {
             return Path.GetFullPath(defaultRoot);
         }
@@ -59,23 +80,8 @@ public sealed class StorageOptions
             return Path.GetFullPath(Path.Combine(dataRoot, defaultRelativePath));
         }
 
-        if (Path.IsPathRooted(value))
-        {
-            return Path.GetFullPath(value);
-        }
-
-        const string legacyPrefix = ".data";
-        if (string.Equals(value, legacyPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetFullPath(dataRoot);
-        }
-
-        if (value.StartsWith($"{legacyPrefix}\\", StringComparison.OrdinalIgnoreCase) ||
-            value.StartsWith($"{legacyPrefix}/", StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetFullPath(Path.Combine(dataRoot, value[($"{legacyPrefix}\\").Length..]));
-        }
-
-        return Path.GetFullPath(Path.Combine(dataRoot, value));
+        return Path.IsPathRooted(value)
+            ? Path.GetFullPath(value)
+            : Path.GetFullPath(Path.Combine(dataRoot, value));
     }
 }

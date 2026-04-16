@@ -28,7 +28,7 @@ public interface IAzureDevOpsClient
 
     Task AddCommentAsync(int workItemId, string comment, CancellationToken cancellationToken);
 
-    /// <summary>Returns QueueItems (Kind=AiPrFix) for PRs that have both "AI-Generated" and "AI-Rework" labels.</summary>
+    /// <summary>Returns QueueItems (Kind=AiPrFix) for PRs that have the "AI-Rework" label.</summary>
     Task<IReadOnlyList<QueueItem>> QueryAiPrFixAsync(CancellationToken cancellationToken);
 
     /// <summary>Returns a single QueueItem (Kind=AiPrFix) for the given PR ID, or null if the PR lacks required labels or has no linked work items.</summary>
@@ -42,4 +42,31 @@ public interface IAzureDevOpsClient
 
     /// <summary>Removes a label from a PR by name (case-insensitive).</summary>
     Task RemovePullRequestLabelAsync(string repositoryName, int pullRequestId, string labelName, CancellationToken cancellationToken);
+
+    // ── Deploy / pipeline ──────────────────────────────────────────────────
+
+    /// <summary>Verifies that a pipeline with the given ID exists. Returns the pipeline name on success, or null if not found.</summary>
+    Task<string?> TryGetPipelineNameAsync(int pipelineId, CancellationToken cancellationToken);
+
+    /// <summary>Triggers a pipeline run on the specified git ref (e.g. <c>refs/heads/main</c> or <c>refs/tags/v1.2.3</c>) and returns the run ID.</summary>
+    Task<int> TriggerPipelineAsync(int pipelineId, string refName, CancellationToken cancellationToken);
+
+    /// <summary>Gets the current state and result of a pipeline run.</summary>
+    Task<(string State, string? Result)> GetPipelineRunStatusAsync(int pipelineId, int runId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns all Task and Bug work items in the current sprint whose state is "Resolved".
+    /// </summary>
+    Task<IReadOnlyList<WorkItemSummary>> QueryResolvedSprintItemsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns all active User Story work items in the current sprint together with their child work-item IDs.
+    /// </summary>
+    Task<IReadOnlyList<(WorkItemSummary Story, IReadOnlyList<int> ChildIds)>> QueryActiveSprintUserStoriesWithChildrenAsync(CancellationToken cancellationToken);
+
+    /// <summary>Returns the state of the given work items keyed by ID.</summary>
+    Task<IReadOnlyDictionary<int, string>> GetWorkItemStatesAsync(IReadOnlyList<int> workItemIds, CancellationToken cancellationToken);
+
+    /// <summary>Updates both the state and assignee of a work item in a single PATCH call.</summary>
+    Task UpdateWorkItemStateAndAssigneeAsync(int workItemId, string state, string assignee, CancellationToken cancellationToken);
 }

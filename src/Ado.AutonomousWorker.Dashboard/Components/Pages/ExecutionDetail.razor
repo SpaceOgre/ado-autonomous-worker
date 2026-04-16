@@ -1,0 +1,595 @@
+@page "/executions/{ExecutionId}"
+@rendermode InteractiveServer
+@inject IStateStore StateStore
+@inject NavigationManager Nav
+@inject IOptions<StorageOptions> StorageOptions
+@implements IDisposable
+
+<PageTitle>Execution Detail — ADO Autonomous Worker</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_execution is null)
+{
+    <MudAlert Severity="Severity.Error">Execution not found.</MudAlert>
+}
+else
+{
+    <MudBreadcrumbs Items="_breadcrumbs" Class="pa-0 mb-2" />
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="8">
+            <MudText Typo="Typo.h5">@_execution.Title</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Work Item #@_execution.WorkItemId · @_execution.ExecutionId</MudText>
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2 flex-wrap">
+            <MudChip T="string" Color="KindColor(_execution.Kind)">@_execution.Kind</MudChip>
+            <MudChip T="string" Color="PhaseColor(_execution.Phase)">@_execution.Phase</MudChip>
+            <MudChip T="string" Color="StatusColor(_execution.Status)">@_execution.Status</MudChip>
+            @if (_execution.PullRequestId.HasValue)
+            {
+                <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR #@_execution.PullRequestId</MudChip>
+            }
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption">Created</MudText>
+            <MudText>@_execution.CreatedAt.ToLocalTime().ToString("g")</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption">Updated</MudText>
+            <MudText>@_execution.UpdatedAt.ToLocalTime().ToString("g")</MudText>
+        </MudItem>
+    </MudGrid>
+
+    <MudDivider Class="my-4" />
+
+    <MudTabs Elevation="0" Rounded="false">
+
+        <MudTabPanel Text="Events" Icon="@Icons.Material.Filled.EventNote">
+            @if (_events.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No events recorded.</MudText>
+            }
+            else
+            {
+                <MudTimeline TimelinePosition="TimelinePosition.Start">
+                    @foreach (var ev in _events)
+                    {
+                        <MudTimelineItem Color="PhaseColor(ev.Phase)" Size="Size.Small">
+                            <ItemContent>
+                                <MudText Typo="Typo.body2">@ev.Message</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @ev.Phase · @ev.Timestamp.ToLocalTime().ToString("HH:mm:ss")
+                                </MudText>
+                            </ItemContent>
+                        </MudTimelineItem>
+                    }
+                </MudTimeline>
+            }
+        </MudTabPanel>
+
+        @if (_plan is not null)
+        {
+            <MudTabPanel Text="Plan" Icon="@Icons.Material.Filled.Assignment">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Summary</MudText>
+                <div class="mb-4">@((MarkupString)RenderMarkdown(_plan.Summary))</div>
+
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2">Repositories</MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var repo in _plan.Repositories)
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.Code">@repo</MudListItem>
+                            }
+                        </MudList>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2">Risks</MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var risk in _plan.Risks)
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.Warning" IconColor="Color.Warning">@risk</MudListItem>
+                            }
+                        </MudList>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2">Validation Targets</MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var target in _plan.ValidationTargets)
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.CheckCircle">@target</MudListItem>
+                            }
+                        </MudList>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2">Test Intent</MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var intent in _plan.TestIntent)
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.BugReport">@intent</MudListItem>
+                            }
+                        </MudList>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+        }
+
+        @if (_review is not null)
+        {
+            <MudTabPanel Text="Review" Icon="@Icons.Material.Filled.RateReview">
+                <MudText Typo="Typo.body1" Class="mb-3">@_review.Summary</MudText>
+                @if (_review.Findings.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Findings</MudText>
+                    @foreach (var finding in _review.Findings)
+                    {
+                        <MudCard Class="mb-2">
+                            <MudCardContent>
+                                <MudText Typo="Typo.subtitle2">
+                                    <MudChip T="string" Size="Size.Small" Color="SeverityColor(finding.Severity)" Class="mr-1">@finding.Severity</MudChip>
+                                    @finding.Title
+                                </MudText>
+                                <MudText Typo="Typo.body2" Class="mt-1">@finding.Rationale</MudText>
+                                @if (!string.IsNullOrEmpty(finding.FilePath))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@finding.FilePath</MudText>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                }
+                else
+                {
+                    <MudText Color="Color.Secondary">No findings.</MudText>
+                }
+            </MudTabPanel>
+        }
+
+        <MudTabPanel Text="Agent Output" Icon="@Icons.Material.Filled.Terminal">
+            @if (_agentSessions.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No agent sessions recorded.</MudText>
+            }
+            else
+            {
+                @foreach (var session in _agentSessions)
+                {
+                    var sessionChunks = _chunksBySession.GetValueOrDefault(session.SessionId, []);
+                    <MudExpansionPanels Class="mb-2">
+                        <MudExpansionPanel>
+                            <TitleContent>
+                                <MudText Typo="Typo.subtitle2">
+                                    <MudIcon Icon="@RoleIcon(session.Role)" Size="Size.Small" Class="mr-1" />
+                                    @session.Role (@session.Provider)
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true"> — @session.SessionId</MudText>
+                                </MudText>
+                            </TitleContent>
+                            <ChildContent>
+                                @if (sessionChunks.Count == 0)
+                                {
+                                    <MudText Color="Color.Secondary" Typo="Typo.caption">No output captured.</MudText>
+                                }
+                                else
+                                {
+                                    <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto;">@string.Join(string.Empty, sessionChunks.Select(c => c.Content))</pre>
+                                }
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Logs" Icon="@Icons.Material.Filled.Article">
+            @if (_agentSessions.Count == 0 && _extraLogFiles.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No log files found.</MudText>
+            }
+            else
+            {
+                @if (_agentSessions.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Agent Transcripts</MudText>
+                    @foreach (var session in _agentSessions)
+                    {
+                        <MudExpansionPanels Class="mb-2">
+                            <MudExpansionPanel>
+                                <TitleContent>
+                                    <MudText Typo="Typo.subtitle2">
+                                        <MudIcon Icon="@RoleIcon(session.Role)" Size="Size.Small" Class="mr-1" />
+                                        @session.Role (@session.Provider)
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true"> — @Path.GetFileName(session.TranscriptPath)</MudText>
+                                    </MudText>
+                                </TitleContent>
+                                <ChildContent>
+                                    @{
+                                        var hasLog = _logContents.TryGetValue(session.SessionId, out var content);
+                                    }
+                                    @if (!hasLog)
+                                    {
+                                        <MudText Color="Color.Secondary" Typo="Typo.caption">Log file not found: @session.TranscriptPath</MudText>
+                                    }
+                                    else if (content is { Length: 0 })
+                                    {
+                                        <MudText Color="Color.Secondary" Typo="Typo.caption">Log file is empty.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 600px; overflow-y: auto;">@content</pre>
+                                    }
+                                </ChildContent>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                }
+
+                @if (_extraLogFiles.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Other Logs (git, validation, etc.)</MudText>
+                    @foreach (var (logPath, logKey) in _extraLogFiles)
+                    {
+                        <MudExpansionPanels Class="mb-2">
+                            <MudExpansionPanel>
+                                <TitleContent>
+                                    <MudText Typo="Typo.subtitle2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-1" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true">@Path.GetRelativePath(_artifactRoot, logPath)</MudText>
+                                    </MudText>
+                                </TitleContent>
+                                <ChildContent>
+                                    @{
+                                        var hasExtra = _extraLogContents.TryGetValue(logKey, out var extraContent);
+                                    }
+                                    @if (!hasExtra || extraContent is null)
+                                    {
+                                        <MudText Color="Color.Secondary" Typo="Typo.caption">Could not read log file.</MudText>
+                                    }
+                                    else if (extraContent.Length == 0)
+                                    {
+                                        <MudText Color="Color.Secondary" Typo="Typo.caption">Log file is empty.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 600px; overflow-y: auto;">@extraContent</pre>
+                                    }
+                                </ChildContent>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                }
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Usage" Icon="@Icons.Material.Filled.BarChart">
+            @if (_usageRecords.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No usage data recorded.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_usageRecords" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Phase</MudTh>
+                        <MudTh>Role</MudTh>
+                        <MudTh>Provider</MudTh>
+                        <MudTh>Model</MudTh>
+                        <MudTh>Input Tokens</MudTh>
+                        <MudTh>Output Tokens</MudTh>
+                        <MudTh>Cached</MudTh>
+                        <MudTh>Cost (USD)</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+                        <MudTd>
+                            <MudChip T="string" Size="Size.Small" Icon="@RoleIcon(context.Role)" Color="Color.Dark">@context.Role</MudChip>
+                        </MudTd>
+                        <MudTd>@context.Provider</MudTd>
+                        <MudTd>@(context.ActualModel ?? "-")</MudTd>
+                        <MudTd>@context.InputTokens.ToString("N0")</MudTd>
+                        <MudTd>@context.OutputTokens.ToString("N0")</MudTd>
+                        <MudTd>@context.CachedInputTokens.ToString("N0")</MudTd>
+                        <MudTd>@(context.CostUsd.HasValue ? context.CostUsd.Value.ToString("F4") : "-")</MudTd>
+                    </RowTemplate>
+                    <FooterContent>
+                        <MudTd colspan="4"><strong>Total</strong></MudTd>
+                        <MudTd><strong>@_usageRecords.Sum(r => r.InputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@_usageRecords.Sum(r => r.OutputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@_usageRecords.Sum(r => r.CachedInputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@(_usageRecords.Any(r => r.CostUsd.HasValue) ? _usageRecords.Sum(r => r.CostUsd ?? 0).ToString("F4") : "-")</strong></MudTd>
+                    </FooterContent>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Related Executions" Icon="@Icons.Material.Filled.AccountTree">
+            @if (_relatedExecutions.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No other executions found for this work item.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_relatedExecutions" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Execution ID</MudTh>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Phase</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Created</MudTh>
+                        <MudTh>Updated</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            @if (context.ExecutionId == ExecutionId)
+                            {
+                                <MudText Typo="Typo.body2"><strong>@context.ExecutionId[..8]…</strong> <MudChip T="string" Size="Size.Small" Color="Color.Primary">current</MudChip></MudText>
+                            }
+                            else
+                            {
+                                <MudLink Href="@($"/executions/{context.ExecutionId}")">@context.ExecutionId[..8]…</MudLink>
+                            }
+                        </MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+                        <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+                        <MudTd>@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public string? ExecutionId { get; set; }
+
+    private bool _loading = true;
+    private TaskExecutionRecord? _execution;
+    private List<ExecutionEventRecord> _events = [];
+    private List<AgentSessionHandle> _agentSessions = [];
+    private List<AgentOutputChunk> _agentChunks = [];
+    private PlanResult? _plan;
+    private ReviewResult? _review;
+    private List<AgentUsageRecord> _usageRecords = [];
+    private List<TaskExecutionRecord> _relatedExecutions = [];
+    private System.Threading.Timer? _refreshTimer;
+    private List<BreadcrumbItem> _breadcrumbs = [];
+    private Dictionary<string, string?> _logContents = [];
+    private Dictionary<string, List<AgentOutputChunk>> _chunksBySession = [];
+    private CancellationTokenSource _cts = new();
+    // Extra (non-transcript) log files discovered in the artifact directory.
+    private List<(string Path, string Key)> _extraLogFiles = [];
+    private Dictionary<string, string?> _extraLogContents = [];
+    private string _artifactRoot = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Cancel any in-flight reads and dispose the previous timer before loading new data.
+        await _cts.CancelAsync();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+
+        _loading = true;
+        await StateStore.InitializeAsync(CancellationToken.None);
+        await LoadDataAsync();
+
+        _breadcrumbs =
+        [
+            new BreadcrumbItem("Dashboard", href: "/"),
+            new BreadcrumbItem("Executions", href: "/executions"),
+            new BreadcrumbItem(ExecutionId ?? string.Empty, href: null, disabled: true),
+        ];
+
+        if (_execution?.Status == ExecutionStatus.Running)
+        {
+            _refreshTimer = new System.Threading.Timer(_ => InvokeAsync(async () =>
+            {
+                await LoadDataAsync();
+                StateHasChanged();
+
+                // Stop polling once the execution is no longer running.
+                if (_execution?.Status != ExecutionStatus.Running)
+                {
+                    _refreshTimer?.Dispose();
+                    _refreshTimer = null;
+                }
+            }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (string.IsNullOrEmpty(ExecutionId)) return;
+        _execution = await StateStore.GetExecutionAsync(ExecutionId, CancellationToken.None);
+        if (_execution is null) { _loading = false; return; }
+
+        var eventsTask = StateStore.GetEventsAsync(ExecutionId, CancellationToken.None);
+        var sessionsTask = StateStore.GetAgentSessionsAsync(ExecutionId, CancellationToken.None);
+        var chunksTask = StateStore.GetAgentOutputChunksAsync(ExecutionId, CancellationToken.None);
+        var planTask = StateStore.GetPlanAsync(ExecutionId, CancellationToken.None);
+        var reviewTask = StateStore.GetLatestReviewResultAsync(ExecutionId, CancellationToken.None);
+        var usageTask = StateStore.GetAgentUsageAsync(ExecutionId, CancellationToken.None);
+        var relatedTask = StateStore.ListExecutionsByWorkItemAsync(_execution.WorkItemId, CancellationToken.None);
+
+        await Task.WhenAll(eventsTask, sessionsTask, chunksTask, planTask, reviewTask, usageTask, relatedTask);
+
+        _events = (await eventsTask).ToList();
+        _agentSessions = (await sessionsTask).ToList();
+        _agentChunks = (await chunksTask).ToList();
+        _plan = await planTask;
+        _review = await reviewTask;
+        _usageRecords = (await usageTask).ToList();
+        _relatedExecutions = (await relatedTask)
+            .OrderByDescending(e => e.CreatedAt)
+            .ToList();
+
+        _chunksBySession = _agentChunks
+            .GroupBy(c => c.SessionId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Sequence).ToList());
+
+        // Compute the execution artifact root to find additional log files.
+        _artifactRoot = StorageOptions.Value.GetExecutionArtifactRoot(_execution.WorkItemId, ExecutionId);
+        var agentTranscriptPaths = _agentSessions
+            .Select(s => Path.GetFullPath(s.TranscriptPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _extraLogFiles = Directory.Exists(_artifactRoot)
+            ? Directory.EnumerateFiles(_artifactRoot, "*.log", SearchOption.AllDirectories)
+                .Where(f => !agentTranscriptPaths.Contains(Path.GetFullPath(f)))
+                .OrderBy(f => f)
+                .Select(f => (f, f))
+                .ToList()
+            : [];
+
+        await LoadLogFilesAsync(_cts.Token);
+
+        _loading = false;
+    }
+
+    private static Color KindColor(QueueItemKind kind) => kind switch
+    {
+        QueueItemKind.AiWork => Color.Primary,
+        QueueItemKind.AiRework => Color.Warning,
+        QueueItemKind.AiPrFix => Color.Secondary,
+        _ => Color.Default,
+    };
+
+    private static Color PhaseColor(TaskPhase phase) => phase switch
+    {
+        TaskPhase.Queued => Color.Default,
+        TaskPhase.Planning => Color.Info,
+        TaskPhase.Coding => Color.Primary,
+        TaskPhase.Reviewing => Color.Warning,
+        TaskPhase.ApplyingReview => Color.Warning,
+        TaskPhase.Validating => Color.Info,
+        TaskPhase.Publishing => Color.Success,
+        _ => Color.Default,
+    };
+
+    private static Color StatusColor(ExecutionStatus status) => status switch
+    {
+        ExecutionStatus.Running => Color.Primary,
+        ExecutionStatus.Completed => Color.Success,
+        ExecutionStatus.Failed => Color.Error,
+        ExecutionStatus.Skipped => Color.Default,
+        _ => Color.Default,
+    };
+
+    private static string RoleIcon(AgentRole role) => role switch
+    {
+        AgentRole.Plan => Icons.Material.Filled.Assignment,
+        AgentRole.Code => Icons.Material.Filled.Code,
+        AgentRole.Review => Icons.Material.Filled.RateReview,
+        _ => Icons.Material.Filled.SmartToy,
+    };
+
+    private static Color SeverityColor(string severity) =>
+        severity?.ToUpperInvariant() switch
+        {
+            "CRITICAL" or "HIGH" => Color.Error,
+            "MEDIUM" => Color.Warning,
+            "LOW" or "INFO" => Color.Info,
+            _ => Color.Default,
+        };
+
+    private const int LogTailBytes = 512 * 1024; // 512 KB
+
+    private async Task LoadLogFilesAsync(CancellationToken cancellationToken)
+    {
+        _logContents.Clear();
+        foreach (var session in _agentSessions)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            try
+            {
+                var info = new FileInfo(session.TranscriptPath);
+                if (!info.Exists) continue;
+
+                string content;
+                if (info.Length <= LogTailBytes)
+                {
+                    content = await File.ReadAllTextAsync(session.TranscriptPath, cancellationToken);
+                }
+                else
+                {
+                    // File exceeds limit — read the last LogTailBytes only.
+                    var buffer = new byte[LogTailBytes];
+                    await using var fs = new FileStream(session.TranscriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    fs.Seek(-LogTailBytes, SeekOrigin.End);
+                    var bytesRead = await fs.ReadAsync(buffer.AsMemory(0, LogTailBytes), cancellationToken);
+                    content = $"[Showing last {LogTailBytes / 1024} KB of {info.Length / 1024} KB log]\n\n"
+                              + System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                }
+
+                _logContents[session.SessionId] = content;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logContents[session.SessionId] = $"Error reading log file: {ex.Message}";
+            }
+        }
+
+        _extraLogContents.Clear();
+        foreach (var (logPath, logKey) in _extraLogFiles)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            try
+            {
+                var info = new FileInfo(logPath);
+                if (!info.Exists) continue;
+
+                string content;
+                if (info.Length <= LogTailBytes)
+                {
+                    content = await File.ReadAllTextAsync(logPath, cancellationToken);
+                }
+                else
+                {
+                    var buffer = new byte[LogTailBytes];
+                    await using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    fs.Seek(-LogTailBytes, SeekOrigin.End);
+                    var bytesRead = await fs.ReadAsync(buffer.AsMemory(0, LogTailBytes), cancellationToken);
+                    content = $"[Showing last {LogTailBytes / 1024} KB of {info.Length / 1024} KB log]\n\n"
+                              + System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                }
+
+                _extraLogContents[logKey] = content;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _extraLogContents[logKey] = $"Error reading log file: {ex.Message}";
+            }
+        }
+    }
+
+    private static string RenderMarkdown(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return string.Empty;
+        var pipeline = Markdig.MarkdownExtensions.UseAdvancedExtensions(new Markdig.MarkdownPipelineBuilder()).Build();
+        return Markdig.Markdown.ToHtml(markdown, pipeline);
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

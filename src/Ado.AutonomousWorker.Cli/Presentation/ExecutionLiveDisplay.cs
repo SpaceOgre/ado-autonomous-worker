@@ -107,9 +107,10 @@ public sealed class ExecutionLiveDisplay(
 
         var loopIteration = 0;
         ViewData? cached = null;
+        ViewData? finalData = null;
 
         await AnsiConsole.Live(BuildView(title, null, tick, startedAt, useUnicode))
-            .AutoClear(false)
+            .AutoClear(true)
             .Overflow(VerticalOverflow.Visible)
             .StartAsync(async liveCtx =>
             {
@@ -137,7 +138,6 @@ public sealed class ExecutionLiveDisplay(
                 }
 
                 var finalExecution = await executionResolver(cancellationToken);
-                ViewData? finalData = null;
                 if (finalExecution is not null)
                 {
                     var events = await stateStore.GetEventsAsync(finalExecution.ExecutionId, cancellationToken);
@@ -150,6 +150,12 @@ public sealed class ExecutionLiveDisplay(
                     TerminalTitleFormatter.BuildExecutionTitle(title, finalData?.Execution, tick, useUnicode));
                 liveCtx.UpdateTarget(BuildView(title, finalData, tick, startedAt, useUnicode));
             });
+
+        // Re-print the final state as static output. AutoClear(true) above ensures Spectre
+        // resets the cursor cleanly when the live context exits; the static write then places
+        // the finished panel into the terminal's scrollback buffer with the cursor correctly
+        // positioned after it, so the user can scroll up to review the full output.
+        AnsiConsole.Write(BuildView(title, finalData, tick, startedAt, useUnicode));
 
         return await operationTask;
     }
@@ -164,7 +170,7 @@ public sealed class ExecutionLiveDisplay(
         IRenderable header;
         IReadOnlyList<ExecutionEventRecord> events = [];
         IReadOnlyList<AgentOutputChunk> agentOutput = [];
-        TaskPhase phase = TaskPhase.Queued;
+        var phase = TaskPhase.Queued;
 
         if (data is not null)
         {

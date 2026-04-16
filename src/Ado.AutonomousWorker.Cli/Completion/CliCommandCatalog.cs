@@ -8,6 +8,8 @@ public static class CliCommandCatalog
         "agent",
         "bootstrap",
         "completion",
+        "deploy",
+        "dashboard",
         "doctor",
         "execution",
         "executions",
@@ -36,6 +38,14 @@ public static class CliCommandCatalog
             ["agent"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["test"] = ["--role"],
+            },
+            ["deploy"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                [string.Empty] = ["--dry-run", "--tag", "--backend", "--frontend"],
+            },
+            ["dashboard"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                [string.Empty] = ["--port", "--no-open"],
             },
             ["execution"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
             {

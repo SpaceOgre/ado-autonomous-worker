@@ -12,7 +12,7 @@ The worker picks up work items tagged `AI-Work` (or `AI-Rework`) from the Azure 
 |---|---|---|---|---|
 | **AI Work** | Work item tagged `AI-Work` | Queued → Planning → Coding → Reviewing → Validating → Publishing | Tag `AI-Done`, post success comment | Tag `AI-Failed`, post failure comment |
 | **AI Rework** | Work item tagged `AI-Rework` | Same as AI Work | Same as AI Work | Same as AI Work |
-| **PR Fix** | PR has both `AI-Generated` and `AI-Rework` labels | Queued → Coding → Validating → Publishing | Remove `AI-Rework` label from PR, tag `AI-Done` | Leave `AI-Rework` label intact (so developer knows it still needs attention), post failure comment |
+| **PR Fix** | PR has the `AI-Rework` label | Queued → Coding → Validating → Publishing | Remove `AI-Rework` label from PR, tag `AI-Done` | Leave `AI-Rework` label intact (so developer knows it still needs attention), post failure comment |
 
 PR Fix skips Planning and Reviewing — the existing PR branch defines the scope and the reviewer's comments are the quality signal.
 
@@ -133,6 +133,9 @@ stateDiagram-v2
 
 ```powershell
 ado-worker bootstrap
+ado-worker dashboard
+ado-worker dashboard --port 8080
+ado-worker dashboard --no-open
 ado-worker reset
 ado-worker reset --force
 ado-worker doctor
@@ -144,6 +147,11 @@ ado-worker execution show --id <execution-id>
 ado-worker execution show --last
 ado-worker completion powershell
 ado-worker run
+ado-worker deploy
+ado-worker deploy --dry-run
+ado-worker deploy --tag v1.2.3
+ado-worker deploy --backend
+ado-worker deploy --frontend
 ado-worker task run --id 12345
 ado-worker task run --pr 42
 ado-worker task resume --execution-id <execution-id>
@@ -161,7 +169,11 @@ ado-worker ui run-preview
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
 
+`ado-worker dashboard` starts a local Blazor web dashboard (default port 5173) and opens it in the browser. The dashboard shows active tasks, recent executions, events, agent output, plan and review results, and token usage. Pass `--port` to change the port or `--no-open` to suppress the automatic browser launch. The dashboard reads the same SQLite database as the CLI.
+
 `ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive.
+
+`ado-worker deploy` triggers the configured backend and frontend Azure Pipelines from `main`, polls until both succeed (or times out), then promotes all resolved tasks and bugs in the current sprint to **Ready for Test** and assigns them to the configured tester. User stories whose every child is now **Ready for Test** or **Closed** are also promoted. Pass `--dry-run` to preview the work item changes without triggering any pipelines or making any updates. Pass `--tag <tagname>` to trigger both pipelines from a specific git tag instead of the default branch (e.g. `ado-worker deploy --tag v1.2.3`). Pass `--backend` to trigger only the backend pipeline, or `--frontend` to trigger only the frontend pipeline — useful when you know changes are limited to one service.
 
 `ado-worker run` first previews the exact queue slice it will execute, including the current ordering and `MaxItemsPerRun` cap, and then starts immediately.
 
@@ -188,6 +200,21 @@ Local machine overrides should go in:
 Set Azure DevOps and provider credentials outside source control.
 
 The worker also uses work item comments as prompt context for both `AI-Work` and `AI-Rework` items. Use `Worker:MaxPromptComments` and `Worker:MaxPromptCommentCharacters` to bound how much comment context is sent to the agents.
+
+### Deploy configuration
+
+The `deploy` command is controlled by the `Deploy` section:
+
+| Key | Default | Description |
+|---|---|---|
+| `Deploy:BackendPipelineId` | `0` | Azure DevOps pipeline definition ID for the backend pipeline. |
+| `Deploy:FrontendPipelineId` | `0` | Azure DevOps pipeline definition ID for the frontend pipeline. |
+| `Deploy:Branch` | `"main"` | Branch to trigger both pipelines from. |
+| `Deploy:PollIntervalSeconds` | `30` | How often to poll pipeline run status. |
+| `Deploy:TimeoutMinutes` | `60` | Maximum total time to wait for both pipelines combined before aborting. |
+| `Deploy:ReadyForTestAssignee` | `""` | Email of the user to assign when transitioning work items to **Ready for Test**. |
+
+Set these in `appsettings.local.json` (or `config.jsonc`). You can find pipeline definition IDs in Azure DevOps under **Pipelines** → select the pipeline → the ID is in the URL (`?definitionId=<id>`).
 
 Execution state, logs, artifacts, and the local SQLite database are stored under:
 
