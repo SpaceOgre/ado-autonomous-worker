@@ -6,6 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <RootNamespace>Ado.AutonomousWorker.Dashboard</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <PackageId>ado-worker-dashboard</PackageId>
+    <PackageVersion>0.1.0-local</PackageVersion>
+    <ToolCommandName>ado-worker-dashboard</ToolCommandName>
   </PropertyGroup>
 
   <ItemGroup>

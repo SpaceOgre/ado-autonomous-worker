@@ -30,7 +30,6 @@ builder.Logging.AddSerilog(WorkerLoggingSetup.CreateLogger(builder.Configuration
 
 builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
-builder.Services.AddSingleton<DashboardCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();
 builder.Services.AddSingleton<ExecutionsCommand>();
@@ -86,7 +85,6 @@ app.Configure(config =>
 {
     config.SetApplicationName("ado-worker");
     config.AddCommand<BootstrapCommand>("bootstrap").WithDescription("Initialize storage and workspace directories.");
-    config.AddCommand<DashboardCommand>("dashboard").WithDescription("Start the local web dashboard and open it in the browser.");
     config.AddCommand<ResetCommand>("reset").WithDescription("Delete the local worker database.");
     config.AddCommand<DoctorCommand>("doctor").WithDescription("Verify configuration, repos, CLI tools, and Azure DevOps access.");
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");

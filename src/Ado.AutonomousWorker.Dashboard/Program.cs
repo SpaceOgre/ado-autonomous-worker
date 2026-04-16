@@ -5,7 +5,14 @@ using Ado.AutonomousWorker.Infrastructure.Logging;
 using MudBlazor.Services;
 using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+// When run as a dotnet tool (via `dotnet <dll>`), ASP.NET Core defaults the content root to
+// Directory.GetCurrentDirectory() — the user's shell CWD — not the tool's installation directory.
+// Explicitly set it to AppContext.BaseDirectory so wwwroot and static assets are always found.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
 // Mirror the same config resolution as the CLI.
 var userConfigPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc");
