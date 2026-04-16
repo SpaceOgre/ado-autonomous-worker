@@ -35,6 +35,8 @@ dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj -
 # Run the tool after local install
 dotnet tool run ado-worker -- queue
 dotnet tool run ado-worker -- run
+dotnet tool run ado-worker -- deploy
+dotnet tool run ado-worker -- deploy --dry-run
 dotnet tool run ado-worker -- task run --id <workItemId>
 dotnet tool run ado-worker -- task run --pr <pullRequestId>
 dotnet tool run ado-worker -- task resume --execution-id <executionId>
