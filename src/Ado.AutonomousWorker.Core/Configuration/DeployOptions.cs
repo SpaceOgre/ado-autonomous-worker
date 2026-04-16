@@ -17,7 +17,7 @@ public sealed class DeployOptions
     public int PollIntervalSeconds { get; set; } = 30;
 
     /// <summary>
-    /// Maximum time (in minutes) to wait for each pipeline before timing out.
+    /// Maximum total time (in minutes) to wait for the pipeline runs before timing out.
     /// </summary>
     public int TimeoutMinutes { get; set; } = 60;
 
