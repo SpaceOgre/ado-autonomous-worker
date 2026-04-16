@@ -75,6 +75,11 @@ public sealed class DeployService(
         IProgress<string> progress,
         CancellationToken cancellationToken)
     {
+        if (_options.TimeoutMinutes <= 0)
+            throw new InvalidOperationException($"Deploy configuration is invalid: TimeoutMinutes must be greater than 0 (currently {_options.TimeoutMinutes}).");
+        if (_options.PollIntervalSeconds <= 0)
+            throw new InvalidOperationException($"Deploy configuration is invalid: PollIntervalSeconds must be greater than 0 (currently {_options.PollIntervalSeconds}).");
+
         var timeout = TimeSpan.FromMinutes(_options.TimeoutMinutes);
         var pollInterval = TimeSpan.FromSeconds(_options.PollIntervalSeconds);
         var deadline = DateTimeOffset.UtcNow + timeout;
