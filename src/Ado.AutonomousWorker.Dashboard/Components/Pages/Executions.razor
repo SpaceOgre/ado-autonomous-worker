@@ -1,0 +1,97 @@
+@page "/executions"
+@rendermode InteractiveServer
+@inject IStateStore StateStore
+
+<PageTitle>Executions — ADO Autonomous Worker</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">All Executions</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_executions" Hover="true" Dense="true" Filter="FilterFunc">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchText" Placeholder="Search..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<TaskExecutionRecord,object>(x=>x.WorkItemId)">Work Item</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TaskExecutionRecord,object>(x=>x.Title)">Title</MudTableSortLabel></MudTh>
+            <MudTh>Kind</MudTh>
+            <MudTh>Phase</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TaskExecutionRecord,object>(x=>x.UpdatedAt)" InitialDirection="SortDirection.Descending">Updated</MudTableSortLabel></MudTh>
+            <MudTh>PR</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Work Item">@context.WorkItemId</MudTd>
+            <MudTd DataLabel="Title">@context.Title</MudTd>
+            <MudTd DataLabel="Kind"><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
+            <MudTd DataLabel="Phase"><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+            <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+            <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd DataLabel="PR">@(context.PullRequestId.HasValue ? $"#{context.PullRequestId}" : "-")</MudTd>
+            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No executions found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private List<TaskExecutionRecord> _executions = [];
+    private string _searchText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StateStore.InitializeAsync(CancellationToken.None);
+        var all = await StateStore.ListExecutionsAsync(CancellationToken.None);
+        _executions = all.OrderByDescending(e => e.UpdatedAt).ToList();
+        _loading = false;
+    }
+
+    private bool FilterFunc(TaskExecutionRecord record)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText)) return true;
+        return record.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+            || record.WorkItemId.ToString().Contains(_searchText)
+            || record.Status.ToString().Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+            || record.Phase.ToString().Contains(_searchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Color KindColor(QueueItemKind kind) => kind switch
+    {
+        QueueItemKind.AiWork => Color.Primary,
+        QueueItemKind.AiRework => Color.Warning,
+        QueueItemKind.AiPrFix => Color.Secondary,
+        _ => Color.Default,
+    };
+
+    private static Color PhaseColor(TaskPhase phase) => phase switch
+    {
+        TaskPhase.Queued => Color.Default,
+        TaskPhase.Planning => Color.Info,
+        TaskPhase.Coding => Color.Primary,
+        TaskPhase.Reviewing => Color.Warning,
+        TaskPhase.ApplyingReview => Color.Warning,
+        TaskPhase.Validating => Color.Info,
+        TaskPhase.Publishing => Color.Success,
+        _ => Color.Default,
+    };
+
+    private static Color StatusColor(ExecutionStatus status) => status switch
+    {
+        ExecutionStatus.Running => Color.Primary,
+        ExecutionStatus.Completed => Color.Success,
+        ExecutionStatus.Failed => Color.Error,
+        ExecutionStatus.Skipped => Color.Default,
+        _ => Color.Default,
+    };
+}

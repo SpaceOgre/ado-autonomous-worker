@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <RootNamespace>Ado.AutonomousWorker.Dashboard</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <PackageId>ado-worker-dashboard</PackageId>
+    <PackageVersion>0.1.0-local</PackageVersion>
+    <ToolCommandName>ado-worker-dashboard</ToolCommandName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ado.AutonomousWorker.Core\Ado.AutonomousWorker.Core.csproj" />
+    <ProjectReference Include="..\Ado.AutonomousWorker.Infrastructure\Ado.AutonomousWorker.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.1.2" />
+    <PackageReference Include="MudBlazor" Version="9.3.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+  </ItemGroup>
+
+</Project>
