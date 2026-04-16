@@ -31,6 +31,27 @@ public sealed class StorageOptions
         return Path.Combine(GetWorkItemArtifactRoot(workItemId), "tasks", childTaskId.ToString());
     }
 
+    /// <summary>
+    /// Returns a .data path under the repository root for development runs,
+    /// found by walking up from the binary output directory until a .git marker is located.
+    /// Returns null in non-development environments.
+    /// </summary>
+    public static string? GetDevStorageOverride(bool isDevelopment)
+    {
+        if (!isDevelopment)
+            return null;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (dir.GetDirectories(".git").Length > 0)
+                return Path.Combine(dir.FullName, ".data");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Directory.GetCurrentDirectory(), ".data");
+    }
+
     public void NormalizePaths(string? baseOverride = null)
     {
         var defaultRoot = string.IsNullOrWhiteSpace(baseOverride) ? DefaultAppFolder : baseOverride;

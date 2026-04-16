@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.1.2" />
     <PackageReference Include="MudBlazor" Version="9.3.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
   </ItemGroup>
 
 </Project>
