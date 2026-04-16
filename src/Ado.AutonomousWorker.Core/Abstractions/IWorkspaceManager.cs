@@ -16,4 +16,10 @@ public interface IWorkspaceManager
     Task<RepoExecutionContext> CheckoutPrBranchAsync(int parentWorkItemId, int childTaskId, RepoKind repoKind, string branchName, bool preserveExistingWorkspace, CancellationToken cancellationToken);
 
     Task CleanupAsync(RepoExecutionContext context, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Pulls the main branch of every configured repository so that planning agents see up-to-date code.
+    /// Repositories whose <see cref="RepositoryProfile.BaseClonePath"/> does not exist are skipped.
+    /// </summary>
+    Task PullAllBaseClonesAsync(string artifactDirectory, CancellationToken cancellationToken);
 }
