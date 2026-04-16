@@ -206,7 +206,7 @@ The `deploy` command is controlled by the `Deploy` section:
 | `Deploy:FrontendPipelineId` | `0` | Azure DevOps pipeline definition ID for the frontend pipeline. |
 | `Deploy:Branch` | `"main"` | Branch to trigger both pipelines from. |
 | `Deploy:PollIntervalSeconds` | `30` | How often to poll pipeline run status. |
-| `Deploy:TimeoutMinutes` | `60` | Maximum time to wait for each pipeline before aborting. |
+| `Deploy:TimeoutMinutes` | `60` | Maximum total time to wait for both pipelines combined before aborting. |
 | `Deploy:ReadyForTestAssignee` | `""` | Email of the user to assign when transitioning work items to **Ready for Test**. |
 
 Set these in `appsettings.local.json` (or `config.jsonc`). You can find pipeline definition IDs in Azure DevOps under **Pipelines** → select the pipeline → the ID is in the URL (`?definitionId=<id>`).
