@@ -39,8 +39,6 @@ var consoleLevel = Enum.TryParse<LogEventLevel>(configuredLevel, ignoreCase: tru
 
 var serilogLogger = new LoggerConfiguration()
     .MinimumLevel.Information()
-    .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.Extensions.Http", LogEventLevel.Warning)
     .WriteTo.Console(
         restrictedToMinimumLevel: consoleLevel,
         outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
