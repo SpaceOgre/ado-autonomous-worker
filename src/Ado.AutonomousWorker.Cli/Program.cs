@@ -8,6 +8,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
 using Spectre.Console.Cli;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -22,19 +24,35 @@ builder.Configuration
     .AddJsonFile(userConfigPath, optional: true, reloadOnChange: false)
     .AddEnvironmentVariables("AdoWorker_");
 
-builder.Logging.ClearProviders();
-var configuredLevel = builder.Configuration["Logging:LogLevel:Default"];
-var minimumLevel = Enum.TryParse<LogLevel>(configuredLevel, ignoreCase: true, out var parsed) ? parsed : LogLevel.Warning;
-builder.Logging.SetMinimumLevel(minimumLevel);
-builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
-builder.Logging.AddSimpleConsole(options =>
-{
-    options.TimestampFormat = "HH:mm:ss ";
-    options.SingleLine = true;
-});
-
 var storageBaseOverride = builder.Environment.IsDevelopment() ? Path.Combine(Directory.GetCurrentDirectory(), ".data") : null;
+
+var earlyStorageOptions = new StorageOptions();
+builder.Configuration.GetSection("Storage").Bind(earlyStorageOptions);
+earlyStorageOptions.NormalizePaths(storageBaseOverride);
+Directory.CreateDirectory(earlyStorageOptions.LogRoot);
+var logFilePath = Path.Combine(earlyStorageOptions.LogRoot, "worker-.log");
+
+var configuredLevel = builder.Configuration["Serilog:ConsoleLevel"];
+var consoleLevel = Enum.TryParse<LogEventLevel>(configuredLevel, ignoreCase: true, out var parsed)
+    ? parsed
+    : LogEventLevel.Warning;
+
+var serilogLogger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.Extensions.Http", LogEventLevel.Warning)
+    .WriteTo.Console(
+        restrictedToMinimumLevel: consoleLevel,
+        outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        logFilePath,
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
+builder.Logging.ClearProviders();
+builder.Logging.AddSerilog(serilogLogger, dispose: true);
+
 builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
