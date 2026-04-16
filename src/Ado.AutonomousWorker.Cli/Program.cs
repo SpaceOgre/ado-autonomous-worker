@@ -34,7 +34,7 @@ builder.Logging.AddSimpleConsole(options =>
     options.SingleLine = true;
 });
 
-var storageBaseOverride = builder.Environment.IsDevelopment() ? Directory.GetCurrentDirectory() : null;
+var storageBaseOverride = builder.Environment.IsDevelopment() ? Path.Combine(Directory.GetCurrentDirectory(), ".data") : null;
 builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
