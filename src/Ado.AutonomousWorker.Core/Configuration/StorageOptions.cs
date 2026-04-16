@@ -8,13 +8,13 @@ public sealed class StorageOptions
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Ado.AutonomousWorker");
 
-    public string DataRoot { get; set; } = ".data";
+    public string DataRoot { get; set; } = string.Empty;
 
-    public string DatabasePath { get; set; } = ".data\\worker.db";
+    public string DatabasePath { get; set; } = string.Empty;
 
-    public string LogRoot { get; set; } = ".data\\logs";
+    public string LogRoot { get; set; } = string.Empty;
 
-    public string ArtifactRoot { get; set; } = ".data\\artifacts";
+    public string ArtifactRoot { get; set; } = string.Empty;
 
     public string GetWorkItemArtifactRoot(int workItemId)
     {
@@ -42,7 +42,7 @@ public sealed class StorageOptions
 
     private static string NormalizeRoot(string? value, string defaultRoot)
     {
-        if (string.IsNullOrWhiteSpace(value) || string.Equals(value, ".data", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(value))
         {
             return Path.GetFullPath(defaultRoot);
         }
@@ -59,23 +59,8 @@ public sealed class StorageOptions
             return Path.GetFullPath(Path.Combine(dataRoot, defaultRelativePath));
         }
 
-        if (Path.IsPathRooted(value))
-        {
-            return Path.GetFullPath(value);
-        }
-
-        const string legacyPrefix = ".data";
-        if (string.Equals(value, legacyPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetFullPath(dataRoot);
-        }
-
-        if (value.StartsWith($"{legacyPrefix}\\", StringComparison.OrdinalIgnoreCase) ||
-            value.StartsWith($"{legacyPrefix}/", StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetFullPath(Path.Combine(dataRoot, value[($"{legacyPrefix}\\").Length..]));
-        }
-
-        return Path.GetFullPath(Path.Combine(dataRoot, value));
+        return Path.IsPathRooted(value)
+            ? Path.GetFullPath(value)
+            : Path.GetFullPath(Path.Combine(dataRoot, value));
     }
 }

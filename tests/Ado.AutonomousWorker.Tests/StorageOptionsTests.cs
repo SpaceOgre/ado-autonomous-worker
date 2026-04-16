@@ -5,7 +5,7 @@ namespace Ado.AutonomousWorker.Tests;
 public sealed class StorageOptionsTests
 {
     [Fact]
-    public void NormalizePaths_MapsLegacyRelativeDefaultsIntoLocalAppData()
+    public void NormalizePaths_DefaultsToLocalAppData()
     {
         var options = new StorageOptions();
 
