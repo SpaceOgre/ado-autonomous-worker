@@ -31,9 +31,9 @@ public sealed class StorageOptions
         return Path.Combine(GetWorkItemArtifactRoot(workItemId), "tasks", childTaskId.ToString());
     }
 
-    public void NormalizePaths()
+    public void NormalizePaths(string? baseOverride = null)
     {
-        var defaultRoot = DefaultAppFolder;
+        var defaultRoot = string.IsNullOrWhiteSpace(baseOverride) ? DefaultAppFolder : baseOverride;
         DataRoot = NormalizeRoot(DataRoot, defaultRoot);
         DatabasePath = NormalizeChildPath(DatabasePath, "worker.db", DataRoot);
         LogRoot = NormalizeChildPath(LogRoot, "logs", DataRoot);
