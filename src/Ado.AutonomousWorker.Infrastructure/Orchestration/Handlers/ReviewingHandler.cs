@@ -2,6 +2,7 @@ using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
+using Ado.AutonomousWorker.Infrastructure.Agents;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -37,17 +38,44 @@ internal sealed class ReviewingHandler(
         logger.LogInformation("Execution {ExecutionId}: running review agent for {ScopeLabel}.", context.ExecutionId, scopeLabel);
 
         var config = agentOptions.Value.Review;
-        var (review, reviewUsage) = await agentRunnerFactory.GetRunner(config.Provider).RunReviewAsync(
+        var artifactDirectory = Path.Combine(implementationArtifactRoot, "review");
+        var prompt = await PromptTemplateLoader.ApplyAsync(
             config,
-            await PromptTemplateLoader.ApplyAsync(
-                config,
-                BuildReviewPrompt(workItem, repositoryExecutions, agentWorkingDirectory, commentsBlock),
-                cancellationToken),
-            agentWorkingDirectory,
-            Path.Combine(implementationArtifactRoot, "review"),
-            AgentOutputSchemas.Review,
-            executionJournal.CreateOutputObserver(context.ExecutionId),
+            BuildReviewPrompt(workItem, repositoryExecutions, agentWorkingDirectory, commentsBlock, config.RequireStructuredOutput),
             cancellationToken);
+
+        ReviewResult review;
+        AgentUsage? reviewUsage;
+
+        if (config.RequireStructuredOutput)
+        {
+            (review, reviewUsage) = await agentRunnerFactory.GetRunner(config.Provider).RunReviewAsync(
+                config,
+                prompt,
+                agentWorkingDirectory,
+                artifactDirectory,
+                AgentOutputSchemas.Review,
+                executionJournal.CreateOutputObserver(context.ExecutionId),
+                cancellationToken);
+        }
+        else
+        {
+            // Free-text mode: skip --json-schema and parse the review agent's markdown output
+            // directly. This supports agents such as the hardcore-code-reviewer Claude plugin
+            // that produce a structured markdown report instead of JSON.
+            var runner = agentRunnerFactory.GetRunner(config.Provider);
+            var startResult = await runner.StartSessionAsync(
+                AgentRole.Review,
+                config,
+                prompt,
+                agentWorkingDirectory,
+                artifactDirectory,
+                outputSchema: null,
+                executionJournal.CreateOutputObserver(context.ExecutionId),
+                cancellationToken);
+            review = ReviewResultParser.ParseFreeText(startResult.Result.Summary, startResult.Result.TranscriptPath);
+            reviewUsage = startResult.Result.Usage;
+        }
 
         await stateStore.SaveReviewResultAsync(context.ExecutionId, review, cancellationToken);
         if (reviewUsage is not null)
@@ -77,13 +105,14 @@ internal sealed class ReviewingHandler(
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
         string agentWorkingDirectory,
-        string commentsBlock)
+        string commentsBlock,
+        bool structured)
     {
         var repositorySummary = RepositoryWorkflowHelpers.BuildRepositorySummary(repositoryExecutions, agentWorkingDirectory);
+        var jsonInstruction = structured ? "\nReturn JSON that matches the supplied schema exactly.\n" : string.Empty;
         return $$"""
         Review the coordinated changes across the listed repositories for correctness, regressions, integration mismatches, security issues, and missing tests.
-        Return JSON that matches the supplied schema exactly.
-
+        {{jsonInstruction}}
         Parent item: #{{parent.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Agent working directory: {{agentWorkingDirectory}}
         Parent feature: {{parent.ParentFeatureTitle ?? "-"}}

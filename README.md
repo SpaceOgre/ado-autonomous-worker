@@ -201,6 +201,29 @@ Set Azure DevOps and provider credentials outside source control.
 
 The worker also uses work item comments as prompt context for both `AI-Work` and `AI-Rework` items. Use `Worker:MaxPromptComments` and `Worker:MaxPromptCommentCharacters` to bound how much comment context is sent to the agents.
 
+### Hardcore Code Reviewer
+
+The review agent supports an optional hardcore multi-subagent mode powered by the [hardcore-code-reviewer](https://github.com/stilero/claude-plugins/tree/main/plugins/hardcore-code-reviewer) Claude plugin. When enabled it spawns 12 parallel review subagents (bugs, security, architecture, tests, silent failures, performance, complexity, observability, API contracts, data/migrations, accessibility, type safety) and merges their findings into a single report before handing off to the orchestrator.
+
+**Prerequisites**
+
+Install the hardcore-code-reviewer Claude plugin. The plugin is invoked via the `claude` CLI's `--agent` flag.
+
+**Configuration** (`appsettings.local.json`)
+
+```json
+"Review": {
+    "Provider": "Claude",
+    "Model": "sonnet",
+    "Effort": "high",
+    "CommandPath": "claude",
+    "ExtraArguments": ["--agent", "hardcore-code-reviewer:hardcore-code-reviewer"],
+    "RequireStructuredOutput": false
+}
+```
+
+Setting `RequireStructuredOutput` to `false` tells the orchestrator to skip the `--json-schema` flag and instead parse the plugin's markdown report (🔴 Blocking → `critical`, 🟠 Important → `high`, 🟡 Minor → `low`) into `ReviewFinding` objects. Blocking and Important findings trigger the Apply Review phase exactly as they would with a structured JSON review.
+
 ### Deploy configuration
 
 The `deploy` command is controlled by the `Deploy` section:
