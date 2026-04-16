@@ -13,9 +13,11 @@ namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 internal sealed class PlanningHandler(
     IStateStore stateStore,
     IAgentRunnerFactory agentRunnerFactory,
+    IWorkspaceManager workspaceManager,
     ExecutionJournal executionJournal,
     IOptions<AgentOptions> agentOptions,
     IOptions<WorkerOptions> workerOptions,
+    IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
     ILogger<PlanningHandler> logger) : WorkItemHandler
 {
@@ -30,6 +32,8 @@ internal sealed class PlanningHandler(
             storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, context.ExecutionId), "plan");
         var commentsBlock = WorkItemPromptContextFormatter.FormatComments(
             workItem.Comments, workerOptions.Value.MaxPromptComments, workerOptions.Value.MaxPromptCommentCharacters);
+
+        await workspaceManager.PullAllBaseClonesAsync(artifactDirectory, cancellationToken);
 
         await context.Journal.AppendEventAsync(
             context.ExecutionId, TaskPhase.Planning, "Running planning agent.", cancellationToken);
@@ -54,12 +58,15 @@ internal sealed class PlanningHandler(
         {{commentsBlock}}
         """;
 
+        var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory(
+            [repositoryOptions.Value.Backend.BaseClonePath, repositoryOptions.Value.Frontend.BaseClonePath]);
+
         var prompt = await PromptTemplateLoader.ApplyAsync(config, rawPrompt, cancellationToken);
         var startResult = await runner.StartSessionAsync(
             AgentRole.Plan,
             config,
             prompt,
-            Directory.GetCurrentDirectory(),
+            agentWorkingDirectory,
             artifactDirectory,
             AgentOutputSchemas.Plan,
             executionJournal.CreateOutputObserver(context.ExecutionId),

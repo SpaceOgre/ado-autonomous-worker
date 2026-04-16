@@ -119,6 +119,30 @@ public sealed partial class WorkspaceManager(
         return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
     }
 
+    public async Task PullAllBaseClonesAsync(string artifactDirectory, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(artifactDirectory);
+        foreach (var profile in new[] { repositoryOptions.Value.Backend, repositoryOptions.Value.Frontend })
+        {
+            if (!Directory.Exists(profile.BaseClonePath))
+            {
+                logger.LogWarning("Skipping pull for {RepoKind}: base clone path '{Path}' not found.", profile.Kind, profile.BaseClonePath);
+                continue;
+            }
+
+            var pullResult = await RunGitAsync(
+                profile.BaseClonePath,
+                Path.Combine(artifactDirectory, $"{profile.Kind.ToString().ToLowerInvariant()}-pull.log"),
+                ["pull", "origin", profile.MainBranch],
+                cancellationToken);
+
+            if (!pullResult.Success)
+                throw new InvalidOperationException($"Failed to pull '{profile.MainBranch}' for {profile.Kind}: {pullResult.StandardError}");
+
+            logger.LogInformation("Pulled {MainBranch} for {RepoKind}.", profile.MainBranch, profile.Kind);
+        }
+    }
+
     public async Task CleanupAsync(RepoExecutionContext context, CancellationToken cancellationToken)
     {
         var profile = GetProfile(context.RepoKind);
