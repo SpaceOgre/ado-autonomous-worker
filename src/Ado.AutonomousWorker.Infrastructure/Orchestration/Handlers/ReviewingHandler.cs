@@ -64,9 +64,12 @@ internal sealed class ReviewingHandler(
             return PhaseTransition.To(TaskPhase.ApplyingReview);
         }
 
+        var belowThreshold = review.Findings.Count - acceptedFindings.Length;
+        var noAcceptedMessage = belowThreshold > 0
+            ? $"{belowThreshold} finding(s) below acceptance threshold — proceeding to validation."
+            : "No findings — proceeding to validation.";
         await context.Journal.AppendEventAsync(
-            context.ExecutionId, TaskPhase.Reviewing,
-            "No accepted findings — proceeding to validation.", cancellationToken);
+            context.ExecutionId, TaskPhase.Reviewing, noAcceptedMessage, cancellationToken);
         return PhaseTransition.To(TaskPhase.Validating);
     }
 
