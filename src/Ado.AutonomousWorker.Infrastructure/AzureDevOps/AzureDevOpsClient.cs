@@ -695,37 +695,29 @@ public sealed class AzureDevOpsClient(
         return (run.State ?? "unknown", run.Result);
     }
 
-    public async Task<IReadOnlyList<WorkItemSummary>> QueryResolvedSprintItemsAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<WorkItemSummary>> QueryResolvedSprintItemsAsync(CancellationToken cancellationToken)
     {
-        var sprintPath = await GetCurrentSprintPathAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(sprintPath))
-            return [];
-
         var query = $"""
         SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
         FROM WorkItems
         WHERE ([System.WorkItemType] = 'Task' OR [System.WorkItemType] = 'Bug')
           AND [System.State] = 'Resolved'
-          AND [System.IterationPath] = '{sprintPath}'
+          AND [System.IterationPath] = @CurrentIteration('[{_options.Project}]\{_options.Team}')
           AND [System.TeamProject] = '{_options.Project}'
         ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
         """;
 
-        return await QueryByWiqlAsync(query, cancellationToken);
+        return QueryByWiqlAsync(query, cancellationToken);
     }
 
     public async Task<IReadOnlyList<(WorkItemSummary Story, IReadOnlyList<int> ChildIds)>> QueryActiveSprintUserStoriesWithChildrenAsync(CancellationToken cancellationToken)
     {
-        var sprintPath = await GetCurrentSprintPathAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(sprintPath))
-            return [];
-
         var query = $"""
         SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
         FROM WorkItems
         WHERE [System.WorkItemType] = 'User Story'
           AND [System.State] = 'Active'
-          AND [System.IterationPath] = '{sprintPath}'
+          AND [System.IterationPath] = @CurrentIteration('[{_options.Project}]\{_options.Team}')
           AND [System.TeamProject] = '{_options.Project}'
         ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
         """;
