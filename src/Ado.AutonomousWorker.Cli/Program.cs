@@ -17,6 +17,7 @@ var userConfigPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc
 builder.Configuration
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
     .AddJsonFile(userConfigPath, optional: true, reloadOnChange: false)
     .AddEnvironmentVariables("AdoWorker_");
@@ -33,7 +34,8 @@ builder.Logging.AddSimpleConsole(options =>
     options.SingleLine = true;
 });
 
-builder.Services.AddAutonomousWorker(builder.Configuration);
+var storageBaseOverride = builder.Environment.IsDevelopment() ? Path.Combine(Directory.GetCurrentDirectory(), ".data") : null;
+builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();

@@ -19,13 +19,13 @@ namespace Ado.AutonomousWorker.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddAutonomousWorker(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddAutonomousWorker(this IServiceCollection services, IConfiguration configuration, string? storageBaseOverride = null)
     {
         services.Configure<AgentOptions>(configuration.GetSection("Agents"));
         services.Configure<AzureDevOpsOptions>(configuration.GetSection("AzureDevOps"));
         services.Configure<RepositoryOptions>(configuration.GetSection("Repositories"));
         services.Configure<StorageOptions>(configuration.GetSection("Storage"));
-        services.PostConfigure<StorageOptions>(options => options.NormalizePaths());
+        services.PostConfigure<StorageOptions>(options => options.NormalizePaths(storageBaseOverride));
         services.Configure<WorkerOptions>(configuration.GetSection("Worker"));
 
         services.AddDbContextFactory<WorkerDbContext>((provider, options) =>

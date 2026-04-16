@@ -5,7 +5,7 @@ namespace Ado.AutonomousWorker.Tests;
 public sealed class StorageOptionsTests
 {
     [Fact]
-    public void NormalizePaths_MapsLegacyRelativeDefaultsIntoLocalAppData()
+    public void NormalizePaths_DefaultsToLocalAppData()
     {
         var options = new StorageOptions();
 
@@ -19,6 +19,20 @@ public sealed class StorageOptionsTests
         Assert.Equal(Path.Combine(Path.GetFullPath(expectedRoot), "worker.db"), options.DatabasePath);
         Assert.Equal(Path.Combine(Path.GetFullPath(expectedRoot), "logs"), options.LogRoot);
         Assert.Equal(Path.Combine(Path.GetFullPath(expectedRoot), "artifacts"), options.ArtifactRoot);
+    }
+
+    [Fact]
+    public void NormalizePaths_WithBaseOverride_ResolvesRelativeDefaultsUnderOverride()
+    {
+        var baseDir = Path.Combine(Path.GetTempPath(), "ado-worker-dev-base");
+        var options = new StorageOptions();
+
+        options.NormalizePaths(baseOverride: baseDir);
+
+        Assert.Equal(Path.GetFullPath(baseDir), options.DataRoot);
+        Assert.Equal(Path.Combine(Path.GetFullPath(baseDir), "worker.db"), options.DatabasePath);
+        Assert.Equal(Path.Combine(Path.GetFullPath(baseDir), "logs"), options.LogRoot);
+        Assert.Equal(Path.Combine(Path.GetFullPath(baseDir), "artifacts"), options.ArtifactRoot);
     }
 
     [Fact]
