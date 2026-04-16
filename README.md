@@ -146,6 +146,7 @@ ado-worker completion powershell
 ado-worker run
 ado-worker deploy
 ado-worker deploy --dry-run
+ado-worker deploy --tag v1.2.3
 ado-worker task run --id 12345
 ado-worker task run --pr 42
 ado-worker task resume --execution-id <execution-id>
@@ -165,7 +166,7 @@ Use the local or global installation flow below depending on how you want to run
 
 `ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive.
 
-`ado-worker deploy` triggers the configured backend and frontend Azure Pipelines from `main`, polls until both succeed (or times out), then promotes all resolved tasks and bugs in the current sprint to **Ready for Test** and assigns them to the configured tester. User stories whose every child is now **Ready for Test** or **Closed** are also promoted. Pass `--dry-run` to preview the work item changes without triggering any pipelines or making any updates.
+`ado-worker deploy` triggers the configured backend and frontend Azure Pipelines from `main`, polls until both succeed (or times out), then promotes all resolved tasks and bugs in the current sprint to **Ready for Test** and assigns them to the configured tester. User stories whose every child is now **Ready for Test** or **Closed** are also promoted. Pass `--dry-run` to preview the work item changes without triggering any pipelines or making any updates. Pass `--tag <tagname>` to trigger both pipelines from a specific git tag instead of the default branch (e.g. `ado-worker deploy --tag v1.2.3`).
 
 `ado-worker run` first previews the exact queue slice it will execute, including the current ordering and `MaxItemsPerRun` cap, and then starts immediately.
 

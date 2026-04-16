@@ -19,18 +19,23 @@ public sealed class DeployService(
 
     /// <summary>
     /// Triggers the backend and frontend pipelines and waits for both to complete successfully.
-    /// Returns the pipeline run URLs for display.
+    /// If <paramref name="tag"/> is provided, pipelines are triggered from that tag instead of the configured branch.
+    /// Returns the run IDs for the triggered runs.
     /// </summary>
     public async Task<(int BackendRunId, int FrontendRunId)> TriggerPipelinesAsync(
         IProgress<string> progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? tag = null)
     {
-        progress.Report($"Triggering backend pipeline (id={_options.BackendPipelineId}) on branch '{_options.Branch}'…");
-        var backendRunId = await _adoClient.TriggerPipelineAsync(_options.BackendPipelineId, _options.Branch, cancellationToken);
+        var refName = tag is not null ? $"refs/tags/{tag}" : $"refs/heads/{_options.Branch}";
+        var refLabel = tag is not null ? $"tag '{tag}'" : $"branch '{_options.Branch}'";
+
+        progress.Report($"Triggering backend pipeline (id={_options.BackendPipelineId}) on {refLabel}…");
+        var backendRunId = await _adoClient.TriggerPipelineAsync(_options.BackendPipelineId, refName, cancellationToken);
         progress.Report($"Backend run #{backendRunId} started.");
 
-        progress.Report($"Triggering frontend pipeline (id={_options.FrontendPipelineId}) on branch '{_options.Branch}'…");
-        var frontendRunId = await _adoClient.TriggerPipelineAsync(_options.FrontendPipelineId, _options.Branch, cancellationToken);
+        progress.Report($"Triggering frontend pipeline (id={_options.FrontendPipelineId}) on {refLabel}…");
+        var frontendRunId = await _adoClient.TriggerPipelineAsync(_options.FrontendPipelineId, refName, cancellationToken);
         progress.Report($"Frontend run #{frontendRunId} started.");
 
         return (backendRunId, frontendRunId);

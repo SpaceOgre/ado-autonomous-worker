@@ -48,8 +48,8 @@ public interface IAzureDevOpsClient
     /// <summary>Verifies that a pipeline with the given ID exists. Returns the pipeline name on success, or null if not found.</summary>
     Task<string?> TryGetPipelineNameAsync(int pipelineId, CancellationToken cancellationToken);
 
-    /// <summary>Triggers a pipeline run on the specified branch and returns the run ID.</summary>
-    Task<int> TriggerPipelineAsync(int pipelineId, string branch, CancellationToken cancellationToken);
+    /// <summary>Triggers a pipeline run on the specified git ref (e.g. <c>refs/heads/main</c> or <c>refs/tags/v1.2.3</c>) and returns the run ID.</summary>
+    Task<int> TriggerPipelineAsync(int pipelineId, string refName, CancellationToken cancellationToken);
 
     /// <summary>Gets the current state and result of a pipeline run.</summary>
     Task<(string State, string? Result)> GetPipelineRunStatusAsync(int pipelineId, int runId, CancellationToken cancellationToken);

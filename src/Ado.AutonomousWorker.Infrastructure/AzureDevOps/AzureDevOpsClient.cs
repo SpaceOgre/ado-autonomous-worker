@@ -659,7 +659,7 @@ public sealed class AzureDevOpsClient(
         }
     }
 
-    public async Task<int> TriggerPipelineAsync(int pipelineId, string branch, CancellationToken cancellationToken)
+    public async Task<int> TriggerPipelineAsync(int pipelineId, string refName, CancellationToken cancellationToken)
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/pipelines/{pipelineId}/runs?api-version={ApiVersion}",
@@ -669,7 +669,7 @@ public sealed class AzureDevOpsClient(
                 {
                     repositories = new
                     {
-                        self = new { refName = $"refs/heads/{branch}" },
+                        self = new { refName },
                     },
                 },
             },
