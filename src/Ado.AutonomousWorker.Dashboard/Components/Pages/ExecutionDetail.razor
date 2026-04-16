@@ -296,6 +296,50 @@ else
                         <MudTd>@context.CachedInputTokens.ToString("N0")</MudTd>
                         <MudTd>@(context.CostUsd.HasValue ? context.CostUsd.Value.ToString("F4") : "-")</MudTd>
                     </RowTemplate>
+                    <FooterContent>
+                        <MudTd colspan="4"><strong>Total</strong></MudTd>
+                        <MudTd><strong>@_usageRecords.Sum(r => r.InputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@_usageRecords.Sum(r => r.OutputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@_usageRecords.Sum(r => r.CachedInputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@(_usageRecords.Any(r => r.CostUsd.HasValue) ? _usageRecords.Sum(r => r.CostUsd ?? 0).ToString("F4") : "-")</strong></MudTd>
+                    </FooterContent>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Related Executions" Icon="@Icons.Material.Filled.AccountTree">
+            @if (_relatedExecutions.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No other executions found for this work item.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_relatedExecutions" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Execution ID</MudTh>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Phase</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Created</MudTh>
+                        <MudTh>Updated</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            @if (context.ExecutionId == ExecutionId)
+                            {
+                                <MudText Typo="Typo.body2"><strong>@context.ExecutionId[..8]…</strong> <MudChip T="string" Size="Size.Small" Color="Color.Primary">current</MudChip></MudText>
+                            }
+                            else
+                            {
+                                <MudLink Href="@($"/executions/{context.ExecutionId}")">@context.ExecutionId[..8]…</MudLink>
+                            }
+                        </MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+                        <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+                        <MudTd>@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
+                    </RowTemplate>
                 </MudTable>
             }
         </MudTabPanel>
@@ -314,6 +358,7 @@ else
     private PlanResult? _plan;
     private ReviewResult? _review;
     private List<AgentUsageRecord> _usageRecords = [];
+    private List<TaskExecutionRecord> _relatedExecutions = [];
     private System.Threading.Timer? _refreshTimer;
     private List<BreadcrumbItem> _breadcrumbs = [];
     private Dictionary<string, string?> _logContents = [];
@@ -374,8 +419,9 @@ else
         var planTask = StateStore.GetPlanAsync(ExecutionId, CancellationToken.None);
         var reviewTask = StateStore.GetLatestReviewResultAsync(ExecutionId, CancellationToken.None);
         var usageTask = StateStore.GetAgentUsageAsync(ExecutionId, CancellationToken.None);
+        var relatedTask = StateStore.ListExecutionsByWorkItemAsync(_execution.WorkItemId, CancellationToken.None);
 
-        await Task.WhenAll(eventsTask, sessionsTask, chunksTask, planTask, reviewTask, usageTask);
+        await Task.WhenAll(eventsTask, sessionsTask, chunksTask, planTask, reviewTask, usageTask, relatedTask);
 
         _events = (await eventsTask).ToList();
         _agentSessions = (await sessionsTask).ToList();
@@ -383,6 +429,9 @@ else
         _plan = await planTask;
         _review = await reviewTask;
         _usageRecords = (await usageTask).ToList();
+        _relatedExecutions = (await relatedTask)
+            .OrderByDescending(e => e.CreatedAt)
+            .ToList();
 
         _chunksBySession = _agentChunks
             .GroupBy(c => c.SessionId)
