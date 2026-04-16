@@ -46,6 +46,7 @@ public sealed class DoctorService(
             repositoryOptions.Value.Frontend.BaseClonePath));
         checks.Add(await CheckRepoBranchAsync("Frontend Branch", repositoryOptions.Value.Frontend, cancellationToken));
 
+        var adoConnected = false;
         if (string.IsNullOrWhiteSpace(azureDevOpsOptions.Value.PersonalAccessToken))
         {
             var configPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc");
@@ -59,7 +60,8 @@ public sealed class DoctorService(
             try
             {
                 var sprint = await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken);
-                checks.Add(new DoctorCheckResult("Azure DevOps", !string.IsNullOrWhiteSpace(sprint), sprint ?? "No sprint returned"));
+                adoConnected = !string.IsNullOrWhiteSpace(sprint);
+                checks.Add(new DoctorCheckResult("Azure DevOps", adoConnected, sprint ?? "No sprint returned"));
             }
             catch (Exception ex)
             {
@@ -67,24 +69,29 @@ public sealed class DoctorService(
             }
         }
 
-        // Pipeline checks (only when pipeline IDs are configured)
+        // Pipeline checks: only run when IDs are configured and ADO connectivity has been confirmed.
+        // If ADO auth failed, pipeline API calls would also fail — skip them to avoid misleading errors.
         var deploy = deployOptions.Value;
         if (deploy.BackendPipelineId > 0)
         {
-            checks.Add(await CheckPipelineAsync("Backend Pipeline", deploy.BackendPipelineId, cancellationToken));
+            checks.Add(adoConnected
+                ? await CheckPipelineAsync("Backend Pipeline", deploy.BackendPipelineId, cancellationToken)
+                : new DoctorCheckResult("Backend Pipeline", false, "Skipped — Azure DevOps connectivity check did not pass."));
         }
         else
         {
-            checks.Add(new DoctorCheckResult("Backend Pipeline", false, "Deploy:BackendPipelineId is not configured."));
+            checks.Add(new DoctorCheckResult("Backend Pipeline", true, "Not configured — skipped."));
         }
 
         if (deploy.FrontendPipelineId > 0)
         {
-            checks.Add(await CheckPipelineAsync("Frontend Pipeline", deploy.FrontendPipelineId, cancellationToken));
+            checks.Add(adoConnected
+                ? await CheckPipelineAsync("Frontend Pipeline", deploy.FrontendPipelineId, cancellationToken)
+                : new DoctorCheckResult("Frontend Pipeline", false, "Skipped — Azure DevOps connectivity check did not pass."));
         }
         else
         {
-            checks.Add(new DoctorCheckResult("Frontend Pipeline", false, "Deploy:FrontendPipelineId is not configured."));
+            checks.Add(new DoctorCheckResult("Frontend Pipeline", true, "Not configured — skipped."));
         }
 
         return checks;
@@ -145,7 +152,7 @@ public sealed class DoctorService(
                 ? new DoctorCheckResult(name, true, $"id={pipelineId}  name={pipelineName}")
                 : new DoctorCheckResult(name, false, $"Pipeline id={pipelineId} not found in Azure DevOps.");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new DoctorCheckResult(name, false, ex.Message);
         }
