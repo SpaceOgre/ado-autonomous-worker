@@ -38,6 +38,8 @@ dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj -
 # Run the tool after local install
 dotnet tool run ado-worker -- queue
 dotnet tool run ado-worker -- run
+dotnet tool run ado-worker -- deploy
+dotnet tool run ado-worker -- deploy --dry-run
 dotnet tool run ado-worker -- dashboard
 dotnet tool run ado-worker -- dashboard --port 8080
 dotnet tool run ado-worker -- task run --id <workItemId>
@@ -61,23 +63,24 @@ Local configuration goes in `src/Ado.AutonomousWorker.Cli/appsettings.local.json
 
 ### Project Layout
 
-| Project | Role |
-|---|---|
-| `Ado.AutonomousWorker.Cli` | CLI entry point, commands, DI wiring, Spectre.Console UI |
-| `Ado.AutonomousWorker.Core` | Domain abstractions, models, enums, `RulesEngine` |
-| `Ado.AutonomousWorker.Dashboard` | Blazor Server web dashboard (MudBlazor) for viewing executions, logs, and agent output |
-| `Ado.AutonomousWorker.Infrastructure` | All real implementations (agents, state, ADO client, workspaces) |
-| `Ado.AutonomousWorker.Tests` | xUnit tests for pure/unit-testable components |
+| Project                               | Role                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Ado.AutonomousWorker.Cli`            | CLI entry point, commands, DI wiring, Spectre.Console UI                               |
+| `Ado.AutonomousWorker.Core`           | Domain abstractions, models, enums, `RulesEngine`                                      |
+| `Ado.AutonomousWorker.Dashboard`      | Blazor Server web dashboard (MudBlazor) for viewing executions, logs, and agent output |
+| `Ado.AutonomousWorker.Infrastructure` | All real implementations (agents, state, ADO client, workspaces)                       |
+| `Ado.AutonomousWorker.Tests`          | xUnit tests for pure/unit-testable components                                          |
 
 ### Queue Kinds
 
-| Kind | `QueueItemKind` | Trigger | Phase flow |
-|---|---|---|---|
-| AI Work | `0` | Work item tagged `AI-Work` | Queued → Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing |
-| AI Rework | `1` | Work item tagged `AI-Rework` | Same as AI Work |
-| PR Fix | `2` | PR has the `AI-Rework` label | Queued → Coding → Validating → Publishing |
+| Kind      | `QueueItemKind` | Trigger                      | Phase flow                                                                        |
+| --------- | --------------- | ---------------------------- | --------------------------------------------------------------------------------- |
+| AI Work   | `0`             | Work item tagged `AI-Work`   | Queued → Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing |
+| AI Rework | `1`             | Work item tagged `AI-Rework` | Same as AI Work                                                                   |
+| PR Fix    | `2`             | PR has the `AI-Rework` label | Queued → Coding → Validating → Publishing                                         |
 
 **PR Fix** (`AiPrFix`) skips Planning and Reviewing because:
+
 - The existing PR branch already defines the scope.
 - The reviewer's comments are the quality signal — running a separate AI review would be redundant.
 - On success, the `AI-Rework` PR label is removed and `AI-Done` is added to the work item.
@@ -93,6 +96,7 @@ Queued → Planning → Coding → Reviewing → ApplyingReview → Validating �
 ```
 
 For `AiPrFix`, Planning and Reviewing are bypassed via dedicated handler classes:
+
 - `PrFixEligibilityHandler` transitions directly to `Coding` (no eligibility or acceptance-criteria checks).
 - `PrFixCodingHandler` transitions directly to `Validating`, so `ReviewingHandler` and `PlanningHandler` are never reached.
 
@@ -127,18 +131,18 @@ Each work item execution creates a **git worktree** under the configured `Worktr
 
 ### ADO Tag / PR Label Lifecycle
 
-| Tag | Meaning |
-|---|---|
-| `AI-Work` | Item is eligible for first-time automation |
-| `AI-Rework` | Item was previously attempted; needs a retry pass |
-| `AI-Done` | Successfully completed; PR published |
-| `AI-Failed` | Terminal failure; requires human intervention |
-| `AI-TooLarge` | Acceptance criteria exceeded size limit |
+| Tag           | Meaning                                           |
+| ------------- | ------------------------------------------------- |
+| `AI-Work`     | Item is eligible for first-time automation        |
+| `AI-Rework`   | Item was previously attempted; needs a retry pass |
+| `AI-Done`     | Successfully completed; PR published              |
+| `AI-Failed`   | Terminal failure; requires human intervention     |
+| `AI-TooLarge` | Acceptance criteria exceeded size limit           |
 
-| PR Label | Set when | Cleared when |
-|---|---|---|
-| `AI-Generated` | PR is created by the worker | — |
-| `AI-Rework` | Manually by reviewer to request AI fixes | PR Fix run completes successfully |
+| PR Label       | Set when                                 | Cleared when                      |
+| -------------- | ---------------------------------------- | --------------------------------- |
+| `AI-Generated` | PR is created by the worker              | —                                 |
+| `AI-Rework`    | Manually by reviewer to request AI fixes | PR Fix run completes successfully |
 
 After a successful AI Work / AI Rework run, `AI-Work`/`AI-Rework` is removed and `AI-Done` is added. A success comment with PR links is posted to the work item.
 
