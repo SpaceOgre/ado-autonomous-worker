@@ -170,7 +170,7 @@ public sealed class ExecutionLiveDisplay(
         IRenderable header;
         IReadOnlyList<ExecutionEventRecord> events = [];
         IReadOnlyList<AgentOutputChunk> agentOutput = [];
-        TaskPhase phase = TaskPhase.Queued;
+        var phase = TaskPhase.Queued;
 
         if (data is not null)
         {
