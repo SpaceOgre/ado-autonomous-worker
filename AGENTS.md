@@ -66,7 +66,7 @@ Local configuration goes in `src/Ado.AutonomousWorker.Cli/appsettings.local.json
 |---|---|---|---|
 | AI Work | `0` | Work item tagged `AI-Work` | Queued → Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing |
 | AI Rework | `1` | Work item tagged `AI-Rework` | Same as AI Work |
-| PR Fix | `2` | PR has both `AI-Generated` and `AI-Rework` labels | Queued → Coding → Validating → Publishing |
+| PR Fix | `2` | PR has the `AI-Rework` label | Queued → Coding → Validating → Publishing |
 
 **PR Fix** (`AiPrFix`) skips Planning and Reviewing because:
 - The existing PR branch already defines the scope.

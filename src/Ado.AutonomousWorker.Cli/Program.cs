@@ -19,13 +19,16 @@ var userConfigPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc
 builder.Configuration
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
     .AddJsonFile(userConfigPath, optional: true, reloadOnChange: false)
     .AddEnvironmentVariables("AdoWorker_");
 
+var storageBaseOverride = builder.Environment.IsDevelopment() ? Path.Combine(Directory.GetCurrentDirectory(), ".data") : null;
+
 var earlyStorageOptions = new StorageOptions();
 builder.Configuration.GetSection("Storage").Bind(earlyStorageOptions);
-earlyStorageOptions.NormalizePaths();
+earlyStorageOptions.NormalizePaths(storageBaseOverride);
 Directory.CreateDirectory(earlyStorageOptions.LogRoot);
 var logFilePath = Path.Combine(earlyStorageOptions.LogRoot, "worker-.log");
 
@@ -50,7 +53,7 @@ var serilogLogger = new LoggerConfiguration()
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(serilogLogger, dispose: true);
 
-builder.Services.AddAutonomousWorker(builder.Configuration);
+builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();
