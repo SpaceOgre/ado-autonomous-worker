@@ -106,7 +106,8 @@ public sealed class DashboardCommand : AsyncCommand<DashboardCommand.Settings>
         var current = Directory.GetCurrentDirectory();
         for (var i = 0; i < 6; i++)
         {
-            if (current is null) break;
+            if (current is null)
+                break;
             var projectPath = Path.Combine(current, "src", "Ado.AutonomousWorker.Dashboard", "Ado.AutonomousWorker.Dashboard.csproj");
             if (File.Exists(projectPath))
             {

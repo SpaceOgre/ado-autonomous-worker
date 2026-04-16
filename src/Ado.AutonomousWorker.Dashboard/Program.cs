@@ -2,7 +2,6 @@ using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Dashboard.Components;
 using Ado.AutonomousWorker.Infrastructure;
 using Ado.AutonomousWorker.Infrastructure.Logging;
-using Microsoft.Extensions.Configuration;
 using MudBlazor.Services;
 using Serilog;
 
