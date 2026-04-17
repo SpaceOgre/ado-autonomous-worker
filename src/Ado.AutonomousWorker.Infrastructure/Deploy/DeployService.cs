@@ -15,7 +15,7 @@ public sealed class DeployService(
     private readonly DeployOptions _options = deployOptions.Value;
     private readonly ILogger<DeployService> _logger = logger;
 
-    private const string ReadyForTestState = "Ready for Test";
+    private const string ReadyForTestState = "Ready for test";
 
     /// <summary>
     /// Triggers the selected pipelines on the configured branch or the given <paramref name="tag"/>.
@@ -135,8 +135,8 @@ public sealed class DeployService(
     /// <summary>
     /// Computes the work item changes that would be applied (for dry-run or actual execution).
     /// Returns:
-    ///   - <c>taskChanges</c>: Resolved tasks/bugs to move to Ready for Test
-    ///   - <c>storyChanges</c>: User stories whose children are all Ready for Test or Closed
+    ///   - <c>taskChanges</c>: Resolved tasks/bugs to move to Ready for test
+    ///   - <c>storyChanges</c>: User stories whose children are all Ready for test or Closed
     /// </summary>
     public async Task<(IReadOnlyList<DeployWorkItemChange> TaskChanges, IReadOnlyList<DeployWorkItemChange> StoryChanges)> ComputeChangesAsync(
         CancellationToken cancellationToken)
@@ -154,7 +154,7 @@ public sealed class DeployService(
                 _options.ReadyForTestAssignee))
             .ToArray();
 
-        // 2. Active user stories where all children will be Ready for Test or Closed after the changes above
+        // 2. Active user stories where all children will be Ready for test or Closed after the changes above
         var resolvedIds = new HashSet<int>(resolvedItems.Select(i => i.WorkItemId));
         var stories = await _adoClient.QueryActiveSprintUserStoriesWithChildrenAsync(cancellationToken);
 
@@ -179,7 +179,7 @@ public sealed class DeployService(
 
             var allDone = childIds.All(id =>
             {
-                // This ID is being moved to Ready for Test
+                // This ID is being moved to Ready for test
                 if (resolvedIds.Contains(id))
                     return true;
                 // Already in an acceptable end state

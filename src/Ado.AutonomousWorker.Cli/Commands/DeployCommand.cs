@@ -72,8 +72,8 @@ public sealed class DeployCommand(
             return 1;
         }
 
-        RenderChangesTable("Tasks / Bugs → Ready for Test", changes.taskChanges);
-        RenderChangesTable("User Stories → Ready for Test", changes.storyChanges);
+        RenderChangesTable("Tasks / Bugs → Ready for test", changes.taskChanges);
+        RenderChangesTable("User Stories → Ready for test", changes.storyChanges);
 
         if (changes.taskChanges.Count == 0 && changes.storyChanges.Count == 0)
         {
@@ -189,8 +189,8 @@ public sealed class DeployCommand(
             return 1;
         }
 
-        RenderChangesTable("Tasks / Bugs → Ready for Test", changes.taskChanges);
-        RenderChangesTable("User Stories → Ready for Test", changes.storyChanges);
+        RenderChangesTable("Tasks / Bugs → Ready for test", changes.taskChanges);
+        RenderChangesTable("User Stories → Ready for test", changes.storyChanges);
 
         if (changes.taskChanges.Count == 0 && changes.storyChanges.Count == 0)
         {
@@ -219,7 +219,7 @@ public sealed class DeployCommand(
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[green]✓ Deploy complete.[/] Updated {changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories to [deepskyblue1]Ready for Test[/].");
+        AnsiConsole.MarkupLine($"[green]✓ Deploy complete.[/] Updated {changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories to [deepskyblue1]Ready for test[/].");
         return 0;
     }
 

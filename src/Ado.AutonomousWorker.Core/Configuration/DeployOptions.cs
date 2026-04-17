@@ -22,7 +22,7 @@ public sealed class DeployOptions
     public int TimeoutMinutes { get; set; } = 60;
 
     /// <summary>
-    /// Email address of the user to assign when transitioning work items to "Ready for Test".
+    /// Email address of the user to assign when transitioning work items to "Ready for test".
     /// </summary>
     public string ReadyForTestAssignee { get; set; } = string.Empty;
 }
