@@ -8,4 +8,6 @@ public sealed record ReviewFinding(
     string Title,
     string Rationale,
     string? FilePath = null,
-    ReviewDisposition Disposition = ReviewDisposition.Pending);
+    ReviewDisposition Disposition = ReviewDisposition.Pending,
+    string? Category = null,
+    string? SuggestedFix = null);

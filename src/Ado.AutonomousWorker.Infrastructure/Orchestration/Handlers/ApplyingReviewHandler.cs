@@ -62,7 +62,14 @@ internal sealed class ApplyingReviewHandler(
     {
         var formattedFindings = string.Join(
             Environment.NewLine,
-            findings.Select(f => $"- [{f.Severity}] {f.Title}: {f.Rationale}"));
+            findings.Select(f =>
+            {
+                var categoryLabel = f.Category is not null ? $" ({f.Category})" : string.Empty;
+                var fix = string.IsNullOrWhiteSpace(f.SuggestedFix)
+                    ? string.Empty
+                    : $"{Environment.NewLine}  Fix: {f.SuggestedFix}";
+                return $"- [{f.Severity}{categoryLabel}] {f.Title}: {f.Rationale}{fix}";
+            }));
 
         return $$"""
         Apply the accepted review findings and leave the repository ready for validation.
@@ -71,6 +78,7 @@ internal sealed class ApplyingReviewHandler(
         {{formattedFindings}}
 
         Requirements:
+        - Address each finding using the suggested fix where provided.
         - Do not create commits, push branches, open pull requests, link work items, or publish changes.
         """;
     }

@@ -80,19 +80,70 @@ internal sealed class ReviewingHandler(
         string commentsBlock)
     {
         var repositorySummary = RepositoryWorkflowHelpers.BuildRepositorySummary(repositoryExecutions, agentWorkingDirectory);
+        var repoPaths = string.Join(
+            Environment.NewLine,
+            repositoryExecutions.Select(re => $"- {re.Workspace.WorkingDirectory}"));
+
         return $$"""
-        Review the coordinated changes across the listed repositories for correctness, regressions, integration mismatches, security issues, and missing tests.
-        Return JSON that matches the supplied schema exactly.
+        You are performing a focused code review of a completed implementation. Your job is to find real problems, not speculate.
 
         Parent item: #{{parent.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}} {{parent.Title}}
         Agent working directory: {{agentWorkingDirectory}}
         Parent feature: {{parent.ParentFeatureTitle ?? "-"}}
+
+        Description:
+        {{parent.Description ?? "-"}}
+
+        Acceptance Criteria:
+        {{parent.AcceptanceCriteria ?? "-"}}
 
         Recent comments:
         {{commentsBlock}}
 
         Repositories:
         {{repositorySummary}}
+
+        ## Step 1: Inspect the diff
+
+        For each repository path listed below, run `git log --oneline -5` to understand the commit history, then run `git diff main..HEAD` (or `git diff master..HEAD` if `main` does not exist) to see exactly what was changed on this branch. Base all findings on evidence visible in the diff or in files the diff touches.
+
+        Repository paths:
+        {{repoPaths}}
+
+        ## Step 2: Review using four focused lenses
+
+        For each lens, only emit findings that are clearly present in the diff or in code the diff interacts with. Skip anything speculative.
+
+        **Lens 1 — Bugs**
+        Category: `bugs`
+        Look for: logic errors, off-by-one errors, null/missing-value handling gaps, incorrect assumptions about data, broken contracts with callers (wrong return value, missing state update), race conditions in async code.
+
+        **Lens 2 — Security**
+        Category: `security`
+        Look for: unvalidated or unsanitized external input reaching sensitive operations, hard-coded credentials or secrets, missing authorization checks on new code paths, data exposure in logs or error responses, insecure defaults.
+
+        **Lens 3 — Test coverage**
+        Category: `test-coverage`
+        Look for: new logic paths or branches that have no corresponding test, edge cases (empty input, null, error conditions) that are untested, test assertions that are too weak to catch regressions. Only flag missing tests for non-trivial logic.
+
+        **Lens 4 — Error handling**
+        Category: `error-handling`
+        Look for: empty or swallowed catch blocks, exceptions replaced with silent defaults (null, false, 0) without logging, unhandled async exceptions, retry logic that exhausts silently, callers not checking for failure results.
+
+        ## Step 3: Severity definitions
+
+        Use exactly one of these four severity labels per finding:
+        - `critical` — data loss, security breach, or crash in the normal flow; must be fixed before merging.
+        - `high` — causes incorrect behavior or a meaningful reliability gap; should be fixed before merging.
+        - `medium` — reduces quality or safety but has a workaround; fix is strongly recommended.
+        - `low` — minor improvement only; omit unless the finding is directly related to correctness or safety.
+
+        ## Step 4: Output rules
+
+        - Every finding must include a concrete `suggestedFix`: a specific description of the exact code change needed, not a general recommendation.
+        - Set `filePath` to the relative path of the affected file when known.
+        - Do not report findings about code that was not changed in this diff.
+        - Return JSON matching the supplied schema exactly.
 
         Requirements:
         - Do not create commits, push branches, open pull requests, link work items, or publish changes.

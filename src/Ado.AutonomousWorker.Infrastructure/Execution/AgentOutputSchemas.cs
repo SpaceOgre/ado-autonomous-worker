@@ -55,8 +55,10 @@ public static class AgentOutputSchemas
             "properties": {
               "id": { "type": "string" },
               "severity": { "type": "string" },
+              "category": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
               "title": { "type": "string" },
               "rationale": { "type": "string" },
+              "suggestedFix": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
               "filePath": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
             },
             "required": ["id", "severity", "title", "rationale", "filePath"]
