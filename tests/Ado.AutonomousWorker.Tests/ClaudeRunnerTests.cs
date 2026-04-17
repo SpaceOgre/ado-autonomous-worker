@@ -4,8 +4,8 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class ClaudeRunnerTests
 {
-    [Fact]
-    public void ParseEnvelope_ExtractsSummaryAndUsageFromResultLine()
+    [Test]
+    public async Task ParseEnvelope_ExtractsSummaryAndUsageFromResultLine()
     {
         const string raw = """
             {"type":"system","subtype":"init","session_id":"abc","tools":[]}
@@ -16,18 +16,18 @@ public sealed class ClaudeRunnerTests
 
         var (summary, structuredPayload, usage) = ClaudeRunner.ParseEnvelope(raw, hasSchema: false);
 
-        Assert.Equal("All done.", summary);
-        Assert.Null(structuredPayload);
-        Assert.NotNull(usage);
-        Assert.Equal("claude-opus-4-6", usage.ActualModel);
-        Assert.Equal(100, usage.InputTokens);
-        Assert.Equal(50, usage.OutputTokens);
-        Assert.Equal(10, usage.CachedInputTokens);
-        Assert.Equal(0.002m, usage.CostUsd);
+        await Assert.That(summary).IsEqualTo("All done.");
+        await Assert.That(structuredPayload).IsNull();
+        await Assert.That(usage).IsNotNull();
+        await Assert.That(usage!.ActualModel).IsEqualTo("claude-opus-4-6");
+        await Assert.That(usage.InputTokens).IsEqualTo(100);
+        await Assert.That(usage.OutputTokens).IsEqualTo(50);
+        await Assert.That(usage.CachedInputTokens).IsEqualTo(10);
+        await Assert.That(usage.CostUsd).IsEqualTo(0.002m);
     }
 
-    [Fact]
-    public void ParseEnvelope_ExtractsStructuredPayloadWhenSchemaPresent()
+    [Test]
+    public async Task ParseEnvelope_ExtractsStructuredPayloadWhenSchemaPresent()
     {
         const string raw = """
             {"type":"system","subtype":"init","session_id":"abc","tools":[]}
@@ -36,26 +36,26 @@ public sealed class ClaudeRunnerTests
 
         var (_, structuredPayload, _) = ClaudeRunner.ParseEnvelope(raw, hasSchema: true);
 
-        Assert.NotNull(structuredPayload);
-        Assert.Contains("\"scope\"", structuredPayload);
-        Assert.Contains("\"Backend\"", structuredPayload);
+        await Assert.That(structuredPayload).IsNotNull();
+        await Assert.That(structuredPayload).Contains("\"scope\"");
+        await Assert.That(structuredPayload).Contains("\"Backend\"");
     }
 
-    [Fact]
-    public void ParseEnvelope_FallsBackToSingleBlobForOldJsonFormat()
+    [Test]
+    public async Task ParseEnvelope_FallsBackToSingleBlobForOldJsonFormat()
     {
         const string raw =
             """{"type":"result","subtype":"success","result":"Legacy result.","model":"claude-opus-4-6","total_cost_usd":0.001}""";
 
         var (summary, _, usage) = ClaudeRunner.ParseEnvelope(raw, hasSchema: false);
 
-        Assert.Equal("Legacy result.", summary);
-        Assert.NotNull(usage);
-        Assert.Equal("claude-opus-4-6", usage.ActualModel);
+        await Assert.That(summary).IsEqualTo("Legacy result.");
+        await Assert.That(usage).IsNotNull();
+        await Assert.That(usage!.ActualModel).IsEqualTo("claude-opus-4-6");
     }
 
-    [Fact]
-    public void ParseEnvelope_ReturnsRawWhenNoResultLineExists()
+    [Test]
+    public async Task ParseEnvelope_ReturnsRawWhenNoResultLineExists()
     {
         const string raw = """
             {"type":"system","subtype":"init"}
@@ -64,18 +64,18 @@ public sealed class ClaudeRunnerTests
 
         var (summary, structuredPayload, usage) = ClaudeRunner.ParseEnvelope(raw, hasSchema: false);
 
-        Assert.Equal(raw.Trim(), summary);
-        Assert.Null(structuredPayload);
-        Assert.Null(usage);
+        await Assert.That(summary).IsEqualTo(raw.Trim());
+        await Assert.That(structuredPayload).IsNull();
+        await Assert.That(usage).IsNull();
     }
 
-    [Fact]
-    public void ParseEnvelope_ReturnsEmptyForWhitespaceInput()
+    [Test]
+    public async Task ParseEnvelope_ReturnsEmptyForWhitespaceInput()
     {
         var (summary, structuredPayload, usage) = ClaudeRunner.ParseEnvelope("   ", hasSchema: false);
 
-        Assert.Equal("   ", summary);
-        Assert.Null(structuredPayload);
-        Assert.Null(usage);
+        await Assert.That(summary).IsEqualTo("   ");
+        await Assert.That(structuredPayload).IsNull();
+        await Assert.That(usage).IsNull();
     }
 }

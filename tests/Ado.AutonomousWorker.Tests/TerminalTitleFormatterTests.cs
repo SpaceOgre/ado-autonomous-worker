@@ -6,18 +6,18 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class TerminalTitleFormatterTests
 {
-    [Fact]
-    public void BuildWaitingTitle_IncludesSpinnerAndBaseTitle()
+    [Test]
+    public async Task BuildWaitingTitle_IncludesSpinnerAndBaseTitle()
     {
         var title = TerminalTitleFormatter.BuildWaitingTitle("Queue 1/3 - Work item #28639", 0, useUnicode: false);
 
-        Assert.Contains("Queue 1/3 - Work item #28639", title);
-        Assert.Contains("Waiting", title);
-        Assert.StartsWith("-", title);
+        await Assert.That(title).Contains("Queue 1/3 - Work item #28639");
+        await Assert.That(title).Contains("Waiting");
+        await Assert.That(title).StartsWith("-");
     }
 
-    [Fact]
-    public void BuildExecutionTitle_UsesPhaseForActiveExecution()
+    [Test]
+    public async Task BuildExecutionTitle_UsesPhaseForActiveExecution()
     {
         var execution = new TaskExecutionRecord(
             "exec-123",
@@ -37,13 +37,13 @@ public sealed class TerminalTitleFormatterTests
             useUnicode: true
         );
 
-        Assert.Contains("Planning", title);
-        Assert.Contains("Queue 1/3 - Work item #28639", title);
-        Assert.Contains("ado-worker", title);
+        await Assert.That(title).Contains("Planning");
+        await Assert.That(title).Contains("Queue 1/3 - Work item #28639");
+        await Assert.That(title).Contains("ado-worker");
     }
 
-    [Fact]
-    public void BuildExecutionTitle_UsesCompletionMarkerForCompletedExecution()
+    [Test]
+    public async Task BuildExecutionTitle_UsesCompletionMarkerForCompletedExecution()
     {
         var execution = new TaskExecutionRecord(
             "exec-123",
@@ -58,7 +58,7 @@ public sealed class TerminalTitleFormatterTests
 
         var title = TerminalTitleFormatter.BuildExecutionTitle("Work item #28639", execution, 0, useUnicode: true);
 
-        Assert.StartsWith("✓", title);
-        Assert.Contains("Completed", title);
+        await Assert.That(title).StartsWith("✓");
+        await Assert.That(title).Contains("Completed");
     }
 }

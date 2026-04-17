@@ -226,7 +226,7 @@ You can still override the storage paths in `appsettings.local.json` with absolu
 
 ```powershell
 dotnet build src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj
-dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj --no-build
+dotnet run --project tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj
 dotnet csharpier format .
 ```
 

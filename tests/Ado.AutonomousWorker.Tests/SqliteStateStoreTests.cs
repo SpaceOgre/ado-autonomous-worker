@@ -13,7 +13,7 @@ public sealed class SqliteStateStoreTests : IDisposable
         Guid.NewGuid().ToString("N")
     );
 
-    [Fact]
+    [Test]
     public async Task AppendAgentOutputChunkAsync_TrimsStoredChunksPerSession()
     {
         Directory.CreateDirectory(_rootPath);
@@ -40,9 +40,9 @@ public sealed class SqliteStateStoreTests : IDisposable
 
         var chunks = await store.GetAgentOutputChunksAsync("exec-1", CancellationToken.None);
 
-        Assert.Equal(200, chunks.Count);
-        Assert.Equal(6, chunks.First().Sequence);
-        Assert.Equal(205, chunks.Last().Sequence);
+        await Assert.That(chunks.Count).IsEqualTo(200);
+        await Assert.That(chunks.First().Sequence).IsEqualTo(6);
+        await Assert.That(chunks.Last().Sequence).IsEqualTo(205);
     }
 
     public void Dispose()

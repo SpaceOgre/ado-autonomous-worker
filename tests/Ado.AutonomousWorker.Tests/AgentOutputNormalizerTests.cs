@@ -6,38 +6,38 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class AgentOutputNormalizerTests
 {
-    [Fact]
-    public void NormalizeClaudeLine_ReturnsReadableStdoutText()
+    [Test]
+    public async Task NormalizeClaudeLine_ReturnsReadableStdoutText()
     {
         var result = AgentOutputNormalizer.NormalizeClaudeLine(
             new ProcessOutputLine(AgentOutputStream.Stdout, "  Implementing validation now.  ")
         );
 
-        Assert.Equal(["Implementing validation now."], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "Implementing validation now." });
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_IgnoresJsonWithNoKnownFields()
+    [Test]
+    public async Task NormalizeClaudeLine_IgnoresJsonWithNoKnownFields()
     {
         var result = AgentOutputNormalizer.NormalizeClaudeLine(
             new ProcessOutputLine(AgentOutputStream.Stdout, "{\"scope\":\"Backend\"}")
         );
 
-        Assert.Empty(result);
+        await Assert.That(result).IsEmpty();
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_ExtractsMessageFromJsonWithMessageField()
+    [Test]
+    public async Task NormalizeClaudeLine_ExtractsMessageFromJsonWithMessageField()
     {
         const string line = """{"message":"Planning repositories and validation strategy."}""";
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Equal(["Planning repositories and validation strategy."], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "Planning repositories and validation strategy." });
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_ExtractsTextFromAssistantEvent()
+    [Test]
+    public async Task NormalizeClaudeLine_ExtractsTextFromAssistantEvent()
     {
         const string line = """
             {"type":"assistant","message":{"content":[{"type":"text","text":"Analyzing the failing test now."}]}}
@@ -45,11 +45,11 @@ public sealed class AgentOutputNormalizerTests
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Equal(["Analyzing the failing test now."], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "Analyzing the failing test now." });
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_ExtractsToolNameFromAssistantEvent()
+    [Test]
+    public async Task NormalizeClaudeLine_ExtractsToolNameFromAssistantEvent()
     {
         const string line = """
             {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"dotnet test"}}]}}
@@ -57,11 +57,11 @@ public sealed class AgentOutputNormalizerTests
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Equal(["Using tool: Bash"], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "Using tool: Bash" });
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_ExtractsTextAndToolFromAssistantEvent()
+    [Test]
+    public async Task NormalizeClaudeLine_ExtractsTextAndToolFromAssistantEvent()
     {
         const string line = """
             {"type":"assistant","message":{"content":[{"type":"text","text":"Running tests."},{"type":"tool_use","name":"Bash","input":{}}]}}
@@ -69,69 +69,69 @@ public sealed class AgentOutputNormalizerTests
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Equal(["Running tests.", "Using tool: Bash"], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "Running tests.", "Using tool: Bash" });
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_SkipsSystemEvent()
+    [Test]
+    public async Task NormalizeClaudeLine_SkipsSystemEvent()
     {
         const string line = """{"type":"system","subtype":"init","session_id":"abc","tools":[]}""";
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Empty(result);
+        await Assert.That(result).IsEmpty();
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_SkipsResultEvent()
+    [Test]
+    public async Task NormalizeClaudeLine_SkipsResultEvent()
     {
         const string line =
             """{"type":"result","subtype":"success","result":"Done.","model":"claude-opus-4-5","total_cost_usd":0.001}""";
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Empty(result);
+        await Assert.That(result).IsEmpty();
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_SkipsUserEvent()
+    [Test]
+    public async Task NormalizeClaudeLine_SkipsUserEvent()
     {
         const string line =
             """{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"x","content":"ok"}]}}""";
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Empty(result);
+        await Assert.That(result).IsEmpty();
     }
 
-    [Fact]
-    public void NormalizeClaudeLine_PrefixesStderrLines()
+    [Test]
+    public async Task NormalizeClaudeLine_PrefixesStderrLines()
     {
         var result = AgentOutputNormalizer.NormalizeClaudeLine(
             new ProcessOutputLine(AgentOutputStream.Stderr, "API rate limit hit")
         );
 
-        Assert.Equal(["[stderr] API rate limit hit"], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "[stderr] API rate limit hit" });
     }
 
-    [Fact]
-    public void NormalizeCodexLine_ExtractsMessageFromJsonPayload()
+    [Test]
+    public async Task NormalizeCodexLine_ExtractsMessageFromJsonPayload()
     {
         const string line =
             """{"type":"assistant_message","payload":{"message":"Inspecting failing test and tracing null input path."}}""";
 
         var result = AgentOutputNormalizer.NormalizeCodexLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Equal(["Inspecting failing test and tracing null input path."], result);
+        await Assert.That(result).IsEquivalentTo(new[] { "Inspecting failing test and tracing null input path." });
     }
 
-    [Fact]
-    public void NormalizeCodexLine_IgnoresSessionMetadata()
+    [Test]
+    public async Task NormalizeCodexLine_IgnoresSessionMetadata()
     {
         const string line = """{"type":"session_meta","payload":{"id":"abc"}}""";
 
         var result = AgentOutputNormalizer.NormalizeCodexLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        Assert.Empty(result);
+        await Assert.That(result).IsEmpty();
     }
 }

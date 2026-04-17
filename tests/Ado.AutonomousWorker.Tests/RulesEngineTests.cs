@@ -8,31 +8,25 @@ public sealed class RulesEngineTests
 {
     private readonly RulesEngine _rulesEngine = new();
 
-    [Fact]
-    public void OrderQueue_PrioritizesReworkBeforeAiWork()
+    [Test]
+    public async Task OrderQueue_PrioritizesReworkBeforeAiWork()
     {
-        var ordered = _rulesEngine.OrderQueue(
-            [new WorkItemSummary(2, WorkItemType.Bug, "AI Work", "New", null, 10)],
-            [new WorkItemSummary(1, WorkItemType.UserStory, "Rework", "Active", "daniel.nordstrom@consid.se", 50)]
-        );
+        var ordered = _rulesEngine
+            .OrderQueue(
+                [new WorkItemSummary(2, WorkItemType.Bug, "AI Work", "New", null, 10)],
+                [new WorkItemSummary(1, WorkItemType.UserStory, "Rework", "Active", "daniel.nordstrom@consid.se", 50)]
+            )
+            .ToList();
 
-        Assert.Collection(
-            ordered,
-            first =>
-            {
-                Assert.Equal(QueueItemKind.AiRework, first.Kind);
-                Assert.Equal(WorkItemType.UserStory, first.WorkItemType);
-            },
-            second =>
-            {
-                Assert.Equal(QueueItemKind.AiWork, second.Kind);
-                Assert.Equal(WorkItemType.Bug, second.WorkItemType);
-            }
-        );
+        await Assert.That(ordered.Count).IsEqualTo(2);
+        await Assert.That(ordered[0].Kind).IsEqualTo(QueueItemKind.AiRework);
+        await Assert.That(ordered[0].WorkItemType).IsEqualTo(WorkItemType.UserStory);
+        await Assert.That(ordered[1].Kind).IsEqualTo(QueueItemKind.AiWork);
+        await Assert.That(ordered[1].WorkItemType).IsEqualTo(WorkItemType.Bug);
     }
 
-    [Fact]
-    public void ClassifyScope_UsesTagsBeforeTextAnalysis()
+    [Test]
+    public async Task ClassifyScope_UsesTagsBeforeTextAnalysis()
     {
         var scope = _rulesEngine.ClassifyScope(
             new WorkItemDetails
@@ -43,11 +37,11 @@ public sealed class RulesEngineTests
             }
         );
 
-        Assert.Equal(WorkItemScope.Backend, scope);
+        await Assert.That(scope).IsEqualTo(WorkItemScope.Backend);
     }
 
-    [Fact]
-    public void ExceedsAcceptanceCriteriaLimit_CountsBulletLines()
+    [Test]
+    public async Task ExceedsAcceptanceCriteriaLimit_CountsBulletLines()
     {
         var workItem = new WorkItemDetails
         {
@@ -59,20 +53,20 @@ public sealed class RulesEngineTests
 
         var exceeds = _rulesEngine.ExceedsAcceptanceCriteriaLimit(workItem, 10, out var lineCount);
 
-        Assert.True(exceeds);
-        Assert.Equal(11, lineCount);
+        await Assert.That(exceeds).IsTrue();
+        await Assert.That(lineCount).IsEqualTo(11);
     }
 
-    [Fact]
-    public void BuildCompletionTags_RemovesWorkTagsAndAddsDone()
+    [Test]
+    public async Task BuildCompletionTags_RemovesWorkTagsAndAddsDone()
     {
         var result = _rulesEngine.BuildCompletionTags(
             new WorkItemDetails { Tags = ["AI-Work", "Backend", "AI-Rework"] }
         );
 
-        Assert.Contains("AI-Done", result);
-        Assert.DoesNotContain("AI-Work", result);
-        Assert.DoesNotContain("AI-Rework", result);
-        Assert.Contains("Backend", result);
+        await Assert.That(result).Contains("AI-Done");
+        await Assert.That(result).DoesNotContain("AI-Work");
+        await Assert.That(result).DoesNotContain("AI-Rework");
+        await Assert.That(result).Contains("Backend");
     }
 }

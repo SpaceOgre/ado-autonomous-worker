@@ -16,27 +16,30 @@ public sealed class ProcessCommandRunnerTests : IDisposable
         Directory.CreateDirectory(_rootPath);
     }
 
-    [Fact]
+    [Test]
     public async Task RunAsync_ThrowsTimeoutExceptionWhenProcessExceedsConfiguredTimeout()
     {
         var runner = new ProcessCommandRunner(NullLogger<ProcessCommandRunner>.Instance);
         var artifactPath = Path.Combine(_rootPath, "timeout.log");
 
-        var exception = await Assert.ThrowsAsync<TimeoutException>(() =>
-            runner.RunAsync(
-                "pwsh",
-                ["-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 2"],
-                _rootPath,
-                artifactPath,
-                environmentVariables: null,
-                activityName: "Timeout test",
-                outputCallback: null,
-                cancellationToken: CancellationToken.None,
-                timeoutSeconds: 1
-            )
-        );
+        var exception = await Assert
+            .That(async () =>
+            {
+                await runner.RunAsync(
+                    "pwsh",
+                    ["-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 2"],
+                    _rootPath,
+                    artifactPath,
+                    environmentVariables: null,
+                    activityName: "Timeout test",
+                    outputCallback: null,
+                    cancellationToken: CancellationToken.None,
+                    timeoutSeconds: 1
+                );
+            })
+            .Throws<TimeoutException>();
 
-        Assert.Contains("configured timeout of 1 seconds", exception.Message);
+        await Assert.That(exception!.Message).Contains("configured timeout of 1 seconds");
     }
 
     public void Dispose()
