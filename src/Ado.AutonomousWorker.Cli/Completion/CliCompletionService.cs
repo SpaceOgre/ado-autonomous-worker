@@ -4,7 +4,11 @@ namespace Ado.AutonomousWorker.Cli.Completion;
 
 public sealed class CliCompletionService(IStateStore stateStore)
 {
-    public async Task<IReadOnlyList<string>> GetSuggestionsAsync(string currentWord, IReadOnlyList<string> tokens, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> GetSuggestionsAsync(
+        string currentWord,
+        IReadOnlyList<string> tokens,
+        CancellationToken cancellationToken
+    )
     {
         var suggestions = await GetUnfilteredSuggestionsAsync(tokens, cancellationToken);
         return suggestions
@@ -17,28 +21,31 @@ public sealed class CliCompletionService(IStateStore stateStore)
     public string BuildPowerShellScript(string commandName)
     {
         return $$"""
-        Register-ArgumentCompleter -Native -CommandName '{{commandName}}' -ScriptBlock {
-            param($wordToComplete, $commandAst, $cursorPosition)
+            Register-ArgumentCompleter -Native -CommandName '{{commandName}}' -ScriptBlock {
+                param($wordToComplete, $commandAst, $cursorPosition)
 
-            $tokens = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.Extent.Text })
-            if ($wordToComplete -and $tokens.Count -gt 0 -and $tokens[-1] -eq $wordToComplete) {
-                if ($tokens.Count -eq 1) {
-                    $tokens = @()
+                $tokens = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.Extent.Text })
+                if ($wordToComplete -and $tokens.Count -gt 0 -and $tokens[-1] -eq $wordToComplete) {
+                    if ($tokens.Count -eq 1) {
+                        $tokens = @()
+                    }
+                    else {
+                        $tokens = $tokens[0..($tokens.Count - 2)]
+                    }
                 }
-                else {
-                    $tokens = $tokens[0..($tokens.Count - 2)]
+
+                $completionArgs = @('__complete', '--current', $wordToComplete, '--') + $tokens
+                & '{{commandName}}' @completionArgs | ForEach-Object {
+                    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
                 }
             }
-
-            $completionArgs = @('__complete', '--current', $wordToComplete, '--') + $tokens
-            & '{{commandName}}' @completionArgs | ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
-            }
-        }
-        """;
+            """;
     }
 
-    private async Task<IReadOnlyList<string>> GetUnfilteredSuggestionsAsync(IReadOnlyList<string> tokens, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> GetUnfilteredSuggestionsAsync(
+        IReadOnlyList<string> tokens,
+        CancellationToken cancellationToken
+    )
     {
         if (tokens.Count == 0)
         {
@@ -60,8 +67,10 @@ public sealed class CliCompletionService(IStateStore stateStore)
                 return branchCommands;
             }
 
-            if (CliCommandCatalog.CommandOptions.TryGetValue(tokens[0], out var branchOptions)
-                && branchOptions.TryGetValue(tokens[1], out var options))
+            if (
+                CliCommandCatalog.CommandOptions.TryGetValue(tokens[0], out var branchOptions)
+                && branchOptions.TryGetValue(tokens[1], out var options)
+            )
             {
                 return options;
             }
@@ -69,8 +78,10 @@ public sealed class CliCompletionService(IStateStore stateStore)
             return [];
         }
 
-        if (CliCommandCatalog.CommandOptions.TryGetValue(tokens[0], out var topLevelOptions)
-            && topLevelOptions.TryGetValue(string.Empty, out var topLevelSuggestions))
+        if (
+            CliCommandCatalog.CommandOptions.TryGetValue(tokens[0], out var topLevelOptions)
+            && topLevelOptions.TryGetValue(string.Empty, out var topLevelSuggestions)
+        )
         {
             return topLevelSuggestions;
         }
@@ -80,7 +91,6 @@ public sealed class CliCompletionService(IStateStore stateStore)
 
     private static bool IsAwaitingValue(IReadOnlyList<string> tokens, string optionName)
     {
-        return tokens.Count > 0 &&
-               string.Equals(tokens[^1], optionName, StringComparison.OrdinalIgnoreCase);
+        return tokens.Count > 0 && string.Equals(tokens[^1], optionName, StringComparison.OrdinalIgnoreCase);
     }
 }

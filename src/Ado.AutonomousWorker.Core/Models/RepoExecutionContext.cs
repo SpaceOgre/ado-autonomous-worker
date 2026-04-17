@@ -7,4 +7,5 @@ public sealed record RepoExecutionContext(
     int ChildTaskId,
     RepoKind RepoKind,
     string BranchName,
-    string WorkingDirectory);
+    string WorkingDirectory
+);

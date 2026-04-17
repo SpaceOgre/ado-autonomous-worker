@@ -8,4 +8,5 @@ public sealed record DeployWorkItemChange(
     string CurrentState,
     string NewState,
     string? CurrentAssignee,
-    string NewAssignee);
+    string NewAssignee
+);

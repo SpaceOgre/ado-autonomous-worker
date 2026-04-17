@@ -10,9 +10,8 @@ public sealed class VersionCommand : Command
     {
         var assembly = Assembly.GetExecutingAssembly();
         var assemblyName = assembly.GetName();
-        var informationalVersion = assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion
+        var informationalVersion =
+            assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? assemblyName.Version?.ToString()
             ?? "unknown";
 

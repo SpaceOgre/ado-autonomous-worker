@@ -19,12 +19,15 @@ internal sealed class WorkItemPublishingHandler(
     ProcessCommandRunner commandRunner,
     IOptions<AgentOptions> agentOptions,
     IOptions<WorkerOptions> workerOptions,
-    ILogger<WorkItemPublishingHandler> logger) : WorkItemHandler
+    ILogger<WorkItemPublishingHandler> logger
+) : WorkItemHandler
 {
     public override TaskPhase Phase => TaskPhase.Publishing;
 
     protected override async Task<PhaseTransition> ExecuteAsync(
-        PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
+        PhaseContext.WorkItemContext context,
+        CancellationToken cancellationToken
+    )
     {
         foreach (var repositoryExecution in context.RepositoryExecutions)
         {
@@ -35,17 +38,49 @@ internal sealed class WorkItemPublishingHandler(
             var artifactDirectory = repositoryExecution.ArtifactDirectory;
 
             await context.Journal.AppendEventAsync(
-                context.ExecutionId, TaskPhase.Publishing, $"Creating commit and PR for {repoKind}.", cancellationToken);
+                context.ExecutionId,
+                TaskPhase.Publishing,
+                $"Creating commit and PR for {repoKind}.",
+                cancellationToken
+            );
 
-            await GitPublishHelper.RunGitAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-add.log", ["add", "-A"], cancellationToken);
-            await GitPublishHelper.RunGitAllowingNoChangesAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-commit.log",
-                ["commit", "-m", $"#{childTask.WorkItemId}: {context.WorkItem.Title}"], cancellationToken);
-            var commitSha = await GitPublishHelper.GetCommitShaAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, cancellationToken);
+            await GitPublishHelper.RunGitAsync(
+                commandRunner,
+                workspace.WorkingDirectory,
+                artifactDirectory,
+                "git-add.log",
+                ["add", "-A"],
+                cancellationToken
+            );
+            await GitPublishHelper.RunGitAllowingNoChangesAsync(
+                commandRunner,
+                workspace.WorkingDirectory,
+                artifactDirectory,
+                "git-commit.log",
+                ["commit", "-m", $"#{childTask.WorkItemId}: {context.WorkItem.Title}"],
+                cancellationToken
+            );
+            var commitSha = await GitPublishHelper.GetCommitShaAsync(
+                commandRunner,
+                workspace.WorkingDirectory,
+                artifactDirectory,
+                cancellationToken
+            );
 
-            var (prTitle, prDescription) = await GeneratePrDescriptionAsync(context, repositoryExecution, cancellationToken);
+            var (prTitle, prDescription) = await GeneratePrDescriptionAsync(
+                context,
+                repositoryExecution,
+                cancellationToken
+            );
 
-            await GitPublishHelper.RunGitAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-push.log",
-                ["push", "-u", "origin", workspace.BranchName], cancellationToken);
+            await GitPublishHelper.RunGitAsync(
+                commandRunner,
+                workspace.WorkingDirectory,
+                artifactDirectory,
+                "git-push.log",
+                ["push", "-u", "origin", workspace.BranchName],
+                cancellationToken
+            );
 
             var pullRequest = await azureDevOpsClient.CreateDraftPullRequestAsync(
                 repoProfile.AzureDevOpsRepository,
@@ -53,36 +88,60 @@ internal sealed class WorkItemPublishingHandler(
                 repoProfile.MainBranch,
                 prTitle,
                 prDescription,
-                cancellationToken);
+                cancellationToken
+            );
 
             logger.LogInformation(
                 "Execution {ExecutionId}: created draft PR #{PullRequestId} for {RepoKind}.",
-                context.ExecutionId, pullRequest.PullRequestId, repoKind);
+                context.ExecutionId,
+                pullRequest.PullRequestId,
+                repoKind
+            );
 
             if (workerOptions.Value.CleanupWorktreesAfterSuccess)
             {
                 await workspaceManager.CleanupAsync(workspace, cancellationToken);
-                logger.LogInformation("Execution {ExecutionId}: cleaned up worktree for {RepoKind}.",
-                    context.ExecutionId, repoKind);
+                logger.LogInformation(
+                    "Execution {ExecutionId}: cleaned up worktree for {RepoKind}.",
+                    context.ExecutionId,
+                    repoKind
+                );
             }
 
             await azureDevOpsClient.LinkPullRequestAsync(childTask.WorkItemId, pullRequest, cancellationToken);
-            await stateStore.LinkPullRequestToExecutionAsync(context.ExecutionId, pullRequest.PullRequestId, cancellationToken);
-            context.PublishedRepositories.Add(new RepositoryPublishResult(
-                repoKind, childTask, workspace.BranchName, commitSha,
-                repoProfile.ValidationCommands.ToArray(), pullRequest));
+            await stateStore.LinkPullRequestToExecutionAsync(
+                context.ExecutionId,
+                pullRequest.PullRequestId,
+                cancellationToken
+            );
+            context.PublishedRepositories.Add(
+                new RepositoryPublishResult(
+                    repoKind,
+                    childTask,
+                    workspace.BranchName,
+                    commitSha,
+                    repoProfile.ValidationCommands.ToArray(),
+                    pullRequest
+                )
+            );
         }
 
         await azureDevOpsClient.UpdateTagsAsync(
-            context.WorkItem.WorkItemId, rulesEngine.BuildCompletionTags(context.WorkItem), cancellationToken);
+            context.WorkItem.WorkItemId,
+            rulesEngine.BuildCompletionTags(context.WorkItem),
+            cancellationToken
+        );
 
         var review = context.LatestReview ?? new ReviewResult("No review available.", [], string.Empty);
         await azureDevOpsClient.AddCommentAsync(
             context.WorkItem.WorkItemId,
             WorkItemCommentFormatter.BuildSuccessComment(
-                context.ExecutionId, context.PublishedRepositories,
-                new ImplementationRunResult(review, AcceptedFindingCount: null)),
-            cancellationToken);
+                context.ExecutionId,
+                context.PublishedRepositories,
+                new ImplementationRunResult(review, AcceptedFindingCount: null)
+            ),
+            cancellationToken
+        );
 
         return PhaseTransition.Complete();
     }
@@ -90,7 +149,8 @@ internal sealed class WorkItemPublishingHandler(
     private async Task<(string Title, string Description)> GeneratePrDescriptionAsync(
         PhaseContext.WorkItemContext context,
         RepositoryExecution repoExecution,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var workItem = context.WorkItem;
         var childTask = repoExecution.ChildTask;
@@ -100,8 +160,9 @@ internal sealed class WorkItemPublishingHandler(
         var mainBranch = repoExecution.Profile.MainBranch;
         var artifactDir = repoExecution.ArtifactDirectory;
 
-        var isBugfix = workItem.WorkItemType == WorkItemType.Bug
-                       || workspace.BranchName.StartsWith("bugfix/", StringComparison.OrdinalIgnoreCase);
+        var isBugfix =
+            workItem.WorkItemType == WorkItemType.Bug
+            || workspace.BranchName.StartsWith("bugfix/", StringComparison.OrdinalIgnoreCase);
 
         try
         {
@@ -110,14 +171,22 @@ internal sealed class WorkItemPublishingHandler(
                 ["-C", workspace.WorkingDirectory, "log", "--oneline", $"origin/{mainBranch}..HEAD"],
                 workspace.WorkingDirectory,
                 Path.Combine(artifactDir, "pr-git-log.log"),
-                environmentVariables: null, activityName: null, outputCallback: null, cancellationToken);
+                environmentVariables: null,
+                activityName: null,
+                outputCallback: null,
+                cancellationToken
+            );
 
             var diffResult = await commandRunner.RunAsync(
                 "git",
                 ["-C", workspace.WorkingDirectory, "diff", $"origin/{mainBranch}...HEAD", "--stat"],
                 workspace.WorkingDirectory,
                 Path.Combine(artifactDir, "pr-git-diff-stat.log"),
-                environmentVariables: null, activityName: null, outputCallback: null, cancellationToken);
+                environmentVariables: null,
+                activityName: null,
+                outputCallback: null,
+                cancellationToken
+            );
 
             var gitLog = logResult.Success ? logResult.StandardOutput.Trim() : string.Empty;
             var diffStat = diffResult.Success ? diffResult.StandardOutput.Trim() : string.Empty;
@@ -126,11 +195,20 @@ internal sealed class WorkItemPublishingHandler(
             {
                 logger.LogWarning(
                     "Execution {ExecutionId}: no git context available for PR description, using default.",
-                    context.ExecutionId);
+                    context.ExecutionId
+                );
                 return DefaultPrMetadata(childTask, workItem);
             }
 
-            var prompt = BuildPrDescriptionPrompt(workItem, childTask, repoKind.ToString(), plan, gitLog, diffStat, isBugfix);
+            var prompt = BuildPrDescriptionPrompt(
+                workItem,
+                childTask,
+                repoKind.ToString(),
+                plan,
+                gitLog,
+                diffStat,
+                isBugfix
+            );
             var config = agentOptions.Value.Pr;
 
             var runner = agentRunnerFactory.GetRunner(config.Provider);
@@ -142,10 +220,18 @@ internal sealed class WorkItemPublishingHandler(
                 Path.Combine(artifactDir, "pr-description"),
                 AgentOutputSchemas.PullRequestDescription,
                 outputCallback: null,
-                cancellationToken);
+                cancellationToken
+            );
 
             if (result.Result.Usage is not null)
-                await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.Publishing, AgentRole.Plan, config.Provider, result.Result.Usage, cancellationToken);
+                await stateStore.RecordAgentUsageAsync(
+                    context.ExecutionId,
+                    TaskPhase.Publishing,
+                    AgentRole.Plan,
+                    config.Provider,
+                    result.Result.Usage,
+                    cancellationToken
+                );
 
             if (result.Result.Success && !string.IsNullOrWhiteSpace(result.Result.StructuredPayload))
             {
@@ -154,31 +240,35 @@ internal sealed class WorkItemPublishingHandler(
                 {
                     logger.LogInformation(
                         "Execution {ExecutionId}: PR description generated for {RepoKind}.",
-                        context.ExecutionId, repoKind);
+                        context.ExecutionId,
+                        repoKind
+                    );
                     return (prPayload.Title, prPayload.Description);
                 }
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex,
+            logger.LogWarning(
+                ex,
                 "Execution {ExecutionId}: PR description generation failed for {RepoKind}, using default.",
-                context.ExecutionId, repoKind);
+                context.ExecutionId,
+                repoKind
+            );
         }
 
         return DefaultPrMetadata(childTask, workItem);
     }
 
     private static (string Title, string Description) DefaultPrMetadata(
-        ChildTaskRecord childTask, WorkItemDetails workItem) =>
-        (
-            $"#{childTask.WorkItemId}: {workItem.Title}",
-            $"Resolved: #{childTask.WorkItemId}"
-        );
+        ChildTaskRecord childTask,
+        WorkItemDetails workItem
+    ) => ($"#{childTask.WorkItemId}: {workItem.Title}", $"Resolved: #{childTask.WorkItemId}");
 
     private sealed record PrDescriptionPayload(
         [property: JsonPropertyName("title")] string? Title,
-        [property: JsonPropertyName("description")] string? Description);
+        [property: JsonPropertyName("description")] string? Description
+    );
 
     private static string BuildPrDescriptionPrompt(
         WorkItemDetails workItem,
@@ -187,57 +277,56 @@ internal sealed class WorkItemPublishingHandler(
         PlanResult? plan,
         string gitLog,
         string diffStat,
-        bool isBugfix)
+        bool isBugfix
+    )
     {
         var classification = isBugfix ? "Bugfix" : "New Feature";
         var bugSection = isBugfix
             ? """
 
-              #### Bug description
-              <what the bug was and how this change fixes it>
+                #### Bug description
+                <what the bug was and how this change fixes it>
 
-              """
+                """
             : string.Empty;
 
-        var planLine = plan is not null
-            ? $"Implementation summary: {plan.Summary}"
-            : string.Empty;
+        var planLine = plan is not null ? $"Implementation summary: {plan.Summary}" : string.Empty;
 
         return $$"""
-        Generate a pull request title and description for this {{repoKind}} change.
-        Return JSON matching the provided schema exactly.
+            Generate a pull request title and description for this {{repoKind}} change.
+            Return JSON matching the provided schema exactly.
 
-        Work item: #{{childTask.WorkItemId}} ({{workItem.WorkItemType}}) {{workItem.Title}}
-        Classification: {{classification}}
-        {{planLine}}
+            Work item: #{{childTask.WorkItemId}} ({{workItem.WorkItemType}}) {{workItem.Title}}
+            Classification: {{classification}}
+            {{planLine}}
 
-        Commits since main:
-        {{gitLog}}
+            Commits since main:
+            {{gitLog}}
 
-        Changed files (--stat):
-        {{diffStat}}
+            Changed files (--stat):
+            {{diffStat}}
 
-        Output requirements:
-        - "title": format exactly "#{{childTask.WorkItemId}}: <concise English description of this {{repoKind}} change>"
-        - "description": use this exact markdown structure:
+            Output requirements:
+            - "title": format exactly "#{{childTask.WorkItemId}}: <concise English description of this {{repoKind}} change>"
+            - "description": use this exact markdown structure:
 
-        #### PR Classification
-        {{classification}}
+            #### PR Classification
+            {{classification}}
 
-        #### PR Summary
-        <concrete summary of what changed and why — describe actual code changes, not planned work>
+            #### PR Summary
+            <concrete summary of what changed and why — describe actual code changes, not planned work>
 
-        **Key impacts:**
-        - `<file or component>`: <what changed>
-        - `<file or component>`: <what changed>
-        {{bugSection}}
-        Resolved: #{{childTask.WorkItemId}}
+            **Key impacts:**
+            - `<file or component>`: <what changed>
+            - `<file or component>`: <what changed>
+            {{bugSection}}
+            Resolved: #{{childTask.WorkItemId}}
 
-        Rules:
-        - Keep everything in English.
-        - Describe what was actually changed, not intended changes.
-        - Be specific about files and components.
-        - Keep the description concise but informative.
-        """;
+            Rules:
+            - Keep everything in English.
+            - Describe what was actually changed, not intended changes.
+            - Be specific about files and components.
+            - Keep the description concise but informative.
+            """;
     }
 }

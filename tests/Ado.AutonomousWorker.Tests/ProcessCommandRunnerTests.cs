@@ -5,7 +5,11 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class ProcessCommandRunnerTests : IDisposable
 {
-    private readonly string _rootPath = Path.Combine(Path.GetTempPath(), "ado-worker-tests", Guid.NewGuid().ToString("N"));
+    private readonly string _rootPath = Path.Combine(
+        Path.GetTempPath(),
+        "ado-worker-tests",
+        Guid.NewGuid().ToString("N")
+    );
 
     public ProcessCommandRunnerTests()
     {
@@ -18,16 +22,19 @@ public sealed class ProcessCommandRunnerTests : IDisposable
         var runner = new ProcessCommandRunner(NullLogger<ProcessCommandRunner>.Instance);
         var artifactPath = Path.Combine(_rootPath, "timeout.log");
 
-        var exception = await Assert.ThrowsAsync<TimeoutException>(() => runner.RunAsync(
-            "pwsh",
-            ["-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 2"],
-            _rootPath,
-            artifactPath,
-            environmentVariables: null,
-            activityName: "Timeout test",
-            outputCallback: null,
-            cancellationToken: CancellationToken.None,
-            timeoutSeconds: 1));
+        var exception = await Assert.ThrowsAsync<TimeoutException>(() =>
+            runner.RunAsync(
+                "pwsh",
+                ["-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 2"],
+                _rootPath,
+                artifactPath,
+                environmentVariables: null,
+                activityName: "Timeout test",
+                outputCallback: null,
+                cancellationToken: CancellationToken.None,
+                timeoutSeconds: 1
+            )
+        );
 
         Assert.Contains("configured timeout of 1 seconds", exception.Message);
     }
@@ -41,11 +48,7 @@ public sealed class ProcessCommandRunnerTests : IDisposable
                 Directory.Delete(_rootPath, recursive: true);
             }
         }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }

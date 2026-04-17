@@ -27,9 +27,15 @@ public sealed class TerminalTitleFormatterTests
             TaskPhase.Planning,
             ExecutionStatus.Running,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow
+        );
 
-        var title = TerminalTitleFormatter.BuildExecutionTitle("Queue 1/3 - Work item #28639", execution, 2, useUnicode: true);
+        var title = TerminalTitleFormatter.BuildExecutionTitle(
+            "Queue 1/3 - Work item #28639",
+            execution,
+            2,
+            useUnicode: true
+        );
 
         Assert.Contains("Planning", title);
         Assert.Contains("Queue 1/3 - Work item #28639", title);
@@ -47,7 +53,8 @@ public sealed class TerminalTitleFormatterTests
             TaskPhase.Publishing,
             ExecutionStatus.Completed,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow
+        );
 
         var title = TerminalTitleFormatter.BuildExecutionTitle("Work item #28639", execution, 0, useUnicode: true);
 

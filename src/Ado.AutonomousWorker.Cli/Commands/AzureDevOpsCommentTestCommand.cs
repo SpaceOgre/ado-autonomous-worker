@@ -5,7 +5,8 @@ using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class AzureDevOpsCommentTestCommand(IAzureDevOpsClient azureDevOpsClient) : AsyncCommand<AzureDevOpsCommentTestCommand.Settings>
+public sealed class AzureDevOpsCommentTestCommand(IAzureDevOpsClient azureDevOpsClient)
+    : AsyncCommand<AzureDevOpsCommentTestCommand.Settings>
 {
     private const string TestComment = """
         This is a **markdown test comment** from `ado-worker`.
@@ -31,7 +32,11 @@ public sealed class AzureDevOpsCommentTestCommand(IAzureDevOpsClient azureDevOps
         public int WorkItemId { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         if (settings.WorkItemId <= 0)
         {
@@ -39,7 +44,9 @@ public sealed class AzureDevOpsCommentTestCommand(IAzureDevOpsClient azureDevOps
             return 1;
         }
 
-        AnsiConsole.MarkupLine($"Posting markdown test comment to work item [deepskyblue1]#{settings.WorkItemId}[/]...");
+        AnsiConsole.MarkupLine(
+            $"Posting markdown test comment to work item [deepskyblue1]#{settings.WorkItemId}[/]..."
+        );
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[grey]Comment content:[/]");
         AnsiConsole.MarkupLine($"[grey]{Markup.Escape(TestComment)}[/]");
@@ -48,7 +55,9 @@ public sealed class AzureDevOpsCommentTestCommand(IAzureDevOpsClient azureDevOps
         try
         {
             await azureDevOpsClient.AddCommentAsync(settings.WorkItemId, TestComment, cancellationToken);
-            AnsiConsole.MarkupLine("[green]✓[/] Comment posted. Check the work item in Azure DevOps to verify markdown rendered correctly.");
+            AnsiConsole.MarkupLine(
+                "[green]✓[/] Comment posted. Check the work item in Azure DevOps to verify markdown rendered correctly."
+            );
             return 0;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

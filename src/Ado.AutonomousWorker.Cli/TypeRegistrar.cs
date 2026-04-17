@@ -9,15 +9,9 @@ public sealed class TypeRegistrar(IServiceProvider serviceProvider) : ITypeRegis
         return new TypeResolver(serviceProvider);
     }
 
-    public void Register(Type service, Type implementation)
-    {
-    }
+    public void Register(Type service, Type implementation) { }
 
-    public void RegisterInstance(Type service, object implementation)
-    {
-    }
+    public void RegisterInstance(Type service, object implementation) { }
 
-    public void RegisterLazy(Type service, Func<object> factory)
-    {
-    }
+    public void RegisterLazy(Type service, Func<object> factory) { }
 }

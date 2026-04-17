@@ -8,4 +8,5 @@ public sealed record PlanResult(
     IReadOnlyList<string> ValidationTargets,
     IReadOnlyList<string> TestIntent,
     IReadOnlyList<string> Risks,
-    string Summary);
+    string Summary
+);

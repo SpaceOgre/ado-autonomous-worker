@@ -8,7 +8,11 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class PromptTemplateLoaderTests : IDisposable
 {
-    private readonly string _rootPath = Path.Combine(Path.GetTempPath(), "ado-worker-tests", Guid.NewGuid().ToString("N"));
+    private readonly string _rootPath = Path.Combine(
+        Path.GetTempPath(),
+        "ado-worker-tests",
+        Guid.NewGuid().ToString("N")
+    );
 
     public PromptTemplateLoaderTests()
     {
@@ -24,7 +28,8 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         var result = await PromptTemplateLoader.ApplyAsync(
             new AgentRoleConfig { PromptTemplatePath = templatePath },
             "Implement feature X.",
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.StartsWith("## Repository conventions", result);
         Assert.Contains("Implement feature X.", result);
@@ -36,7 +41,8 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         var result = await PromptTemplateLoader.ApplyAsync(
             new AgentRoleConfig { PromptTemplatePath = string.Empty },
             "Implement feature X.",
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal("Implement feature X.", result);
     }
@@ -50,7 +56,8 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         var result = await PromptTemplateLoader.ApplyAsync(
             new AgentRoleConfig { PromptTemplatePath = templatePath },
             "Main prompt.",
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Contains($"Template content.{Environment.NewLine}{Environment.NewLine}Main prompt.", result);
     }
@@ -60,49 +67,60 @@ public sealed class PromptTemplateLoaderTests : IDisposable
     {
         var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
-            throwOnError: true);
+            throwOnError: true
+        );
         Assert.NotNull(repositoryWorkflowServiceType);
 
-        var method = repositoryWorkflowServiceType!.GetMethod("BuildCodePrompt", BindingFlags.NonPublic | BindingFlags.Static);
+        var method = repositoryWorkflowServiceType!.GetMethod(
+            "BuildCodePrompt",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
         Assert.NotNull(method);
 
         var repositoryExecutionType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.RepositoryExecution",
-            throwOnError: true);
+            throwOnError: true
+        );
         Assert.NotNull(repositoryExecutionType);
 
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
             new ChildTaskRecord(28883, RepoKind.Backend, "Backend - Story", "Active"),
-            new RepositoryProfile
-            {
-                Kind = RepoKind.Backend,
-                ValidationCommands = ["dotnet build --no-restore"],
-            },
+            new RepositoryProfile { Kind = RepoKind.Backend, ValidationCommands = ["dotnet build --no-restore"] },
             new RepoExecutionContext(28639, 28883, RepoKind.Backend, "feature/28883_story", @"D:\worktrees\backend"),
-            @"D:\artifacts");
+            @"D:\artifacts"
+        );
 
         Assert.NotNull(repositoryExecution);
 
         var repositoryExecutions = Array.CreateInstance(repositoryExecutionType!, 1);
         repositoryExecutions.SetValue(repositoryExecution, 0);
 
-        var prompt = (string?)method!.Invoke(
-            null,
-            [
-                new WorkItemDetails
-                {
-                    WorkItemId = 28639,
-                    WorkItemType = WorkItemType.UserStory,
-                    Title = "Story",
-                    Description = "Detailed business description.",
-                    AcceptanceCriteria = "1. Save data\n2. Show result",
-                },
-                repositoryExecutions,
-                new PlanResult(WorkItemScope.Backend, ["Backend"], ["Backend validation"], ["Run backend tests"], [], "Implement backend flow."),
-                @"D:\worktrees",
-                "- Latest comment context.",
-            ]);
+        var prompt = (string?)
+            method!.Invoke(
+                null,
+                [
+                    new WorkItemDetails
+                    {
+                        WorkItemId = 28639,
+                        WorkItemType = WorkItemType.UserStory,
+                        Title = "Story",
+                        Description = "Detailed business description.",
+                        AcceptanceCriteria = "1. Save data\n2. Show result",
+                    },
+                    repositoryExecutions,
+                    new PlanResult(
+                        WorkItemScope.Backend,
+                        ["Backend"],
+                        ["Backend validation"],
+                        ["Run backend tests"],
+                        [],
+                        "Implement backend flow."
+                    ),
+                    @"D:\worktrees",
+                    "- Latest comment context.",
+                ]
+            );
 
         Assert.NotNull(prompt);
         Assert.Contains("Detailed business description.", prompt);
@@ -115,49 +133,60 @@ public sealed class PromptTemplateLoaderTests : IDisposable
     {
         var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
-            throwOnError: true);
+            throwOnError: true
+        );
         Assert.NotNull(repositoryWorkflowServiceType);
 
-        var method = repositoryWorkflowServiceType!.GetMethod("BuildCodePrompt", BindingFlags.NonPublic | BindingFlags.Static);
+        var method = repositoryWorkflowServiceType!.GetMethod(
+            "BuildCodePrompt",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
         Assert.NotNull(method);
 
         var repositoryExecutionType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.RepositoryExecution",
-            throwOnError: true);
+            throwOnError: true
+        );
         Assert.NotNull(repositoryExecutionType);
 
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
             new ChildTaskRecord(28883, RepoKind.Backend, "Backend - Story", "Active"),
-            new RepositoryProfile
-            {
-                Kind = RepoKind.Backend,
-                ValidationCommands = ["dotnet build --no-restore"],
-            },
+            new RepositoryProfile { Kind = RepoKind.Backend, ValidationCommands = ["dotnet build --no-restore"] },
             new RepoExecutionContext(28639, 28883, RepoKind.Backend, "feature/28883_story", @"D:\worktrees\backend"),
-            @"D:\artifacts");
+            @"D:\artifacts"
+        );
 
         Assert.NotNull(repositoryExecution);
 
         var repositoryExecutions = Array.CreateInstance(repositoryExecutionType!, 1);
         repositoryExecutions.SetValue(repositoryExecution, 0);
 
-        var prompt = (string?)method!.Invoke(
-            null,
-            [
-                new WorkItemDetails
-                {
-                    WorkItemId = 28639,
-                    WorkItemType = WorkItemType.UserStory,
-                    Title = "Story",
-                    ParentFeatureTitle = "Feature - Accounts",
-                    Comments = ["Please fix the failing save flow.", "Update the validation message."],
-                },
-                repositoryExecutions,
-                new PlanResult(WorkItemScope.Backend, ["Backend"], ["Backend validation"], ["Run backend tests"], [], "Implement backend flow."),
-                @"D:\worktrees",
-                "- Please fix the failing save flow.\n\n- Update the validation message.",
-            ]);
+        var prompt = (string?)
+            method!.Invoke(
+                null,
+                [
+                    new WorkItemDetails
+                    {
+                        WorkItemId = 28639,
+                        WorkItemType = WorkItemType.UserStory,
+                        Title = "Story",
+                        ParentFeatureTitle = "Feature - Accounts",
+                        Comments = ["Please fix the failing save flow.", "Update the validation message."],
+                    },
+                    repositoryExecutions,
+                    new PlanResult(
+                        WorkItemScope.Backend,
+                        ["Backend"],
+                        ["Backend validation"],
+                        ["Run backend tests"],
+                        [],
+                        "Implement backend flow."
+                    ),
+                    @"D:\worktrees",
+                    "- Please fix the failing save flow.\n\n- Update the validation message.",
+                ]
+            );
 
         Assert.NotNull(prompt);
         Assert.Contains("Parent feature: Feature - Accounts", prompt);
@@ -175,11 +204,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
                 Directory.Delete(_rootPath, recursive: true);
             }
         }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }

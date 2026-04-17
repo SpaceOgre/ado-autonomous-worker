@@ -10,23 +10,26 @@ internal sealed class WorkItemEligibilityHandler(
     IAzureDevOpsClient azureDevOpsClient,
     IRulesEngine rulesEngine,
     IOptions<AzureDevOpsOptions> azureDevOpsOptions,
-    ILogger<WorkItemEligibilityHandler> logger) : WorkItemHandler
+    ILogger<WorkItemEligibilityHandler> logger
+) : WorkItemHandler
 {
     public override TaskPhase Phase => TaskPhase.Queued;
 
     protected override async Task<PhaseTransition> ExecuteAsync(
-        PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
+        PhaseContext.WorkItemContext context,
+        CancellationToken cancellationToken
+    )
     {
         var workItem = context.WorkItem;
 
-        if (!context.IsExplicitResume &&
-            !rulesEngine.IsEligible(workItem, azureDevOpsOptions.Value.DefaultAssignee))
+        if (!context.IsExplicitResume && !rulesEngine.IsEligible(workItem, azureDevOpsOptions.Value.DefaultAssignee))
         {
             await context.Journal.AppendEventAsync(
                 context.ExecutionId,
                 TaskPhase.Queued,
                 "Work item is no longer eligible for automation.",
-                cancellationToken);
+                cancellationToken
+            );
             return PhaseTransition.Skip();
         }
 
@@ -38,12 +41,14 @@ internal sealed class WorkItemEligibilityHandler(
             await azureDevOpsClient.AddCommentAsync(
                 workItem.WorkItemId,
                 $"Skipped automatically because acceptance criteria contained {lineCount} requirement lines.",
-                cancellationToken);
+                cancellationToken
+            );
             await context.Journal.AppendEventAsync(
                 context.ExecutionId,
                 TaskPhase.Queued,
                 "Acceptance criteria exceeded the configured limit.",
-                cancellationToken);
+                cancellationToken
+            );
             return PhaseTransition.Skip();
         }
 
@@ -57,7 +62,8 @@ internal sealed class WorkItemEligibilityHandler(
     private async Task EnsureWorkItemReadyAsync(
         Core.Models.WorkItemDetails workItem,
         string currentSprint,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!string.Equals(workItem.State, "Active", StringComparison.OrdinalIgnoreCase))
         {
@@ -68,10 +74,15 @@ internal sealed class WorkItemEligibilityHandler(
         if (string.IsNullOrWhiteSpace(workItem.AssignedTo))
         {
             await azureDevOpsClient.AssignWorkItemAsync(
-                workItem.WorkItemId, azureDevOpsOptions.Value.DefaultAssignee, cancellationToken);
+                workItem.WorkItemId,
+                azureDevOpsOptions.Value.DefaultAssignee,
+                cancellationToken
+            );
             logger.LogInformation(
                 "Assigned work item #{WorkItemId} to {Assignee}.",
-                workItem.WorkItemId, azureDevOpsOptions.Value.DefaultAssignee);
+                workItem.WorkItemId,
+                azureDevOpsOptions.Value.DefaultAssignee
+            );
         }
 
         if (workItem.Kind == QueueItemKind.AiWork && !string.IsNullOrWhiteSpace(currentSprint))
@@ -79,7 +90,9 @@ internal sealed class WorkItemEligibilityHandler(
             await azureDevOpsClient.UpdateIterationPathAsync(workItem.WorkItemId, currentSprint, cancellationToken);
             logger.LogInformation(
                 "Set iteration for #{WorkItemId} to '{IterationPath}'.",
-                workItem.WorkItemId, currentSprint);
+                workItem.WorkItemId,
+                currentSprint
+            );
         }
     }
 }

@@ -9,7 +9,5 @@ public sealed class TypeResolver(IServiceProvider serviceProvider) : ITypeResolv
         return type is null ? null : serviceProvider.GetService(type);
     }
 
-    public void Dispose()
-    {
-    }
+    public void Dispose() { }
 }

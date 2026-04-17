@@ -6,7 +6,8 @@ using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, ExecutionLiveDisplay liveDisplay) : AsyncCommand<RunTaskCommand.Settings>
+public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, ExecutionLiveDisplay liveDisplay)
+    : AsyncCommand<RunTaskCommand.Settings>
 {
     public sealed class Settings : CommandSettings
     {
@@ -28,7 +29,11 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
         }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         string executionId;
 
@@ -38,14 +43,16 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
                 $"PR fix #{settings.PullRequestId}",
                 workItemId: 0,
                 token => taskOrchestrator.RunPrFixAsync(settings.PullRequestId.Value, token),
-                cancellationToken);
+                cancellationToken
+            );
         }
         else
         {
             executionId = await liveDisplay.RunForWorkItemAsync(
                 settings.WorkItemId!.Value,
                 token => taskOrchestrator.RunTaskAsync(settings.WorkItemId.Value, token),
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         AnsiConsole.MarkupLine($"[green]Execution finished.[/] Id: {executionId}");

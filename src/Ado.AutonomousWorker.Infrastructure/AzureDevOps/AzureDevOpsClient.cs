@@ -15,7 +15,8 @@ public sealed class AzureDevOpsClient(
     HttpClient httpClient,
     IOptions<AzureDevOpsOptions> options,
     IOptions<RepositoryOptions> repositoryOptions,
-    ILogger<AzureDevOpsClient> logger) : IAzureDevOpsClient
+    ILogger<AzureDevOpsClient> logger
+) : IAzureDevOpsClient
 {
     private const string ApiVersion = "7.1";
 
@@ -34,12 +35,15 @@ public sealed class AzureDevOpsClient(
         var team = Uri.EscapeDataString(_options.Team);
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/{team}/_apis/work/teamsettings/iterations?$timeframe=current&api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoIterationsResponse>(cancellationToken);
-        _cachedSprintPath = result?.Value
-            .FirstOrDefault(i => string.Equals(i.Attributes?.TimeFrame, "current", StringComparison.OrdinalIgnoreCase))
+        _cachedSprintPath = result
+            ?.Value.FirstOrDefault(i =>
+                string.Equals(i.Attributes?.TimeFrame, "current", StringComparison.OrdinalIgnoreCase)
+            )
             ?.Path;
 
         return _cachedSprintPath;
@@ -48,16 +52,16 @@ public sealed class AzureDevOpsClient(
     public Task<IReadOnlyList<WorkItemSummary>> QueryAiWorkAsync(CancellationToken cancellationToken)
     {
         var query = $"""
-        SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
-        FROM WorkItems
-        WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
-          AND [System.Tags] CONTAINS 'AI-Work'
-          AND NOT [System.Tags] CONTAINS 'AI-Failed'
-          AND [System.State] = 'New'
-          AND ([System.AssignedTo] = '' OR [System.AssignedTo] = '{_options.DefaultAssignee}')
-          AND [System.TeamProject] = '{_options.Project}'
-        ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
-        """;
+            SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
+            FROM WorkItems
+            WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
+              AND [System.Tags] CONTAINS 'AI-Work'
+              AND NOT [System.Tags] CONTAINS 'AI-Failed'
+              AND [System.State] = 'New'
+              AND ([System.AssignedTo] = '' OR [System.AssignedTo] = '{_options.DefaultAssignee}')
+              AND [System.TeamProject] = '{_options.Project}'
+            ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
+            """;
 
         return QueryByWiqlAsync(query, cancellationToken);
     }
@@ -65,17 +69,17 @@ public sealed class AzureDevOpsClient(
     public Task<IReadOnlyList<WorkItemSummary>> QueryAiReworkAsync(CancellationToken cancellationToken)
     {
         var query = $"""
-        SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
-        FROM WorkItems
-        WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
-          AND [System.Tags] CONTAINS 'AI-Rework'
-          AND NOT [System.Tags] CONTAINS 'AI-Failed'
-          AND [System.State] <> 'Closed'
-          AND [System.State] <> 'Removed'
-          AND [System.AssignedTo] = '{_options.DefaultAssignee}'
-          AND [System.TeamProject] = '{_options.Project}'
-        ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
-        """;
+            SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
+            FROM WorkItems
+            WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
+              AND [System.Tags] CONTAINS 'AI-Rework'
+              AND NOT [System.Tags] CONTAINS 'AI-Failed'
+              AND [System.State] <> 'Closed'
+              AND [System.State] <> 'Removed'
+              AND [System.AssignedTo] = '{_options.DefaultAssignee}'
+              AND [System.TeamProject] = '{_options.Project}'
+            ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
+            """;
 
         return QueryByWiqlAsync(query, cancellationToken);
     }
@@ -84,10 +88,12 @@ public sealed class AzureDevOpsClient(
     {
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/_apis/wit/workitems/{workItemId}?$expand=Relations&api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
-        var workItem = await response.Content.ReadFromJsonAsync<AdoWorkItemResponse>(cancellationToken)
+        var workItem =
+            await response.Content.ReadFromJsonAsync<AdoWorkItemResponse>(cancellationToken)
             ?? throw new InvalidOperationException($"Azure DevOps returned null for work item {workItemId}.");
 
         var fields = workItem.Fields;
@@ -105,16 +111,20 @@ public sealed class AzureDevOpsClient(
 
             if (string.Equals(relation.Rel, "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
                 childIds.Add(relatedId.Value);
-            else if (string.Equals(relation.Rel, "System.LinkTypes.Hierarchy-Reverse", StringComparison.OrdinalIgnoreCase))
+            else if (
+                string.Equals(relation.Rel, "System.LinkTypes.Hierarchy-Reverse", StringComparison.OrdinalIgnoreCase)
+            )
                 parentIds.Add(relatedId.Value);
         }
 
-        var childrenTask = childIds.Count == 0
-            ? Task.FromResult<IReadOnlyList<ChildTaskRecord>>([])
-            : GetChildTasksAsync(childIds, cancellationToken);
-        var parentFeatureTask = parentIds.Count == 0
-            ? Task.FromResult<string?>(null)
-            : TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
+        var childrenTask =
+            childIds.Count == 0
+                ? Task.FromResult<IReadOnlyList<ChildTaskRecord>>([])
+                : GetChildTasksAsync(childIds, cancellationToken);
+        var parentFeatureTask =
+            parentIds.Count == 0
+                ? Task.FromResult<string?>(null)
+                : TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
         var commentsTask = GetWorkItemCommentsAsync(workItemId, cancellationToken);
 
         try
@@ -124,11 +134,23 @@ public sealed class AzureDevOpsClient(
         catch
         {
             if (childrenTask.IsFaulted)
-                _logger.LogError(childrenTask.Exception, "Failed to fetch child tasks for work item {WorkItemId}", workItemId);
+                _logger.LogError(
+                    childrenTask.Exception,
+                    "Failed to fetch child tasks for work item {WorkItemId}",
+                    workItemId
+                );
             if (parentFeatureTask.IsFaulted)
-                _logger.LogError(parentFeatureTask.Exception, "Failed to fetch parent feature for work item {WorkItemId}", workItemId);
+                _logger.LogError(
+                    parentFeatureTask.Exception,
+                    "Failed to fetch parent feature for work item {WorkItemId}",
+                    workItemId
+                );
             if (commentsTask.IsFaulted)
-                _logger.LogError(commentsTask.Exception, "Failed to fetch comments for work item {WorkItemId}", workItemId);
+                _logger.LogError(
+                    commentsTask.Exception,
+                    "Failed to fetch comments for work item {WorkItemId}",
+                    workItemId
+                );
             throw;
         }
 
@@ -150,23 +172,35 @@ public sealed class AzureDevOpsClient(
             Comments = comments,
             Tags = tags,
             ChildTasks = children,
-            Kind = tags.Contains("AI-Rework", StringComparer.OrdinalIgnoreCase) ? QueueItemKind.AiRework : QueueItemKind.AiWork,
+            Kind = tags.Contains("AI-Rework", StringComparer.OrdinalIgnoreCase)
+                ? QueueItemKind.AiRework
+                : QueueItemKind.AiWork,
         };
     }
 
-    public Task UpdateWorkItemStateAsync(int workItemId, string state, CancellationToken cancellationToken)
-        => PatchFieldsAsync(workItemId, [PatchField("/fields/System.State", state)], cancellationToken);
+    public Task UpdateWorkItemStateAsync(int workItemId, string state, CancellationToken cancellationToken) =>
+        PatchFieldsAsync(workItemId, [PatchField("/fields/System.State", state)], cancellationToken);
 
-    public Task AssignWorkItemAsync(int workItemId, string assignee, CancellationToken cancellationToken)
-        => PatchFieldsAsync(workItemId, [PatchField("/fields/System.AssignedTo", assignee)], cancellationToken);
+    public Task AssignWorkItemAsync(int workItemId, string assignee, CancellationToken cancellationToken) =>
+        PatchFieldsAsync(workItemId, [PatchField("/fields/System.AssignedTo", assignee)], cancellationToken);
 
-    public Task UpdateIterationPathAsync(int workItemId, string iterationPath, CancellationToken cancellationToken)
-        => PatchFieldsAsync(workItemId, [PatchField("/fields/System.IterationPath", iterationPath)], cancellationToken);
+    public Task UpdateIterationPathAsync(int workItemId, string iterationPath, CancellationToken cancellationToken) =>
+        PatchFieldsAsync(workItemId, [PatchField("/fields/System.IterationPath", iterationPath)], cancellationToken);
 
-    public Task UpdateTagsAsync(int workItemId, IReadOnlyCollection<string> tags, CancellationToken cancellationToken)
-        => PatchFieldsAsync(workItemId, [PatchField("/fields/System.Tags", string.Join("; ", tags))], cancellationToken);
+    public Task UpdateTagsAsync(
+        int workItemId,
+        IReadOnlyCollection<string> tags,
+        CancellationToken cancellationToken
+    ) => PatchFieldsAsync(workItemId, [PatchField("/fields/System.Tags", string.Join("; ", tags))], cancellationToken);
 
-    public async Task<int> CreateChildTaskAsync(int parentWorkItemId, string title, IReadOnlyCollection<string> tags, string iterationPath, string assignee, CancellationToken cancellationToken)
+    public async Task<int> CreateChildTaskAsync(
+        int parentWorkItemId,
+        string title,
+        IReadOnlyCollection<string> tags,
+        string iterationPath,
+        string assignee,
+        CancellationToken cancellationToken
+    )
     {
         var createDocument = new object[]
         {
@@ -178,25 +212,36 @@ public sealed class AzureDevOpsClient(
 
         using var request = BuildPatchRequest(
             $"{_options.Project}/_apis/wit/workitems/$Task?api-version={ApiVersion}",
-            createDocument);
+            createDocument
+        );
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var created = await response.Content.ReadFromJsonAsync<AdoCreatedItemResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("Azure DevOps did not return a work item ID for the new child task.");
+        var created =
+            await response.Content.ReadFromJsonAsync<AdoCreatedItemResponse>(cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Azure DevOps did not return a work item ID for the new child task."
+            );
         var childTaskId = created.Id;
 
         // ADO processes JSON Patch operations in document order: state transitions before relation validation.
-        await PatchFieldsAsync(childTaskId,
-        [
-            PatchField("/fields/System.State", "Active"),
-            PatchRelation(parentWorkItemId),
-        ], cancellationToken);
+        await PatchFieldsAsync(
+            childTaskId,
+            [PatchField("/fields/System.State", "Active"), PatchRelation(parentWorkItemId)],
+            cancellationToken
+        );
         return childTaskId;
     }
 
-    public async Task<PullRequestInfo> CreateDraftPullRequestAsync(string repositoryName, string sourceBranch, string targetBranch, string title, string description, CancellationToken cancellationToken)
+    public async Task<PullRequestInfo> CreateDraftPullRequestAsync(
+        string repositoryName,
+        string sourceBranch,
+        string targetBranch,
+        string title,
+        string description,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests?api-version={ApiVersion}",
@@ -208,25 +253,32 @@ public sealed class AzureDevOpsClient(
                 description,
                 isDraft = true,
             },
-            cancellationToken);
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
 
-        var pr = await response.Content.ReadFromJsonAsync<AdoPullRequest>(cancellationToken)
+        var pr =
+            await response.Content.ReadFromJsonAsync<AdoPullRequest>(cancellationToken)
             ?? throw new InvalidOperationException("Azure DevOps did not return a pull request.");
         var prId = pr.PullRequestId;
-        var url = new Uri(pr.Url ?? throw new InvalidOperationException("Azure DevOps did not return a pull request URL."));
+        var url = new Uri(
+            pr.Url ?? throw new InvalidOperationException("Azure DevOps did not return a pull request URL.")
+        );
         var projectId = pr.Repository?.Project?.Id;
         var repoId = pr.Repository?.Id;
-        var artifactUri = projectId is null || repoId is null
-            ? null
-            : $"vstfs:///Git/PullRequestId/{projectId}%2f{repoId}%2f{prId}";
+        var artifactUri =
+            projectId is null || repoId is null ? null : $"vstfs:///Git/PullRequestId/{projectId}%2f{repoId}%2f{prId}";
 
         await AddPullRequestLabelAsync(repositoryName, prId, "AI-Generated", cancellationToken);
         return new PullRequestInfo(prId, title, url, artifactUri);
     }
 
-    public async Task LinkPullRequestAsync(int workItemId, PullRequestInfo pullRequest, CancellationToken cancellationToken)
+    public async Task LinkPullRequestAsync(
+        int workItemId,
+        PullRequestInfo pullRequest,
+        CancellationToken cancellationToken
+    )
     {
         if (string.IsNullOrWhiteSpace(pullRequest.ArtifactUri))
         {
@@ -234,20 +286,23 @@ public sealed class AzureDevOpsClient(
             return;
         }
 
-        await PatchFieldsAsync(workItemId,
-        [
-            new
-            {
-                op = "add",
-                path = "/relations/-",
-                value = new
+        await PatchFieldsAsync(
+            workItemId,
+            [
+                new
                 {
-                    rel = "ArtifactLink",
-                    url = pullRequest.ArtifactUri,
-                    attributes = new { name = "Pull Request" },
+                    op = "add",
+                    path = "/relations/-",
+                    value = new
+                    {
+                        rel = "ArtifactLink",
+                        url = pullRequest.ArtifactUri,
+                        attributes = new { name = "Pull Request" },
+                    },
                 },
-            },
-        ], cancellationToken);
+            ],
+            cancellationToken
+        );
     }
 
     public async Task AddCommentAsync(int workItemId, string comment, CancellationToken cancellationToken)
@@ -255,13 +310,15 @@ public sealed class AzureDevOpsClient(
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?format=Markdown&api-version=7.2-preview.4",
             new { text = comment },
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
     }
 
     public async Task<IReadOnlyList<QueueItem>> QueryAiPrFixAsync(CancellationToken cancellationToken)
     {
-        var url = $"{_options.Project}/_apis/git/pullrequests?searchCriteria.status=active&searchCriteria.includeLinks=true&api-version={ApiVersion}";
+        var url =
+            $"{_options.Project}/_apis/git/pullrequests?searchCriteria.status=active&searchCriteria.includeLinks=true&api-version={ApiVersion}";
         _logger.LogDebug("QueryAiPrFixAsync: GET {Url}", url);
 
         var response = await _httpClient.GetAsync(url, cancellationToken);
@@ -286,7 +343,8 @@ public sealed class AzureDevOpsClient(
     {
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/_apis/git/pullrequests?searchCriteria.pullRequestId={pullRequestId}&searchCriteria.includeLinks=true&api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoPullRequestListResponse>(cancellationToken);
@@ -300,7 +358,10 @@ public sealed class AzureDevOpsClient(
         return null;
     }
 
-    private async Task<IReadOnlyList<QueueItem>> ParsePrFixItemsAsync(AdoPullRequest pr, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<QueueItem>> ParsePrFixItemsAsync(
+        AdoPullRequest pr,
+        CancellationToken cancellationToken
+    )
     {
         var prId = pr.PullRequestId;
         var hasAiRework = false;
@@ -314,8 +375,12 @@ public sealed class AzureDevOpsClient(
                 hasAiRework = true;
         }
 
-        _logger.LogDebug("PR #{PrId}: labels=[{Labels}] hasAiRework={HasAiRework}",
-            prId, string.Join(", ", labelNames), hasAiRework);
+        _logger.LogDebug(
+            "PR #{PrId}: labels=[{Labels}] hasAiRework={HasAiRework}",
+            prId,
+            string.Join(", ", labelNames),
+            hasAiRework
+        );
 
         if (!hasAiRework)
         {
@@ -342,18 +407,32 @@ public sealed class AzureDevOpsClient(
         var summaries = await GetWorkItemSummariesAsync(workItemIds, cancellationToken);
         return summaries
             .Select(s => new QueueItem(
-                s.WorkItemId, s.WorkItemType, s.Title,
+                s.WorkItemId,
+                s.WorkItemType,
+                s.Title,
                 QueueItemKind.AiPrFix,
-                s.StackRank, s.Priority, s.State, s.AssignedTo,
-                scope, prId, repositoryName, branchName))
+                s.StackRank,
+                s.Priority,
+                s.State,
+                s.AssignedTo,
+                scope,
+                prId,
+                repositoryName,
+                branchName
+            ))
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<PrReviewThread>> GetPullRequestThreadsAsync(string repositoryName, int pullRequestId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PrReviewThread>> GetPullRequestThreadsAsync(
+        string repositoryName,
+        int pullRequestId,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/threads?api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoPrThreadListResponse>(cancellationToken);
@@ -367,26 +446,35 @@ public sealed class AzureDevOpsClient(
                 if (string.Equals(comment.CommentType, "system", StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (!string.IsNullOrWhiteSpace(comment.Content))
-                    comments.Add(new PrReviewComment(comment.Id, comment.Author?.DisplayName ?? string.Empty, comment.Content));
+                    comments.Add(
+                        new PrReviewComment(comment.Id, comment.Author?.DisplayName ?? string.Empty, comment.Content)
+                    );
             }
 
             if (comments.Count > 0)
-                threads.Add(new PrReviewThread(
-                    thread.Id,
-                    thread.ThreadContext?.FilePath,
-                    thread.ThreadContext?.RightFileEnd?.Line,
-                    thread.Status ?? "unknown",
-                    comments));
+                threads.Add(
+                    new PrReviewThread(
+                        thread.Id,
+                        thread.ThreadContext?.FilePath,
+                        thread.ThreadContext?.RightFileEnd?.Line,
+                        thread.Status ?? "unknown",
+                        comments
+                    )
+                );
         }
 
         return threads;
     }
 
-    public async Task<(string RepositoryName, string BranchName)?> GetPullRequestLocationAsync(int pullRequestId, CancellationToken cancellationToken)
+    public async Task<(string RepositoryName, string BranchName)?> GetPullRequestLocationAsync(
+        int pullRequestId,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/_apis/git/pullrequests?searchCriteria.pullRequestId={pullRequestId}&api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoPullRequestListResponse>(cancellationToken);
@@ -402,28 +490,39 @@ public sealed class AzureDevOpsClient(
         return (repoName, branch);
     }
 
-    public async Task RemovePullRequestLabelAsync(string repositoryName, int pullRequestId, string labelName, CancellationToken cancellationToken)
+    public async Task RemovePullRequestLabelAsync(
+        string repositoryName,
+        int pullRequestId,
+        string labelName,
+        CancellationToken cancellationToken
+    )
     {
         var encodedLabel = Uri.EscapeDataString(labelName);
         var response = await _httpClient.DeleteAsync(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/labels/{encodedLabel}?api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
     }
 
-    private async Task<int[]> GetPrWorkItemIdsAsync(string repositoryName, int pullRequestId, CancellationToken cancellationToken)
+    private async Task<int[]> GetPrWorkItemIdsAsync(
+        string repositoryName,
+        int pullRequestId,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/workitems?api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoPrWorkItemsResponse>(cancellationToken);
         if (result?.Value is null)
             return [];
 
-        return result.Value
-            .Select(item =>
+        return result
+            .Value.Select(item =>
             {
                 var idEl = item.Id;
                 if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt32(out var n))
@@ -439,30 +538,47 @@ public sealed class AzureDevOpsClient(
 
     private WorkItemScope DeriveScope(string repositoryName)
     {
-        if (string.Equals(_repositoryOptions.Backend.AzureDevOpsRepository, repositoryName, StringComparison.OrdinalIgnoreCase))
+        if (
+            string.Equals(
+                _repositoryOptions.Backend.AzureDevOpsRepository,
+                repositoryName,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
             return WorkItemScope.Backend;
-        if (string.Equals(_repositoryOptions.Frontend.AzureDevOpsRepository, repositoryName, StringComparison.OrdinalIgnoreCase))
+        if (
+            string.Equals(
+                _repositoryOptions.Frontend.AzureDevOpsRepository,
+                repositoryName,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
             return WorkItemScope.Frontend;
         return WorkItemScope.Fullstack;
     }
 
-    private async Task<IReadOnlyList<WorkItemSummary>> QueryByWiqlAsync(string query, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<WorkItemSummary>> QueryByWiqlAsync(
+        string query,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/wiql?api-version={ApiVersion}",
             new { query },
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var wiql = await response.Content.ReadFromJsonAsync<AdoWiqlResponse>(cancellationToken);
         var ids = wiql?.WorkItems?.Select(w => w.Id).ToArray() ?? [];
 
-        return ids.Length == 0
-            ? []
-            : await GetWorkItemSummariesAsync(ids, cancellationToken);
+        return ids.Length == 0 ? [] : await GetWorkItemSummariesAsync(ids, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<WorkItemSummary>> GetWorkItemSummariesAsync(IReadOnlyList<int> ids, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<WorkItemSummary>> GetWorkItemSummariesAsync(
+        IReadOnlyList<int> ids,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/workitemsbatch?api-version={ApiVersion}",
@@ -481,7 +597,8 @@ public sealed class AzureDevOpsClient(
                     "System.Tags",
                 },
             },
-            cancellationToken);
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
 
@@ -495,20 +612,21 @@ public sealed class AzureDevOpsClient(
                 ReadIdentityString(item.Fields.AssignedTo),
                 ParseStackRank(item.Fields.StackRank),
                 ParsePriority(item.Fields.Priority),
-                ParseTags(item.Fields.Tags)))
+                ParseTags(item.Fields.Tags)
+            ))
             .ToList();
     }
 
-    private async Task<IReadOnlyList<ChildTaskRecord>> GetChildTasksAsync(IReadOnlyList<int> ids, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ChildTaskRecord>> GetChildTasksAsync(
+        IReadOnlyList<int> ids,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/workitemsbatch?api-version={ApiVersion}",
-            new
-            {
-                ids,
-                fields = new[] { "System.Id", "System.Title", "System.State", "System.Tags" },
-            },
-            cancellationToken);
+            new { ids, fields = new[] { "System.Id", "System.Title", "System.State", "System.Tags" } },
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
 
@@ -518,41 +636,49 @@ public sealed class AzureDevOpsClient(
             {
                 var title = item.Fields.Title ?? string.Empty;
                 var tags = ParseTags(item.Fields.Tags);
-                var repoKind = tags.Contains("Frontend", StringComparer.OrdinalIgnoreCase) || title.Contains("frontend", StringComparison.OrdinalIgnoreCase)
-                    ? RepoKind.Frontend
-                    : RepoKind.Backend;
+                var repoKind =
+                    tags.Contains("Frontend", StringComparer.OrdinalIgnoreCase)
+                    || title.Contains("frontend", StringComparison.OrdinalIgnoreCase)
+                        ? RepoKind.Frontend
+                        : RepoKind.Backend;
                 return new ChildTaskRecord(item.Fields.Id, repoKind, title, item.Fields.State ?? string.Empty);
             })
             .ToList();
     }
 
-    private async Task<string?> TryGetParentFeatureTitleAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken)
+    private async Task<string?> TryGetParentFeatureTitleAsync(
+        IReadOnlyList<int> parentIds,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/workitemsbatch?api-version={ApiVersion}",
-            new
-            {
-                ids = parentIds,
-                fields = new[] { "System.WorkItemType", "System.Title" },
-            },
-            cancellationToken);
+            new { ids = parentIds, fields = new[] { "System.WorkItemType", "System.Title" } },
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
 
         var batch = await response.Content.ReadFromJsonAsync<AdoWorkItemBatchResponse>(cancellationToken);
         return (batch?.Value ?? [])
-            .FirstOrDefault(item => string.Equals(item.Fields.WorkItemType, "Feature", StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(item =>
+                string.Equals(item.Fields.WorkItemType, "Feature", StringComparison.OrdinalIgnoreCase)
+            )
             ?.Fields.Title;
     }
 
-    private async Task<IReadOnlyList<string>> GetWorkItemCommentsAsync(int workItemId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> GetWorkItemCommentsAsync(
+        int workItemId,
+        CancellationToken cancellationToken
+    )
     {
         var comments = new List<string>();
         string? continuationToken = null;
 
         do
         {
-            var route = $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?$top=200&api-version=7.1-preview.3";
+            var route =
+                $"{_options.Project}/_apis/wit/workItems/{workItemId}/comments?$top=200&api-version=7.1-preview.3";
             if (!string.IsNullOrWhiteSpace(continuationToken))
                 route = $"{route}&continuationToken={Uri.EscapeDataString(continuationToken)}";
 
@@ -567,8 +693,7 @@ public sealed class AzureDevOpsClient(
             }
 
             continuationToken = page?.ContinuationToken;
-        }
-        while (!string.IsNullOrWhiteSpace(continuationToken));
+        } while (!string.IsNullOrWhiteSpace(continuationToken));
 
         return comments;
     }
@@ -577,7 +702,8 @@ public sealed class AzureDevOpsClient(
     {
         using var request = BuildPatchRequest(
             $"{_options.Project}/_apis/wit/workitems/{workItemId}?api-version={ApiVersion}",
-            document);
+            document
+        );
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -588,40 +714,59 @@ public sealed class AzureDevOpsClient(
     {
         return new HttpRequestMessage(new HttpMethod("PATCH"), route)
         {
-            Content = new StringContent(JsonSerializer.Serialize(document), Encoding.UTF8, "application/json-patch+json"),
+            Content = new StringContent(
+                JsonSerializer.Serialize(document),
+                Encoding.UTF8,
+                "application/json-patch+json"
+            ),
         };
     }
 
-    private async Task AddPullRequestLabelAsync(string repositoryName, int pullRequestId, string labelName, CancellationToken cancellationToken)
+    private async Task AddPullRequestLabelAsync(
+        string repositoryName,
+        int pullRequestId,
+        string labelName,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/labels?api-version={ApiVersion}",
             new { name = labelName },
-            cancellationToken);
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
     }
 
-    private static object PatchField(string path, object value) => new { op = "add", path, value };
-
-    private object PatchRelation(int parentWorkItemId) => new
-    {
-        op = "add",
-        path = "/relations/-",
-        value = new
+    private static object PatchField(string path, object value) =>
+        new
         {
-            rel = "System.LinkTypes.Hierarchy-Reverse",
-            url = $"{_options.OrganizationUrl.TrimEnd('/')}/{_options.Project}/_apis/wit/workItems/{parentWorkItemId}",
-        },
-    };
+            op = "add",
+            path,
+            value,
+        };
+
+    private object PatchRelation(int parentWorkItemId) =>
+        new
+        {
+            op = "add",
+            path = "/relations/-",
+            value = new
+            {
+                rel = "System.LinkTypes.Hierarchy-Reverse",
+                url = $"{_options.OrganizationUrl.TrimEnd('/')}/{_options.Project}/_apis/wit/workItems/{parentWorkItemId}",
+            },
+        };
 
     private static string? ReadIdentityString(JsonElement element)
     {
         return element.ValueKind switch
         {
             JsonValueKind.String => element.GetString(),
-            JsonValueKind.Object when element.TryGetProperty("uniqueName", out var uniqueName) => uniqueName.GetString(),
-            JsonValueKind.Object when element.TryGetProperty("displayName", out var displayName) => displayName.GetString(),
+            JsonValueKind.Object when element.TryGetProperty("uniqueName", out var uniqueName) =>
+                uniqueName.GetString(),
+            JsonValueKind.Object when element.TryGetProperty("displayName", out var displayName) =>
+                displayName.GetString(),
             _ => null,
         };
     }
@@ -655,7 +800,13 @@ public sealed class AzureDevOpsClient(
         return rankElement.ValueKind switch
         {
             JsonValueKind.Number when rankElement.TryGetDouble(out var number) => number,
-            JsonValueKind.String when double.TryParse(rankElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) => parsed,
+            JsonValueKind.String
+                when double.TryParse(
+                    rankElement.GetString(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var parsed
+                ) => parsed,
             _ => double.MaxValue,
         };
     }
@@ -665,7 +816,13 @@ public sealed class AzureDevOpsClient(
         return priorityElement.ValueKind switch
         {
             JsonValueKind.Number when priorityElement.TryGetInt32(out var number) => number,
-            JsonValueKind.String when int.TryParse(priorityElement.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) => parsed,
+            JsonValueKind.String
+                when int.TryParse(
+                    priorityElement.GetString(),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var parsed
+                ) => parsed,
             _ => null,
         };
     }
@@ -678,7 +835,8 @@ public sealed class AzureDevOpsClient(
         {
             var response = await _httpClient.GetAsync(
                 $"{_options.Project}/_apis/pipelines/{pipelineId}?api-version={ApiVersion}",
-                cancellationToken);
+                cancellationToken
+            );
 
             if (!response.IsSuccessStatusCode)
                 return null;
@@ -697,34 +855,35 @@ public sealed class AzureDevOpsClient(
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/pipelines/{pipelineId}/runs?api-version={ApiVersion}",
-            new
-            {
-                resources = new
-                {
-                    repositories = new
-                    {
-                        self = new { refName },
-                    },
-                },
-            },
-            cancellationToken);
+            new { resources = new { repositories = new { self = new { refName } } } },
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
 
-        var run = await response.Content.ReadFromJsonAsync<AdoPipelineRunResponse>(cancellationToken)
+        var run =
+            await response.Content.ReadFromJsonAsync<AdoPipelineRunResponse>(cancellationToken)
             ?? throw new InvalidOperationException($"Azure DevOps did not return a run ID for pipeline {pipelineId}.");
         return run.Id;
     }
 
-    public async Task<(string State, string? Result)> GetPipelineRunStatusAsync(int pipelineId, int runId, CancellationToken cancellationToken)
+    public async Task<(string State, string? Result)> GetPipelineRunStatusAsync(
+        int pipelineId,
+        int runId,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/_apis/pipelines/{pipelineId}/runs/{runId}?api-version={ApiVersion}",
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
-        var run = await response.Content.ReadFromJsonAsync<AdoPipelineRunResponse>(cancellationToken)
-            ?? throw new InvalidOperationException($"Azure DevOps returned null for pipeline {pipelineId} run {runId}.");
+        var run =
+            await response.Content.ReadFromJsonAsync<AdoPipelineRunResponse>(cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"Azure DevOps returned null for pipeline {pipelineId} run {runId}."
+            );
 
         return (run.State ?? "unknown", run.Result);
     }
@@ -732,29 +891,31 @@ public sealed class AzureDevOpsClient(
     public Task<IReadOnlyList<WorkItemSummary>> QueryResolvedSprintItemsAsync(CancellationToken cancellationToken)
     {
         var query = $"""
-        SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
-        FROM WorkItems
-        WHERE ([System.WorkItemType] = 'Task' OR [System.WorkItemType] = 'Bug')
-          AND [System.State] = 'Resolved'
-          AND [System.IterationPath] = @CurrentIteration('[{_options.Project}]\{_options.Team}')
-          AND [System.TeamProject] = '{_options.Project}'
-        ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
-        """;
+            SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
+            FROM WorkItems
+            WHERE ([System.WorkItemType] = 'Task' OR [System.WorkItemType] = 'Bug')
+              AND [System.State] = 'Resolved'
+              AND [System.IterationPath] = @CurrentIteration('[{_options.Project}]\{_options.Team}')
+              AND [System.TeamProject] = '{_options.Project}'
+            ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
+            """;
 
         return QueryByWiqlAsync(query, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<(WorkItemSummary Story, IReadOnlyList<int> ChildIds)>> QueryActiveSprintUserStoriesWithChildrenAsync(CancellationToken cancellationToken)
+    public async Task<
+        IReadOnlyList<(WorkItemSummary Story, IReadOnlyList<int> ChildIds)>
+    > QueryActiveSprintUserStoriesWithChildrenAsync(CancellationToken cancellationToken)
     {
         var query = $"""
-        SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
-        FROM WorkItems
-        WHERE [System.WorkItemType] = 'User Story'
-          AND [System.State] = 'Active'
-          AND [System.IterationPath] = @CurrentIteration('[{_options.Project}]\{_options.Team}')
-          AND [System.TeamProject] = '{_options.Project}'
-        ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
-        """;
+            SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
+            FROM WorkItems
+            WHERE [System.WorkItemType] = 'User Story'
+              AND [System.State] = 'Active'
+              AND [System.IterationPath] = @CurrentIteration('[{_options.Project}]\{_options.Team}')
+              AND [System.TeamProject] = '{_options.Project}'
+            ORDER BY [Microsoft.VSTS.Common.StackRank] ASC
+            """;
 
         var stories = await QueryByWiqlAsync(query, cancellationToken);
         if (stories.Count == 0)
@@ -768,35 +929,42 @@ public sealed class AzureDevOpsClient(
             .ToArray();
     }
 
-    public async Task<IReadOnlyDictionary<int, string>> GetWorkItemStatesAsync(IReadOnlyList<int> workItemIds, CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<int, string>> GetWorkItemStatesAsync(
+        IReadOnlyList<int> workItemIds,
+        CancellationToken cancellationToken
+    )
     {
         if (workItemIds.Count == 0)
             return new Dictionary<int, string>();
 
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/workitemsbatch?api-version={ApiVersion}",
-            new
-            {
-                ids = workItemIds,
-                fields = new[] { "System.Id", "System.State" },
-            },
-            cancellationToken);
+            new { ids = workItemIds, fields = new[] { "System.Id", "System.State" } },
+            cancellationToken
+        );
 
         response.EnsureSuccessStatusCode();
 
         var batch = await response.Content.ReadFromJsonAsync<AdoWorkItemBatchResponse>(cancellationToken);
-        return (batch?.Value ?? [])
-            .ToDictionary(item => item.Fields.Id, item => item.Fields.State ?? string.Empty);
+        return (batch?.Value ?? []).ToDictionary(item => item.Fields.Id, item => item.Fields.State ?? string.Empty);
     }
 
-    public Task UpdateWorkItemStateAndAssigneeAsync(int workItemId, string state, string assignee, CancellationToken cancellationToken)
-        => PatchFieldsAsync(workItemId,
-        [
-            PatchField("/fields/System.State", state),
-            PatchField("/fields/System.AssignedTo", assignee),
-        ], cancellationToken);
+    public Task UpdateWorkItemStateAndAssigneeAsync(
+        int workItemId,
+        string state,
+        string assignee,
+        CancellationToken cancellationToken
+    ) =>
+        PatchFieldsAsync(
+            workItemId,
+            [PatchField("/fields/System.State", state), PatchField("/fields/System.AssignedTo", assignee)],
+            cancellationToken
+        );
 
-    private async Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> GetChildWorkItemIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken)
+    private async Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> GetChildWorkItemIdsAsync(
+        IReadOnlyList<int> parentIds,
+        CancellationToken cancellationToken
+    )
     {
         if (parentIds.Count == 0)
             return new Dictionary<int, IReadOnlyList<int>>();
@@ -814,7 +982,8 @@ public sealed class AzureDevOpsClient(
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/wit/wiql?api-version={ApiVersion}",
             new { query },
-            cancellationToken);
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoWiqlTreeResponse>(cancellationToken);

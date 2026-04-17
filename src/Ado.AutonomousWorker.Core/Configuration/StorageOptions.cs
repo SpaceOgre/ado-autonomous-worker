@@ -4,9 +4,7 @@ public sealed class StorageOptions
 {
     /// <summary>The default %LOCALAPPDATA%\Ado.AutonomousWorker directory used for data and user config.</summary>
     public static string DefaultAppFolder =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Ado.AutonomousWorker");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ado.AutonomousWorker");
 
     public string DataRoot { get; set; } = string.Empty;
 
@@ -68,9 +66,7 @@ public sealed class StorageOptions
             return Path.GetFullPath(defaultRoot);
         }
 
-        return Path.IsPathRooted(value)
-            ? Path.GetFullPath(value)
-            : Path.GetFullPath(Path.Combine(defaultRoot, value));
+        return Path.IsPathRooted(value) ? Path.GetFullPath(value) : Path.GetFullPath(Path.Combine(defaultRoot, value));
     }
 
     private static string NormalizeChildPath(string? value, string defaultRelativePath, string dataRoot)
@@ -80,8 +76,6 @@ public sealed class StorageOptions
             return Path.GetFullPath(Path.Combine(dataRoot, defaultRelativePath));
         }
 
-        return Path.IsPathRooted(value)
-            ? Path.GetFullPath(value)
-            : Path.GetFullPath(Path.Combine(dataRoot, value));
+        return Path.IsPathRooted(value) ? Path.GetFullPath(value) : Path.GetFullPath(Path.Combine(dataRoot, value));
     }
 }

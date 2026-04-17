@@ -55,6 +55,9 @@ dotnet tool run ado-worker -- doctor
 
 # Run the dashboard standalone (development)
 dotnet run --project src/Ado.AutonomousWorker.Dashboard
+
+# Format all C# code (run after coding is done)
+dotnet csharpier format .
 ```
 
 Local configuration goes in `src/Ado.AutonomousWorker.Cli/appsettings.local.json` (git-ignored). The PAT and local repo paths live there.

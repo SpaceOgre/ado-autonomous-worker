@@ -14,7 +14,8 @@ public static class WorkerLoggingSetup
     public static ILogger CreateLogger(
         IConfiguration configuration,
         string? storageBaseOverride = null,
-        string logFilePrefix = "worker")
+        string logFilePrefix = "worker"
+    )
     {
         var earlyStorageOptions = new StorageOptions();
         configuration.GetSection("Storage").Bind(earlyStorageOptions);
@@ -32,11 +33,13 @@ public static class WorkerLoggingSetup
             .MinimumLevel.Information()
             .WriteTo.Console(
                 restrictedToMinimumLevel: consoleLevel,
-                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"
+            )
             .WriteTo.File(
                 logFilePath,
                 rollingInterval: RollingInterval.Day,
-                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"
+            )
             .CreateLogger();
     }
 }

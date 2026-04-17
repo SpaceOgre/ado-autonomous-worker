@@ -4,4 +4,5 @@ public sealed record ReviewResult(
     string Summary,
     IReadOnlyList<ReviewFinding> Findings,
     string TranscriptPath,
-    string? StructuredPayload = null);
+    string? StructuredPayload = null
+);

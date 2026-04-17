@@ -20,14 +20,24 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         string artifactDirectory,
         string? outputSchema,
         Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         Directory.CreateDirectory(artifactDirectory);
         var sessionId = Guid.NewGuid().ToString("N");
         var transcriptPath = Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex.jsonl.log");
         var outputPath = Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex.last.txt");
-        var schemaPath = outputSchema is null ? null : Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex-schema.json");
-        var session = new AgentSessionHandle(sessionId, Provider, role, workingDirectory, transcriptPath, ProviderSessionId: null);
+        var schemaPath = outputSchema is null
+            ? null
+            : Path.Combine(artifactDirectory, $"{role.ToString().ToLowerInvariant()}-codex-schema.json");
+        var session = new AgentSessionHandle(
+            sessionId,
+            Provider,
+            role,
+            workingDirectory,
+            transcriptPath,
+            ProviderSessionId: null
+        );
 
         if (schemaPath is not null)
         {
@@ -69,13 +79,23 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             activityName: $"Codex {role}",
             outputCallback: CreateOutputObserver(session, outputCallback),
             cancellationToken,
-            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
+            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null
+        );
 
-        var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
+        var payload = File.Exists(outputPath)
+            ? await File.ReadAllTextAsync(outputPath, cancellationToken)
+            : commandResult.StandardOutput;
         var providerSessionId = TryReadCodexSessionId(commandResult.StandardOutput);
         session = session with { ProviderSessionId = providerSessionId };
         var usage = ParseCodexUsage(commandResult.StandardOutput);
-        var result = new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload, usage);
+        var result = new AgentRunResult(
+            commandResult.Success,
+            SummarizePayload(payload),
+            transcriptPath,
+            commandResult.StandardOutput,
+            payload,
+            usage
+        );
         return new AgentSessionStartResult(session, result);
     }
 
@@ -85,11 +105,18 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         string prompt,
         string artifactDirectory,
         Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         Directory.CreateDirectory(artifactDirectory);
-        var transcriptPath = Path.Combine(artifactDirectory, $"{session.Role.ToString().ToLowerInvariant()}-codex-resume.log");
-        var outputPath = Path.Combine(artifactDirectory, $"{session.Role.ToString().ToLowerInvariant()}-codex-resume.last.txt");
+        var transcriptPath = Path.Combine(
+            artifactDirectory,
+            $"{session.Role.ToString().ToLowerInvariant()}-codex-resume.log"
+        );
+        var outputPath = Path.Combine(
+            artifactDirectory,
+            $"{session.Role.ToString().ToLowerInvariant()}-codex-resume.last.txt"
+        );
         var targetSession = session.ProviderSessionId ?? session.SessionId;
 
         var args = new List<string>
@@ -117,11 +144,21 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             activityName: $"Codex {session.Role} resume",
             outputCallback: CreateOutputObserver(session, outputCallback),
             cancellationToken,
-            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null);
+            timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null
+        );
 
-        var payload = File.Exists(outputPath) ? await File.ReadAllTextAsync(outputPath, cancellationToken) : commandResult.StandardOutput;
+        var payload = File.Exists(outputPath)
+            ? await File.ReadAllTextAsync(outputPath, cancellationToken)
+            : commandResult.StandardOutput;
         var usage = ParseCodexUsage(commandResult.StandardOutput);
-        return new AgentRunResult(commandResult.Success, SummarizePayload(payload), transcriptPath, commandResult.StandardOutput, payload, usage);
+        return new AgentRunResult(
+            commandResult.Success,
+            SummarizePayload(payload),
+            transcriptPath,
+            commandResult.StandardOutput,
+            payload,
+            usage
+        );
     }
 
     public async Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
@@ -131,7 +168,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         string artifactDirectory,
         string? outputSchema,
         Func<AgentOutputChunk, CancellationToken, Task>? outputCallback,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var startResult = await StartSessionAsync(
             AgentRole.Review,
@@ -141,9 +179,13 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             artifactDirectory,
             outputSchema,
             outputCallback,
-            cancellationToken);
+            cancellationToken
+        );
 
-        return (ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath), startResult.Result.Usage);
+        return (
+            ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath),
+            startResult.Result.Usage
+        );
     }
 
     private static string? TryReadCodexSessionId(string stdout)
@@ -156,9 +198,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
                 if (evt?.Type == "session_meta" && evt.Payload?.Id is { } id)
                     return id;
             }
-            catch (JsonException)
-            {
-            }
+            catch (JsonException) { }
         }
 
         return null;
@@ -184,9 +224,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
                     ? null
                     : new AgentUsage(null, usage.InputTokens, usage.OutputTokens, usage.CachedInputTokens, null);
             }
-            catch (JsonException)
-            {
-            }
+            catch (JsonException) { }
         }
 
         return null;
@@ -194,19 +232,21 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
 
     private sealed record CodexSessionMetaEvent(
         [property: JsonPropertyName("type")] string? Type,
-        [property: JsonPropertyName("payload")] CodexSessionMetaPayload? Payload);
+        [property: JsonPropertyName("payload")] CodexSessionMetaPayload? Payload
+    );
 
-    private sealed record CodexSessionMetaPayload(
-        [property: JsonPropertyName("id")] string? Id);
+    private sealed record CodexSessionMetaPayload([property: JsonPropertyName("id")] string? Id);
 
     private sealed record CodexTurnEvent(
         [property: JsonPropertyName("type")] string? Type,
-        [property: JsonPropertyName("usage")] CodexUsage? Usage);
+        [property: JsonPropertyName("usage")] CodexUsage? Usage
+    );
 
     private sealed record CodexUsage(
         [property: JsonPropertyName("input_tokens")] int InputTokens,
         [property: JsonPropertyName("output_tokens")] int OutputTokens,
-        [property: JsonPropertyName("cached_input_tokens")] int CachedInputTokens);
+        [property: JsonPropertyName("cached_input_tokens")] int CachedInputTokens
+    );
 
     private static string GetCommandPath(AgentRoleConfig config, string fallback)
     {
@@ -253,7 +293,8 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
 
     private static Func<ProcessOutputLine, CancellationToken, Task>? CreateOutputObserver(
         AgentSessionHandle session,
-        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback)
+        Func<AgentOutputChunk, CancellationToken, Task>? outputCallback
+    )
     {
         if (outputCallback is null)
         {
@@ -275,8 +316,10 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
                         line.Stream,
                         Interlocked.Increment(ref sequence),
                         DateTimeOffset.UtcNow,
-                        chunk),
-                    cancellationToken);
+                        chunk
+                    ),
+                    cancellationToken
+                );
             }
         };
     }

@@ -13,7 +13,12 @@ public static class TerminalTitleFormatter
         return $"{GetSpinnerFrame(tick, useUnicode)} {baseTitle} | Waiting | ado-worker";
     }
 
-    public static string BuildExecutionTitle(string baseTitle, TaskExecutionRecord? execution, int tick, bool useUnicode)
+    public static string BuildExecutionTitle(
+        string baseTitle,
+        TaskExecutionRecord? execution,
+        int tick,
+        bool useUnicode
+    )
     {
         if (execution is null)
             return BuildWaitingTitle(baseTitle, tick, useUnicode);

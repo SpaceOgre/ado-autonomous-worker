@@ -7,8 +7,8 @@ internal sealed class ValidationFailureException(
     string command,
     string artifactPath,
     string standardOutput,
-    string standardError)
-    : InvalidOperationException($"Validation failed for {repoKind}: {command}")
+    string standardError
+) : InvalidOperationException($"Validation failed for {repoKind}: {command}")
 {
     public RepoKind RepoKind { get; } = repoKind;
 

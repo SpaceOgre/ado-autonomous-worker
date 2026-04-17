@@ -7,13 +7,27 @@ public interface IWorkspaceManager
 {
     Task PrepareAsync(CancellationToken cancellationToken);
 
-    Task<RepoExecutionContext> CreateRepoExecutionAsync(int parentWorkItemId, int childTaskId, RepoKind repoKind, string slug, bool preserveExistingWorkspace, CancellationToken cancellationToken);
+    Task<RepoExecutionContext> CreateRepoExecutionAsync(
+        int parentWorkItemId,
+        int childTaskId,
+        RepoKind repoKind,
+        string slug,
+        bool preserveExistingWorkspace,
+        CancellationToken cancellationToken
+    );
 
     /// <summary>
     /// Checks out an existing remote PR branch into a worktree. Unlike <see cref="CreateRepoExecutionAsync"/>,
     /// this does not create a new branch — it tracks the remote branch as-is.
     /// </summary>
-    Task<RepoExecutionContext> CheckoutPrBranchAsync(int parentWorkItemId, int childTaskId, RepoKind repoKind, string branchName, bool preserveExistingWorkspace, CancellationToken cancellationToken);
+    Task<RepoExecutionContext> CheckoutPrBranchAsync(
+        int parentWorkItemId,
+        int childTaskId,
+        RepoKind repoKind,
+        string branchName,
+        bool preserveExistingWorkspace,
+        CancellationToken cancellationToken
+    );
 
     Task CleanupAsync(RepoExecutionContext context, CancellationToken cancellationToken);
 

@@ -14,7 +14,17 @@ public static class QueueTableRenderer
             table.AddColumn("#");
         }
 
-        table.AddColumns("Work Item", "Type", "Title", "Kind", "Repos", "State", "Assigned To", "StackRank", "Priority");
+        table.AddColumns(
+            "Work Item",
+            "Type",
+            "Title",
+            "Kind",
+            "Repos",
+            "State",
+            "Assigned To",
+            "StackRank",
+            "Priority"
+        );
 
         for (var index = 0; index < items.Count; index++)
         {
@@ -46,10 +56,11 @@ public static class QueueTableRenderer
         return string.IsNullOrWhiteSpace(assignedTo) ? "[grey]-[/]" : Markup.Escape(assignedTo);
     }
 
-    private static string FormatScope(WorkItemScope scope) => scope switch
-    {
-        WorkItemScope.Backend => "[grey]BE[/]",
-        WorkItemScope.Frontend => "[grey]FE[/]",
-        _ => "[grey]BE+FE[/]",
-    };
+    private static string FormatScope(WorkItemScope scope) =>
+        scope switch
+        {
+            WorkItemScope.Backend => "[grey]BE[/]",
+            WorkItemScope.Frontend => "[grey]FE[/]",
+            _ => "[grey]BE+FE[/]",
+        };
 }

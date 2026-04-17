@@ -19,14 +19,20 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         public bool Last { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         await stateStore.InitializeAsync(cancellationToken);
 
         var hasExecutionId = !string.IsNullOrWhiteSpace(settings.ExecutionId);
         if (settings.Last == hasExecutionId)
         {
-            AnsiConsole.MarkupLine("[red]Specify exactly one of:[/] [yellow]--id <execution-id>[/] or [yellow]--last[/]");
+            AnsiConsole.MarkupLine(
+                "[red]Specify exactly one of:[/] [yellow]--id <execution-id>[/] or [yellow]--last[/]"
+            );
             return 1;
         }
 
@@ -66,7 +72,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             eventsTable.AddRow(
                 executionEvent.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
                 CliStyle.Phase(executionEvent.Phase),
-                Markup.Escape(executionEvent.Message));
+                Markup.Escape(executionEvent.Message)
+            );
         }
 
         if (events.Count > 0)
@@ -93,7 +100,9 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
         if (sessions.Count > 0)
         {
-            var sessionsTable = new Table().Border(TableBorder.Rounded).AddColumns("Role", "Provider", "Session Id", "Workdir", "Transcript");
+            var sessionsTable = new Table()
+                .Border(TableBorder.Rounded)
+                .AddColumns("Role", "Provider", "Session Id", "Workdir", "Transcript");
             foreach (var session in sessions)
             {
                 sessionsTable.AddRow(
@@ -101,7 +110,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     CliStyle.Provider(session.Provider),
                     session.SessionId,
                     Markup.Escape(session.WorkingDirectory),
-                    Markup.Escape(session.TranscriptPath));
+                    Markup.Escape(session.TranscriptPath)
+                );
             }
 
             AnsiConsole.Write(CliStyle.SectionRule("Agent Sessions", "mediumpurple2"));
@@ -111,10 +121,14 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
         if (agentOutput.Count > 0)
         {
-            var outputTable = new Table().Border(TableBorder.Rounded).AddColumns("Session", "Role", "Provider", "Updated", "Excerpt");
-            foreach (var sessionOutput in agentOutput
-                         .GroupBy(chunk => chunk.SessionId)
-                         .OrderByDescending(group => group.Max(item => item.Timestamp)))
+            var outputTable = new Table()
+                .Border(TableBorder.Rounded)
+                .AddColumns("Session", "Role", "Provider", "Updated", "Excerpt");
+            foreach (
+                var sessionOutput in agentOutput
+                    .GroupBy(chunk => chunk.SessionId)
+                    .OrderByDescending(group => group.Max(item => item.Timestamp))
+            )
             {
                 var latest = sessionOutput.Last();
                 outputTable.AddRow(
@@ -122,7 +136,10 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     CliStyle.Role(latest.Role),
                     CliStyle.Provider(latest.Provider),
                     latest.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
-                    Markup.Escape(string.Join(Environment.NewLine, sessionOutput.TakeLast(20).Select(chunk => chunk.Content))));
+                    Markup.Escape(
+                        string.Join(Environment.NewLine, sessionOutput.TakeLast(20).Select(chunk => chunk.Content))
+                    )
+                );
             }
 
             AnsiConsole.Write(CliStyle.SectionRule("Agent Output", "mediumspringgreen"));
@@ -132,7 +149,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         if (usageRecords.Count > 0)
         {
             AnsiConsole.WriteLine();
-            var usageTable = new Table().Border(TableBorder.Rounded)
+            var usageTable = new Table()
+                .Border(TableBorder.Rounded)
                 .AddColumns("Phase", "Role", "Provider", "Model", "Tokens In", "Tokens Out", "Cached", "Cost");
 
             var totalIn = 0;
@@ -150,7 +168,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     u.InputTokens.ToString("N0"),
                     u.OutputTokens.ToString("N0"),
                     u.CachedInputTokens > 0 ? u.CachedInputTokens.ToString("N0") : "-",
-                    u.CostUsd.HasValue ? $"${u.CostUsd:F4}" : "-");
+                    u.CostUsd.HasValue ? $"${u.CostUsd:F4}" : "-"
+                );
 
                 totalIn += u.InputTokens;
                 totalOut += u.OutputTokens;
@@ -159,11 +178,15 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             }
 
             usageTable.AddRow(
-                "[bold]Total[/]", "", "", "",
+                "[bold]Total[/]",
+                "",
+                "",
+                "",
                 $"[bold]{totalIn:N0}[/]",
                 $"[bold]{totalOut:N0}[/]",
                 totalCached > 0 ? $"[bold]{totalCached:N0}[/]" : "-",
-                totalCost > 0m ? $"[bold green]${totalCost:F4}[/]" : "-");
+                totalCost > 0m ? $"[bold green]${totalCost:F4}[/]" : "-"
+            );
 
             AnsiConsole.Write(CliStyle.SectionRule("Token Usage", "gold3_1"));
             AnsiConsole.Write(usageTable);
@@ -180,7 +203,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         if (siblings.Count > 0)
         {
             AnsiConsole.WriteLine();
-            var relatedTable = new Table().Border(TableBorder.Rounded)
+            var relatedTable = new Table()
+                .Border(TableBorder.Rounded)
                 .AddColumns("Execution Id", "Kind", "Phase", "Status", "Updated");
 
             foreach (var sibling in siblings)
@@ -190,7 +214,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
                     CliStyle.QueueKind(sibling.Kind),
                     CliStyle.Phase(sibling.Phase),
                     CliStyle.Status(sibling.Status),
-                    sibling.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+                    sibling.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                );
             }
 
             AnsiConsole.Write(CliStyle.SectionRule("Related Executions", "grey"));
@@ -202,8 +227,6 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
     private static string FormatList(IReadOnlyList<string> values)
     {
-        return values.Count == 0
-            ? "-"
-            : Markup.Escape(string.Join(Environment.NewLine, values));
+        return values.Count == 0 ? "-" : Markup.Escape(string.Join(Environment.NewLine, values));
     }
 }

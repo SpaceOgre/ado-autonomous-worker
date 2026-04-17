@@ -42,11 +42,13 @@ public static class RunPreambleDisplay
                 rows.Add(new Markup($"[yellow]{Markup.Escape(status)}[/]"));
             }
 
-            AnsiConsole.Write(new Panel(new Rows(rows.ToArray()))
-            {
-                Border = BoxBorder.Rounded,
-                BorderStyle = new Style(Color.DeepSkyBlue1),
-            });
+            AnsiConsole.Write(
+                new Panel(new Rows(rows.ToArray()))
+                {
+                    Border = BoxBorder.Rounded,
+                    BorderStyle = new Style(Color.DeepSkyBlue1),
+                }
+            );
             AnsiConsole.WriteLine();
             return;
         }
@@ -59,14 +61,20 @@ public static class RunPreambleDisplay
         }
     }
 
-    public static void ShowQueuePreview(IReadOnlyList<QueueItem> selectedQueue, int eligibleCount, int maxItemsPerRun, bool previewOnly)
+    public static void ShowQueuePreview(
+        IReadOnlyList<QueueItem> selectedQueue,
+        int eligibleCount,
+        int maxItemsPerRun,
+        bool previewOnly
+    )
     {
         var selectedText = selectedQueue.Count == 1 ? "item" : "items";
         var eligibleText = eligibleCount == 1 ? "item" : "items";
         var mode = previewOnly ? "Previewing" : "Processing";
 
         AnsiConsole.MarkupLine(
-            $"[deepskyblue1]{mode}[/] {selectedQueue.Count} {selectedText} from {eligibleCount} eligible {eligibleText} ([grey]MaxItemsPerRun={maxItemsPerRun}[/]).");
+            $"[deepskyblue1]{mode}[/] {selectedQueue.Count} {selectedText} from {eligibleCount} eligible {eligibleText} ([grey]MaxItemsPerRun={maxItemsPerRun}[/])."
+        );
 
         if (selectedQueue.Count == 0)
         {
@@ -86,8 +94,11 @@ public static class RunPreambleDisplay
         }
 
         var rainbowName = string.Concat(
-            "SpaceOgre"
-                .Select((character, index) => $"[{RainbowColors[index % RainbowColors.Length]}]{Markup.Escape(character.ToString())}[/]"));
+            "SpaceOgre".Select(
+                (character, index) =>
+                    $"[{RainbowColors[index % RainbowColors.Length]}]{Markup.Escape(character.ToString())}[/]"
+            )
+        );
 
         return $"[grey]By [/]{rainbowName}";
     }

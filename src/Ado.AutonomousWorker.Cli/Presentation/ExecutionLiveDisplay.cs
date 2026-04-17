@@ -11,7 +11,8 @@ namespace Ado.AutonomousWorker.Cli.Presentation;
 public sealed class ExecutionLiveDisplay(
     IStateStore stateStore,
     TerminalTitleService terminalTitleService,
-    IOptions<AgentOptions> agentOptions)
+    IOptions<AgentOptions> agentOptions
+)
 {
     private static readonly string[] UnicodeSpinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     private static readonly string[] AsciiSpinnerFrames = ["-", "\\", "|", "/"];
@@ -29,20 +30,18 @@ public sealed class ExecutionLiveDisplay(
     public Task<string> RunForWorkItemAsync(
         int workItemId,
         Func<CancellationToken, Task<string>> operation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return RunForWorkItemAsync(
-            $"Work item #{workItemId}",
-            workItemId,
-            operation,
-            cancellationToken);
+        return RunForWorkItemAsync($"Work item #{workItemId}", workItemId, operation, cancellationToken);
     }
 
     public Task<string> RunForWorkItemAsync(
         string title,
         int workItemId,
         Func<CancellationToken, Task<string>> operation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return RunAsync(
             title,
@@ -55,13 +54,15 @@ public sealed class ExecutionLiveDisplay(
                     .OrderByDescending(item => item.CreatedAt)
                     .FirstOrDefault();
             },
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     public Task<string> RunForExecutionAsync(
         string executionId,
         Func<CancellationToken, Task> operation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return RunAsync(
             $"Execution {executionId}",
@@ -71,20 +72,23 @@ public sealed class ExecutionLiveDisplay(
                 return executionId;
             },
             token => stateStore.GetExecutionAsync(executionId, token),
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     private sealed record ViewData(
         TaskExecutionRecord Execution,
         IReadOnlyList<ExecutionEventRecord> Events,
         IReadOnlyList<AgentOutputChunk> AgentOutput,
-        IReadOnlyList<AgentUsageRecord> UsageRecords);
+        IReadOnlyList<AgentUsageRecord> UsageRecords
+    );
 
     private async Task<string> RunAsync(
         string title,
         Func<CancellationToken, Task<string>> operation,
         Func<CancellationToken, Task<TaskExecutionRecord?>> executionResolver,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await stateStore.InitializeAsync(cancellationToken);
 
@@ -109,7 +113,8 @@ public sealed class ExecutionLiveDisplay(
         ViewData? cached = null;
         ViewData? finalData = null;
 
-        await AnsiConsole.Live(BuildView(title, null, tick, startedAt, useUnicode))
+        await AnsiConsole
+            .Live(BuildView(title, null, tick, startedAt, useUnicode))
             .AutoClear(true)
             .Overflow(VerticalOverflow.Visible)
             .StartAsync(async liveCtx =>
@@ -122,14 +127,21 @@ public sealed class ExecutionLiveDisplay(
                         if (execution is not null)
                         {
                             var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
-                            var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
-                            var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
+                            var agentOutput = await stateStore.GetAgentOutputChunksAsync(
+                                execution.ExecutionId,
+                                cancellationToken
+                            );
+                            var usageRecords = await stateStore.GetAgentUsageAsync(
+                                execution.ExecutionId,
+                                cancellationToken
+                            );
                             cached = new ViewData(execution, events, agentOutput, usageRecords);
                         }
                     }
 
                     terminalTitleService.UpdateTitle(
-                        TerminalTitleFormatter.BuildExecutionTitle(title, cached?.Execution, tick, useUnicode));
+                        TerminalTitleFormatter.BuildExecutionTitle(title, cached?.Execution, tick, useUnicode)
+                    );
 
                     liveCtx.UpdateTarget(BuildView(title, cached, tick, startedAt, useUnicode));
                     tick++;
@@ -141,13 +153,20 @@ public sealed class ExecutionLiveDisplay(
                 if (finalExecution is not null)
                 {
                     var events = await stateStore.GetEventsAsync(finalExecution.ExecutionId, cancellationToken);
-                    var agentOutput = await stateStore.GetAgentOutputChunksAsync(finalExecution.ExecutionId, cancellationToken);
-                    var usageRecords = await stateStore.GetAgentUsageAsync(finalExecution.ExecutionId, cancellationToken);
+                    var agentOutput = await stateStore.GetAgentOutputChunksAsync(
+                        finalExecution.ExecutionId,
+                        cancellationToken
+                    );
+                    var usageRecords = await stateStore.GetAgentUsageAsync(
+                        finalExecution.ExecutionId,
+                        cancellationToken
+                    );
                     finalData = new ViewData(finalExecution, events, agentOutput, usageRecords);
                 }
 
                 terminalTitleService.UpdateTitle(
-                    TerminalTitleFormatter.BuildExecutionTitle(title, finalData?.Execution, tick, useUnicode));
+                    TerminalTitleFormatter.BuildExecutionTitle(title, finalData?.Execution, tick, useUnicode)
+                );
                 liveCtx.UpdateTarget(BuildView(title, finalData, tick, startedAt, useUnicode));
             });
 
@@ -160,12 +179,7 @@ public sealed class ExecutionLiveDisplay(
         return await operationTask;
     }
 
-    private IRenderable BuildView(
-        string title,
-        ViewData? data,
-        int tick,
-        DateTimeOffset startedAt,
-        bool useUnicode)
+    private IRenderable BuildView(string title, ViewData? data, int tick, DateTimeOffset startedAt, bool useUnicode)
     {
         IRenderable header;
         IReadOnlyList<ExecutionEventRecord> events = [];
@@ -174,7 +188,14 @@ public sealed class ExecutionLiveDisplay(
 
         if (data is not null)
         {
-            header = CreateCompactHeader(data.Execution, tick, startedAt, useUnicode, agentOptions.Value, data.UsageRecords);
+            header = CreateCompactHeader(
+                data.Execution,
+                tick,
+                startedAt,
+                useUnicode,
+                agentOptions.Value,
+                data.UsageRecords
+            );
             events = data.Events;
             agentOutput = data.AgentOutput;
             phase = data.Execution.Phase;
@@ -184,15 +205,15 @@ public sealed class ExecutionLiveDisplay(
             var elapsed = DateTimeOffset.UtcNow - startedAt;
             var elapsedText = elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");
             header = new Markup(
-                $"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] " +
-                $"[grey]Waiting for execution data... (elapsed {elapsedText})[/]");
+                $"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] "
+                    + $"[grey]Waiting for execution data... (elapsed {elapsedText})[/]"
+            );
         }
 
         // Always render the full panel structure so the height stays consistent across
         // all states. A height jump (small→large) causes Spectre's cursor tracking to
         // land short, leaving the previous frame's top line visible as a duplicate.
-        var body = new Rows(
-        [
+        var body = new Rows([
             header,
             CliStyle.SectionRule("Recent Events", "deepskyblue1"),
             CreateEventsTable(events),
@@ -200,11 +221,7 @@ public sealed class ExecutionLiveDisplay(
             CreateAgentOutputMarkup(agentOutput, phase, tick, useUnicode),
         ]);
 
-        return new Panel(body)
-        {
-            Header = new PanelHeader(title),
-            Border = BoxBorder.Rounded,
-        };
+        return new Panel(body) { Header = new PanelHeader(title), Border = BoxBorder.Rounded };
     }
 
     // Compact header: title, agent config, activity, phase pipeline, and (when available) running token/cost totals.
@@ -214,30 +231,28 @@ public sealed class ExecutionLiveDisplay(
         DateTimeOffset startedAt,
         bool useUnicode,
         AgentOptions agentOptions,
-        IReadOnlyList<AgentUsageRecord> usageRecords)
+        IReadOnlyList<AgentUsageRecord> usageRecords
+    )
     {
-        var shortId = execution.ExecutionId.Length > 8
-            ? execution.ExecutionId[..8] + "…"
-            : execution.ExecutionId;
+        var shortId = execution.ExecutionId.Length > 8 ? execution.ExecutionId[..8] + "…" : execution.ExecutionId;
 
         var rows = new List<IRenderable>
         {
             // Title + work item identity
             new Markup(
-                $"[bold]{Markup.Escape(execution.Title)}[/]  " +
-                $"[grey]#{execution.WorkItemId} · {CliStyle.QueueKind(execution.Kind)}[/]"),
-
+                $"[bold]{Markup.Escape(execution.Title)}[/]  "
+                    + $"[grey]#{execution.WorkItemId} · {CliStyle.QueueKind(execution.Kind)}[/]"
+            ),
             // Execution ID + agent configuration
             new Markup(
-                $"[grey]Exec[/] {Markup.Escape(shortId)}  " +
-                $"[grey]Plan[/] {Markup.Escape(FormatAgent(agentOptions.Plan))}  " +
-                $"[grey]Code[/] {Markup.Escape(FormatAgent(agentOptions.Code))}  " +
-                $"[grey]Review[/] {Markup.Escape(FormatAgent(agentOptions.Review))}  " +
-                $"[grey]PR[/] {Markup.Escape(FormatAgent(agentOptions.Pr))}"),
-
+                $"[grey]Exec[/] {Markup.Escape(shortId)}  "
+                    + $"[grey]Plan[/] {Markup.Escape(FormatAgent(agentOptions.Plan))}  "
+                    + $"[grey]Code[/] {Markup.Escape(FormatAgent(agentOptions.Code))}  "
+                    + $"[grey]Review[/] {Markup.Escape(FormatAgent(agentOptions.Review))}  "
+                    + $"[grey]PR[/] {Markup.Escape(FormatAgent(agentOptions.Pr))}"
+            ),
             // Activity status line with spinner / outcome icon
             CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions),
-
             // Phase pipeline
             CreatePhaseMarkup(execution.Phase, execution.Status),
         };
@@ -264,9 +279,7 @@ public sealed class ExecutionLiveDisplay(
 
     private static IRenderable CreatePhaseMarkup(TaskPhase currentPhase, ExecutionStatus status)
     {
-        var entries = OrderedPhases
-            .Select(phase => FormatPipelinePhase(phase, currentPhase, status))
-            .ToArray();
+        var entries = OrderedPhases.Select(phase => FormatPipelinePhase(phase, currentPhase, status)).ToArray();
 
         return new Markup(string.Join(" [grey]->[/] ", entries));
     }
@@ -277,12 +290,11 @@ public sealed class ExecutionLiveDisplay(
         int tick,
         DateTimeOffset startedAt,
         bool useUnicode,
-        AgentOptions agentOptions)
+        AgentOptions agentOptions
+    )
     {
         var elapsed = DateTimeOffset.UtcNow - startedAt;
-        var elapsedText = elapsed.TotalHours >= 1
-            ? elapsed.ToString(@"hh\:mm\:ss")
-            : elapsed.ToString(@"mm\:ss");
+        var elapsedText = elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");
 
         var (prefix, color, message) = status switch
         {
@@ -297,7 +309,9 @@ public sealed class ExecutionLiveDisplay(
             ? string.Empty
             : $" [grey](via {Markup.Escape(agentText)})[/]";
 
-        return new Markup($"[{color}]{Markup.Escape(prefix)}[/] {Markup.Escape(message)}{agentSuffix} [grey](elapsed {elapsedText})[/]");
+        return new Markup(
+            $"[{color}]{Markup.Escape(prefix)}[/] {Markup.Escape(message)}{agentSuffix} [grey](elapsed {elapsedText})[/]"
+        );
     }
 
     private static Table CreateEventsTable(IReadOnlyList<ExecutionEventRecord> events)
@@ -315,7 +329,8 @@ public sealed class ExecutionLiveDisplay(
             table.AddRow(
                 executionEvent.Timestamp.ToLocalTime().ToString("HH:mm:ss"),
                 CliStyle.Phase(executionEvent.Phase),
-                Markup.Escape(executionEvent.Message));
+                Markup.Escape(executionEvent.Message)
+            );
         }
 
         return table;
@@ -327,14 +342,14 @@ public sealed class ExecutionLiveDisplay(
         IReadOnlyList<AgentOutputChunk> chunks,
         TaskPhase phase,
         int tick,
-        bool useUnicode)
+        bool useUnicode
+    )
     {
         if (chunks.Count == 0)
         {
             var spinner = GetSpinnerFrame(tick, useUnicode);
-            var waitingText = phase is TaskPhase.Publishing
-                ? "No agent output captured."
-                : $"{spinner} Waiting for agent output...";
+            var waitingText =
+                phase is TaskPhase.Publishing ? "No agent output captured." : $"{spinner} Waiting for agent output...";
             return new Markup($"[grey]{Markup.Escape(waitingText)}[/]");
         }
 
@@ -347,8 +362,9 @@ public sealed class ExecutionLiveDisplay(
         var lines = new List<IRenderable>
         {
             new Markup(
-                $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}  " +
-                $"[grey]{Markup.Escape(ShortenPath(latestChunk.WorkingDirectory))} · {latestChunk.Timestamp.ToLocalTime():HH:mm:ss}[/]"),
+                $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}  "
+                    + $"[grey]{Markup.Escape(ShortenPath(latestChunk.WorkingDirectory))} · {latestChunk.Timestamp.ToLocalTime():HH:mm:ss}[/]"
+            ),
         };
 
         foreach (var chunk in activeSession.TakeLast(5))

@@ -1,11 +1,11 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj" />
-    <Project Path="src/Ado.AutonomousWorker.Core/Ado.AutonomousWorker.Core.csproj" />
-    <Project Path="src/Ado.AutonomousWorker.Dashboard/Ado.AutonomousWorker.Dashboard.csproj" />
-    <Project Path="src/Ado.AutonomousWorker.Infrastructure/Ado.AutonomousWorker.Infrastructure.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj" />
-  </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj" />
+        <Project Path="src/Ado.AutonomousWorker.Core/Ado.AutonomousWorker.Core.csproj" />
+        <Project Path="src/Ado.AutonomousWorker.Dashboard/Ado.AutonomousWorker.Dashboard.csproj" />
+        <Project Path="src/Ado.AutonomousWorker.Infrastructure/Ado.AutonomousWorker.Infrastructure.csproj" />
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj" />
+    </Folder>
 </Solution>

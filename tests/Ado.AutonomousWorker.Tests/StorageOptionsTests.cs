@@ -13,7 +13,8 @@ public sealed class StorageOptionsTests
 
         var expectedRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Ado.AutonomousWorker");
+            "Ado.AutonomousWorker"
+        );
 
         Assert.Equal(Path.GetFullPath(expectedRoot), options.DataRoot);
         Assert.Equal(Path.Combine(Path.GetFullPath(expectedRoot), "worker.db"), options.DatabasePath);
@@ -58,17 +59,17 @@ public sealed class StorageOptionsTests
     [Fact]
     public void ArtifactHelpers_GroupByWorkItemThenExecutionOrTask()
     {
-        var options = new StorageOptions
-        {
-            ArtifactRoot = Path.Combine(Path.GetTempPath(), "ado-worker-artifacts"),
-        };
+        var options = new StorageOptions { ArtifactRoot = Path.Combine(Path.GetTempPath(), "ado-worker-artifacts") };
 
         var workItemRoot = options.GetWorkItemArtifactRoot(28639);
         var executionRoot = options.GetExecutionArtifactRoot(28639, "de2f6ffd2c034cef9a4abfe1a4bcd84d");
         var taskRoot = options.GetTaskArtifactRoot(28639, 28883);
 
         Assert.Equal(Path.Combine(options.ArtifactRoot, "28639"), workItemRoot);
-        Assert.Equal(Path.Combine(options.ArtifactRoot, "28639", "executions", "de2f6ffd2c034cef9a4abfe1a4bcd84d"), executionRoot);
+        Assert.Equal(
+            Path.Combine(options.ArtifactRoot, "28639", "executions", "de2f6ffd2c034cef9a4abfe1a4bcd84d"),
+            executionRoot
+        );
         Assert.Equal(Path.Combine(options.ArtifactRoot, "28639", "tasks", "28883"), taskRoot);
     }
 }

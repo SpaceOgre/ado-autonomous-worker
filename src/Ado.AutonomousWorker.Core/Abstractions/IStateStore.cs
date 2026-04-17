@@ -15,13 +15,19 @@ public interface IStateStore
 
     Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(int workItemId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(
+        int workItemId,
+        CancellationToken cancellationToken
+    );
 
     Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken);
 
     Task LinkPullRequestToExecutionAsync(string executionId, int pullRequestId, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(string executionId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(
+        string executionId,
+        CancellationToken cancellationToken
+    );
 
     Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken);
 
@@ -29,13 +35,19 @@ public interface IStateStore
 
     Task SaveAgentSessionAsync(string executionId, AgentSessionHandle session, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<AgentSessionHandle>> GetAgentSessionsAsync(string executionId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AgentSessionHandle>> GetAgentSessionsAsync(
+        string executionId,
+        CancellationToken cancellationToken
+    );
 
     Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken);
 
     Task AppendAgentOutputChunkAsync(string executionId, AgentOutputChunk chunk, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(string executionId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(
+        string executionId,
+        CancellationToken cancellationToken
+    );
 
     Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken);
 
@@ -45,7 +57,14 @@ public interface IStateStore
 
     Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken);
 
-    Task RecordAgentUsageAsync(string executionId, TaskPhase phase, AgentRole role, AgentProvider provider, AgentUsage usage, CancellationToken cancellationToken);
+    Task RecordAgentUsageAsync(
+        string executionId,
+        TaskPhase phase,
+        AgentRole role,
+        AgentProvider provider,
+        AgentUsage usage,
+        CancellationToken cancellationToken
+    );
 
     Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken);
 }

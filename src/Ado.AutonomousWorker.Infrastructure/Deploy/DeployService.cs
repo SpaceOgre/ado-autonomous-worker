@@ -9,7 +9,8 @@ namespace Ado.AutonomousWorker.Infrastructure.Deploy;
 public sealed class DeployService(
     IAzureDevOpsClient adoClient,
     IOptions<DeployOptions> deployOptions,
-    ILogger<DeployService> logger)
+    ILogger<DeployService> logger
+)
 {
     private readonly IAzureDevOpsClient _adoClient = adoClient;
     private readonly DeployOptions _options = deployOptions.Value;
@@ -27,7 +28,8 @@ public sealed class DeployService(
         CancellationToken cancellationToken,
         string? tag = null,
         bool triggerBackend = true,
-        bool triggerFrontend = true)
+        bool triggerFrontend = true
+    )
     {
         if (tag is not null && string.IsNullOrWhiteSpace(tag))
         {
@@ -36,7 +38,9 @@ public sealed class DeployService(
 
         if (string.IsNullOrWhiteSpace(_options.Branch))
         {
-            throw new InvalidOperationException("Deploy configuration is invalid: Branch must not be empty or whitespace.");
+            throw new InvalidOperationException(
+                "Deploy configuration is invalid: Branch must not be empty or whitespace."
+            );
         }
 
         var normalizedTag = tag?.Trim();
@@ -50,14 +54,22 @@ public sealed class DeployService(
         if (triggerBackend)
         {
             progress.Report($"Triggering backend pipeline (id={_options.BackendPipelineId}) on {refLabel}…");
-            backendRunId = await _adoClient.TriggerPipelineAsync(_options.BackendPipelineId, refName, cancellationToken);
+            backendRunId = await _adoClient.TriggerPipelineAsync(
+                _options.BackendPipelineId,
+                refName,
+                cancellationToken
+            );
             progress.Report($"Backend run #{backendRunId} started.");
         }
 
         if (triggerFrontend)
         {
             progress.Report($"Triggering frontend pipeline (id={_options.FrontendPipelineId}) on {refLabel}…");
-            frontendRunId = await _adoClient.TriggerPipelineAsync(_options.FrontendPipelineId, refName, cancellationToken);
+            frontendRunId = await _adoClient.TriggerPipelineAsync(
+                _options.FrontendPipelineId,
+                refName,
+                cancellationToken
+            );
             progress.Report($"Frontend run #{frontendRunId} started.");
         }
 
@@ -73,12 +85,17 @@ public sealed class DeployService(
         int? backendRunId,
         int? frontendRunId,
         IProgress<string> progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (_options.TimeoutMinutes <= 0)
-            throw new InvalidOperationException($"Deploy configuration is invalid: TimeoutMinutes must be greater than 0 (currently {_options.TimeoutMinutes}).");
+            throw new InvalidOperationException(
+                $"Deploy configuration is invalid: TimeoutMinutes must be greater than 0 (currently {_options.TimeoutMinutes})."
+            );
         if (_options.PollIntervalSeconds <= 0)
-            throw new InvalidOperationException($"Deploy configuration is invalid: PollIntervalSeconds must be greater than 0 (currently {_options.PollIntervalSeconds}).");
+            throw new InvalidOperationException(
+                $"Deploy configuration is invalid: PollIntervalSeconds must be greater than 0 (currently {_options.PollIntervalSeconds})."
+            );
 
         var timeout = TimeSpan.FromMinutes(_options.TimeoutMinutes);
         var pollInterval = TimeSpan.FromSeconds(_options.PollIntervalSeconds);
@@ -93,14 +110,20 @@ public sealed class DeployService(
 
             if (!backendDone)
             {
-                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(_options.BackendPipelineId, backendRunId!.Value, cancellationToken);
+                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(
+                    _options.BackendPipelineId,
+                    backendRunId!.Value,
+                    cancellationToken
+                );
                 _logger.LogDebug("Backend run #{RunId}: state={State} result={Result}", backendRunId, state, result);
 
                 if (IsFinished(state))
                 {
                     backendDone = true;
                     if (!IsSuccessful(result))
-                        throw new InvalidOperationException($"Backend pipeline run #{backendRunId} finished with result '{result}'. Deploy aborted.");
+                        throw new InvalidOperationException(
+                            $"Backend pipeline run #{backendRunId} finished with result '{result}'. Deploy aborted."
+                        );
                     progress.Report($"Backend pipeline run #{backendRunId} completed successfully.");
                 }
                 else
@@ -111,14 +134,20 @@ public sealed class DeployService(
 
             if (!frontendDone)
             {
-                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(_options.FrontendPipelineId, frontendRunId!.Value, cancellationToken);
+                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(
+                    _options.FrontendPipelineId,
+                    frontendRunId!.Value,
+                    cancellationToken
+                );
                 _logger.LogDebug("Frontend run #{RunId}: state={State} result={Result}", frontendRunId, state, result);
 
                 if (IsFinished(state))
                 {
                     frontendDone = true;
                     if (!IsSuccessful(result))
-                        throw new InvalidOperationException($"Frontend pipeline run #{frontendRunId} finished with result '{result}'. Deploy aborted.");
+                        throw new InvalidOperationException(
+                            $"Frontend pipeline run #{frontendRunId} finished with result '{result}'. Deploy aborted."
+                        );
                     progress.Report($"Frontend pipeline run #{frontendRunId} completed successfully.");
                 }
                 else
@@ -129,7 +158,9 @@ public sealed class DeployService(
         }
 
         if (!backendDone || !frontendDone)
-            throw new InvalidOperationException($"Pipeline runs did not complete within {_options.TimeoutMinutes} minutes.");
+            throw new InvalidOperationException(
+                $"Pipeline runs did not complete within {_options.TimeoutMinutes} minutes."
+            );
     }
 
     /// <summary>
@@ -138,8 +169,10 @@ public sealed class DeployService(
     ///   - <c>taskChanges</c>: Resolved tasks/bugs to move to Ready for test
     ///   - <c>storyChanges</c>: User stories whose children are all Ready for test or Closed
     /// </summary>
-    public async Task<(IReadOnlyList<DeployWorkItemChange> TaskChanges, IReadOnlyList<DeployWorkItemChange> StoryChanges)> ComputeChangesAsync(
-        CancellationToken cancellationToken)
+    public async Task<(
+        IReadOnlyList<DeployWorkItemChange> TaskChanges,
+        IReadOnlyList<DeployWorkItemChange> StoryChanges
+    )> ComputeChangesAsync(CancellationToken cancellationToken)
     {
         // 1. Resolved tasks/bugs in current sprint
         var resolvedItems = await _adoClient.QueryResolvedSprintItemsAsync(cancellationToken);
@@ -151,7 +184,8 @@ public sealed class DeployService(
                 item.State,
                 ReadyForTestState,
                 item.AssignedTo,
-                _options.ReadyForTestAssignee))
+                _options.ReadyForTestAssignee
+            ))
             .ToArray();
 
         // 2. Active user stories where all children will be Ready for test or Closed after the changes above
@@ -168,9 +202,10 @@ public sealed class DeployService(
             .Distinct()
             .ToArray();
 
-        var childStateMap = allUnknownIds.Length > 0
-            ? await _adoClient.GetWorkItemStatesAsync(allUnknownIds, cancellationToken)
-            : (IReadOnlyDictionary<int, string>)new Dictionary<int, string>();
+        var childStateMap =
+            allUnknownIds.Length > 0
+                ? await _adoClient.GetWorkItemStatesAsync(allUnknownIds, cancellationToken)
+                : (IReadOnlyDictionary<int, string>)new Dictionary<int, string>();
 
         foreach (var (story, childIds) in stories)
         {
@@ -190,14 +225,17 @@ public sealed class DeployService(
 
             if (allDone)
             {
-                storyChanges.Add(new DeployWorkItemChange(
-                    story.WorkItemId,
-                    story.WorkItemType.ToString(),
-                    story.Title,
-                    story.State,
-                    ReadyForTestState,
-                    story.AssignedTo,
-                    _options.ReadyForTestAssignee));
+                storyChanges.Add(
+                    new DeployWorkItemChange(
+                        story.WorkItemId,
+                        story.WorkItemType.ToString(),
+                        story.Title,
+                        story.State,
+                        ReadyForTestState,
+                        story.AssignedTo,
+                        _options.ReadyForTestAssignee
+                    )
+                );
             }
         }
 
@@ -209,18 +247,33 @@ public sealed class DeployService(
         IReadOnlyList<DeployWorkItemChange> taskChanges,
         IReadOnlyList<DeployWorkItemChange> storyChanges,
         IProgress<string> progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         foreach (var change in taskChanges)
         {
-            progress.Report($"Updating {change.WorkItemType} #{change.WorkItemId} '{change.Title}' → {change.NewState}, assignee: {change.NewAssignee}");
-            await _adoClient.UpdateWorkItemStateAndAssigneeAsync(change.WorkItemId, change.NewState, change.NewAssignee, cancellationToken);
+            progress.Report(
+                $"Updating {change.WorkItemType} #{change.WorkItemId} '{change.Title}' → {change.NewState}, assignee: {change.NewAssignee}"
+            );
+            await _adoClient.UpdateWorkItemStateAndAssigneeAsync(
+                change.WorkItemId,
+                change.NewState,
+                change.NewAssignee,
+                cancellationToken
+            );
         }
 
         foreach (var change in storyChanges)
         {
-            progress.Report($"Updating User Story #{change.WorkItemId} '{change.Title}' → {change.NewState}, assignee: {change.NewAssignee}");
-            await _adoClient.UpdateWorkItemStateAndAssigneeAsync(change.WorkItemId, change.NewState, change.NewAssignee, cancellationToken);
+            progress.Report(
+                $"Updating User Story #{change.WorkItemId} '{change.Title}' → {change.NewState}, assignee: {change.NewAssignee}"
+            );
+            await _adoClient.UpdateWorkItemStateAndAssigneeAsync(
+                change.WorkItemId,
+                change.NewState,
+                change.NewAssignee,
+                cancellationToken
+            );
         }
     }
 
@@ -231,6 +284,6 @@ public sealed class DeployService(
         string.Equals(result, "succeeded", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAcceptableChildState(string state) =>
-        string.Equals(state, ReadyForTestState, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(state, "Closed", StringComparison.OrdinalIgnoreCase);
+        string.Equals(state, ReadyForTestState, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(state, "Closed", StringComparison.OrdinalIgnoreCase);
 }

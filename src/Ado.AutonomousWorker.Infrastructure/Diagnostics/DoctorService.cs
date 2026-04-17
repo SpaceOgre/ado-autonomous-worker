@@ -15,7 +15,8 @@ public sealed class DoctorService(
     IOptions<AzureDevOpsOptions> azureDevOpsOptions,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
-    IOptions<DeployOptions> deployOptions)
+    IOptions<DeployOptions> deployOptions
+)
 {
     public async Task<IReadOnlyList<DoctorCheckResult>> RunAsync(CancellationToken cancellationToken)
     {
@@ -34,26 +35,35 @@ public sealed class DoctorService(
         checks.Add(CheckAgentCommand("Code Agent", agentOptions.Value.Code));
         checks.Add(CheckAgentCommand("Review Agent", agentOptions.Value.Review));
 
-        checks.Add(new DoctorCheckResult(
-            "Backend Repo",
-            Directory.Exists(repositoryOptions.Value.Backend.BaseClonePath),
-            repositoryOptions.Value.Backend.BaseClonePath));
+        checks.Add(
+            new DoctorCheckResult(
+                "Backend Repo",
+                Directory.Exists(repositoryOptions.Value.Backend.BaseClonePath),
+                repositoryOptions.Value.Backend.BaseClonePath
+            )
+        );
         checks.Add(await CheckRepoBranchAsync("Backend Branch", repositoryOptions.Value.Backend, cancellationToken));
 
-        checks.Add(new DoctorCheckResult(
-            "Frontend Repo",
-            Directory.Exists(repositoryOptions.Value.Frontend.BaseClonePath),
-            repositoryOptions.Value.Frontend.BaseClonePath));
+        checks.Add(
+            new DoctorCheckResult(
+                "Frontend Repo",
+                Directory.Exists(repositoryOptions.Value.Frontend.BaseClonePath),
+                repositoryOptions.Value.Frontend.BaseClonePath
+            )
+        );
         checks.Add(await CheckRepoBranchAsync("Frontend Branch", repositoryOptions.Value.Frontend, cancellationToken));
 
         var adoConnected = false;
         if (string.IsNullOrWhiteSpace(azureDevOpsOptions.Value.PersonalAccessToken))
         {
             var configPath = Path.Combine(StorageOptions.DefaultAppFolder, "config.jsonc");
-            checks.Add(new DoctorCheckResult(
-                "Azure DevOps",
-                false,
-                $"PersonalAccessToken is not set. Edit {configPath} to configure it."));
+            checks.Add(
+                new DoctorCheckResult(
+                    "Azure DevOps",
+                    false,
+                    $"PersonalAccessToken is not set. Edit {configPath} to configure it."
+                )
+            );
         }
         else
         {
@@ -74,9 +84,15 @@ public sealed class DoctorService(
         var deploy = deployOptions.Value;
         if (deploy.BackendPipelineId > 0)
         {
-            checks.Add(adoConnected
-                ? await CheckPipelineAsync("Backend Pipeline", deploy.BackendPipelineId, cancellationToken)
-                : new DoctorCheckResult("Backend Pipeline", false, "Skipped — Azure DevOps connectivity check did not pass."));
+            checks.Add(
+                adoConnected
+                    ? await CheckPipelineAsync("Backend Pipeline", deploy.BackendPipelineId, cancellationToken)
+                    : new DoctorCheckResult(
+                        "Backend Pipeline",
+                        false,
+                        "Skipped — Azure DevOps connectivity check did not pass."
+                    )
+            );
         }
         else
         {
@@ -85,9 +101,15 @@ public sealed class DoctorService(
 
         if (deploy.FrontendPipelineId > 0)
         {
-            checks.Add(adoConnected
-                ? await CheckPipelineAsync("Frontend Pipeline", deploy.FrontendPipelineId, cancellationToken)
-                : new DoctorCheckResult("Frontend Pipeline", false, "Skipped — Azure DevOps connectivity check did not pass."));
+            checks.Add(
+                adoConnected
+                    ? await CheckPipelineAsync("Frontend Pipeline", deploy.FrontendPipelineId, cancellationToken)
+                    : new DoctorCheckResult(
+                        "Frontend Pipeline",
+                        false,
+                        "Skipped — Azure DevOps connectivity check did not pass."
+                    )
+            );
         }
         else
         {
@@ -97,7 +119,11 @@ public sealed class DoctorService(
         return checks;
     }
 
-    private async Task<DoctorCheckResult> CheckRepoBranchAsync(string name, RepositoryProfile profile, CancellationToken cancellationToken)
+    private async Task<DoctorCheckResult> CheckRepoBranchAsync(
+        string name,
+        RepositoryProfile profile,
+        CancellationToken cancellationToken
+    )
     {
         if (!Directory.Exists(profile.BaseClonePath))
         {
@@ -108,26 +134,45 @@ public sealed class DoctorService(
             "git",
             ["-C", profile.BaseClonePath, "fetch", "origin", profile.MainBranch],
             profile.BaseClonePath,
-            Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-fetch.log"),
+            Path.Combine(
+                storageOptions.Value.ArtifactRoot,
+                $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-fetch.log"
+            ),
             environmentVariables: null,
             activityName: null,
             outputCallback: null,
-            cancellationToken);
+            cancellationToken
+        );
 
         if (!fetchResult.Success)
         {
-            return new DoctorCheckResult(name, false, $"Fetch failed for origin/{profile.MainBranch}: {fetchResult.StandardError.Trim()}");
+            return new DoctorCheckResult(
+                name,
+                false,
+                $"Fetch failed for origin/{profile.MainBranch}: {fetchResult.StandardError.Trim()}"
+            );
         }
 
         var verifyResult = await commandRunner.RunAsync(
             "git",
-            ["-C", profile.BaseClonePath, "show-ref", "--verify", "--quiet", $"refs/remotes/origin/{profile.MainBranch}"],
+            [
+                "-C",
+                profile.BaseClonePath,
+                "show-ref",
+                "--verify",
+                "--quiet",
+                $"refs/remotes/origin/{profile.MainBranch}",
+            ],
             profile.BaseClonePath,
-            Path.Combine(storageOptions.Value.ArtifactRoot, $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-branch.log"),
+            Path.Combine(
+                storageOptions.Value.ArtifactRoot,
+                $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-branch.log"
+            ),
             environmentVariables: null,
             activityName: null,
             outputCallback: null,
-            cancellationToken);
+            cancellationToken
+        );
 
         return verifyResult.Success
             ? new DoctorCheckResult(name, true, $"origin/{profile.MainBranch}")
@@ -143,7 +188,11 @@ public sealed class DoctorService(
         return new DoctorCheckResult(name, exists, resolvedPath);
     }
 
-    private async Task<DoctorCheckResult> CheckPipelineAsync(string name, int pipelineId, CancellationToken cancellationToken)
+    private async Task<DoctorCheckResult> CheckPipelineAsync(
+        string name,
+        int pipelineId,
+        CancellationToken cancellationToken
+    )
     {
         try
         {

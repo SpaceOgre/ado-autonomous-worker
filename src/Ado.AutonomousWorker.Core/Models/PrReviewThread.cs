@@ -5,9 +5,7 @@ public sealed record PrReviewThread(
     string? FilePath,
     int? LineNumber,
     string Status,
-    IReadOnlyList<PrReviewComment> Comments);
+    IReadOnlyList<PrReviewComment> Comments
+);
 
-public sealed record PrReviewComment(
-    int CommentId,
-    string Author,
-    string Content);
+public sealed record PrReviewComment(int CommentId, string Author, string Content);

@@ -12,17 +12,16 @@ using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class AgentTestCommand(
-    IAgentRunnerFactory runnerFactory,
-    IOptions<AgentOptions> agentOptions) : AsyncCommand<AgentTestCommand.Settings>
+public sealed class AgentTestCommand(IAgentRunnerFactory runnerFactory, IOptions<AgentOptions> agentOptions)
+    : AsyncCommand<AgentTestCommand.Settings>
 {
     private const string TestPrompt =
         "This is a connectivity test from the ado-worker CLI. Do not take any real actions. Reply with exactly the word: OK";
 
     private const string StructuredTestPrompt =
-        "This is a connectivity test from the ado-worker CLI. Do not take any real actions. " +
-        "Return a minimal valid JSON object that matches the provided schema: " +
-        "use \"test\" for string fields, empty arrays for array fields, and null for nullable fields.";
+        "This is a connectivity test from the ado-worker CLI. Do not take any real actions. "
+        + "Return a minimal valid JSON object that matches the provided schema: "
+        + "use \"test\" for string fields, empty arrays for array fields, and null for nullable fields.";
 
     public sealed class Settings : CommandSettings
     {
@@ -31,15 +30,19 @@ public sealed class AgentTestCommand(
         public string? Role { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         var options = agentOptions.Value;
         (string Label, AgentRole Role, AgentRoleConfig Config, string? Schema)[] candidates =
         [
-            ("Plan",   AgentRole.Plan,   options.Plan,   AgentOutputSchemas.Plan),
-            ("Code",   AgentRole.Code,   options.Code,   null),
+            ("Plan", AgentRole.Plan, options.Plan, AgentOutputSchemas.Plan),
+            ("Code", AgentRole.Code, options.Code, null),
             ("Review", AgentRole.Review, options.Review, AgentOutputSchemas.Review),
-            ("Pr",     AgentRole.Plan,   options.Pr,     AgentOutputSchemas.PullRequestDescription),
+            ("Pr", AgentRole.Plan, options.Pr, AgentOutputSchemas.PullRequestDescription),
         ];
 
         var targets = string.IsNullOrWhiteSpace(settings.Role)
@@ -50,7 +53,9 @@ public sealed class AgentTestCommand(
 
         if (targets.Length == 0)
         {
-            AnsiConsole.MarkupLine($"[red]Unknown role '{Markup.Escape(settings.Role!)}'. Valid values: plan, code, review, pr.[/]");
+            AnsiConsole.MarkupLine(
+                $"[red]Unknown role '{Markup.Escape(settings.Role!)}'. Valid values: plan, code, review, pr.[/]"
+            );
             return 1;
         }
 
@@ -64,12 +69,19 @@ public sealed class AgentTestCommand(
         return allPassed ? 0 : 1;
     }
 
-    private async Task<bool> TestRoleAsync(string label, AgentRole role, AgentRoleConfig config, string? schema, CancellationToken cancellationToken)
+    private async Task<bool> TestRoleAsync(
+        string label,
+        AgentRole role,
+        AgentRoleConfig config,
+        string? schema,
+        CancellationToken cancellationToken
+    )
     {
         var schemaLabel = schema is not null ? " [grey](structured)[/]" : string.Empty;
         AnsiConsole.Markup(
-            $"Testing [cornflowerblue]{Markup.Escape(label)}[/]{schemaLabel} {CliStyle.Provider(config.Provider)} " +
-            $"[grey]({Markup.Escape(config.Model)})[/] ... ");
+            $"Testing [cornflowerblue]{Markup.Escape(label)}[/]{schemaLabel} {CliStyle.Provider(config.Provider)} "
+                + $"[grey]({Markup.Escape(config.Model)})[/] ... "
+        );
 
         var artifactDir = Path.Combine(Path.GetTempPath(), "ado-worker-agent-test", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(artifactDir);
@@ -89,32 +101,35 @@ public sealed class AgentTestCommand(
                 artifactDir,
                 outputSchema: schema,
                 outputCallback: null,
-                cancellationToken);
+                cancellationToken
+            );
 
             sw.Stop();
             var elapsed = FormatElapsed(sw.Elapsed);
-            var preview = result.Result.Summary.Length > 60
-                ? result.Result.Summary[..60] + "…"
-                : result.Result.Summary;
+            var preview = result.Result.Summary.Length > 60 ? result.Result.Summary[..60] + "…" : result.Result.Summary;
             var metaSuffix = FormatUsageSuffix(result.Result.Usage);
 
             if (result.Result.Success)
             {
                 AnsiConsole.MarkupLine(
-                    $"[green]✓[/] [grey]{Markup.Escape(preview)}{Markup.Escape(metaSuffix)}  (elapsed {elapsed})[/]");
+                    $"[green]✓[/] [grey]{Markup.Escape(preview)}{Markup.Escape(metaSuffix)}  (elapsed {elapsed})[/]"
+                );
                 passed = true;
             }
             else
             {
                 AnsiConsole.MarkupLine(
-                    $"[red]✗[/] [grey]{Markup.Escape(preview)}{Markup.Escape(metaSuffix)}  (elapsed {elapsed})[/]");
+                    $"[red]✗[/] [grey]{Markup.Escape(preview)}{Markup.Escape(metaSuffix)}  (elapsed {elapsed})[/]"
+                );
                 AnsiConsole.MarkupLine($"  [grey]Transcript: {Markup.Escape(result.Result.TranscriptPath)}[/]");
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             sw.Stop();
-            AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(ex.Message)}[/] [grey](elapsed {FormatElapsed(sw.Elapsed)})[/]");
+            AnsiConsole.MarkupLine(
+                $"[red]✗ {Markup.Escape(ex.Message)}[/] [grey](elapsed {FormatElapsed(sw.Elapsed)})[/]"
+            );
         }
         finally
         {
@@ -124,24 +139,27 @@ public sealed class AgentTestCommand(
                 {
                     Directory.Delete(artifactDir, recursive: true);
                 }
-                catch { /* best-effort cleanup */ }
+                catch
+                { /* best-effort cleanup */
+                }
             }
         }
 
         return passed;
     }
 
-    private static AgentRoleConfig CreateTestConfig(AgentRoleConfig baseConfig) => new()
-    {
-        Provider = baseConfig.Provider,
-        Model = baseConfig.Model,
-        Effort = "low",
-        CommandPath = baseConfig.CommandPath,
-        ExtraArguments = baseConfig.ExtraArguments,
-        TimeoutSeconds = 120,
-        RequireStructuredOutput = false,
-        ToolPolicy = baseConfig.ToolPolicy,
-    };
+    private static AgentRoleConfig CreateTestConfig(AgentRoleConfig baseConfig) =>
+        new()
+        {
+            Provider = baseConfig.Provider,
+            Model = baseConfig.Model,
+            Effort = "low",
+            CommandPath = baseConfig.CommandPath,
+            ExtraArguments = baseConfig.ExtraArguments,
+            TimeoutSeconds = 120,
+            RequireStructuredOutput = false,
+            ToolPolicy = baseConfig.ToolPolicy,
+        };
 
     // Format the usage metadata suffix for display.
     // Claude: model + tokens + cost. Codex: tokens only (no model or cost available from CLI).

@@ -13,12 +13,15 @@ internal sealed class PrFixPublishingHandler(
     IRulesEngine rulesEngine,
     ProcessCommandRunner commandRunner,
     IOptions<WorkerOptions> workerOptions,
-    ILogger<PrFixPublishingHandler> logger) : PrFixHandler
+    ILogger<PrFixPublishingHandler> logger
+) : PrFixHandler
 {
     public override TaskPhase Phase => TaskPhase.Publishing;
 
     protected override async Task<PhaseTransition> ExecuteAsync(
-        PhaseContext.PrFixContext context, CancellationToken cancellationToken)
+        PhaseContext.PrFixContext context,
+        CancellationToken cancellationToken
+    )
     {
         var prTarget = context.PrTarget;
         var repoExecution = context.RepositoryExecutions.First();
@@ -27,24 +30,52 @@ internal sealed class PrFixPublishingHandler(
         var artifactDirectory = repoExecution.ArtifactDirectory;
 
         await context.Journal.AppendEventAsync(
-            context.ExecutionId, TaskPhase.Publishing,
+            context.ExecutionId,
+            TaskPhase.Publishing,
             $"Committing and pushing PR fix changes to branch '{workspace.BranchName}'.",
-            cancellationToken);
+            cancellationToken
+        );
 
-        var commitMessage = context.CommitMessage
-            ?? $"#{childTask.WorkItemId}: Address PR review comments";
+        var commitMessage = context.CommitMessage ?? $"#{childTask.WorkItemId}: Address PR review comments";
 
-        await GitPublishHelper.RunGitAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-add.log", ["add", "-A"], cancellationToken);
-        await GitPublishHelper.RunGitAllowingNoChangesAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-commit.log",
-            ["commit", "-m", commitMessage], cancellationToken);
-        var commitSha = await GitPublishHelper.GetCommitShaAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, cancellationToken);
+        await GitPublishHelper.RunGitAsync(
+            commandRunner,
+            workspace.WorkingDirectory,
+            artifactDirectory,
+            "git-add.log",
+            ["add", "-A"],
+            cancellationToken
+        );
+        await GitPublishHelper.RunGitAllowingNoChangesAsync(
+            commandRunner,
+            workspace.WorkingDirectory,
+            artifactDirectory,
+            "git-commit.log",
+            ["commit", "-m", commitMessage],
+            cancellationToken
+        );
+        var commitSha = await GitPublishHelper.GetCommitShaAsync(
+            commandRunner,
+            workspace.WorkingDirectory,
+            artifactDirectory,
+            cancellationToken
+        );
 
-        await GitPublishHelper.RunGitAsync(commandRunner, workspace.WorkingDirectory, artifactDirectory, "git-push.log",
-            ["push", "-u", "origin", workspace.BranchName], cancellationToken);
+        await GitPublishHelper.RunGitAsync(
+            commandRunner,
+            workspace.WorkingDirectory,
+            artifactDirectory,
+            "git-push.log",
+            ["push", "-u", "origin", workspace.BranchName],
+            cancellationToken
+        );
 
         logger.LogInformation(
             "Execution {ExecutionId}: pushed PR fix commit {CommitSha} to '{BranchName}'.",
-            context.ExecutionId, commitSha, workspace.BranchName);
+            context.ExecutionId,
+            commitSha,
+            workspace.BranchName
+        );
 
         if (workerOptions.Value.CleanupWorktreesAfterSuccess)
         {
@@ -53,16 +84,24 @@ internal sealed class PrFixPublishingHandler(
         }
 
         await azureDevOpsClient.RemovePullRequestLabelAsync(
-            prTarget.RepositoryName, prTarget.PullRequestId, "AI-Rework", cancellationToken);
+            prTarget.RepositoryName,
+            prTarget.PullRequestId,
+            "AI-Rework",
+            cancellationToken
+        );
 
         await azureDevOpsClient.UpdateTagsAsync(
-            context.WorkItem.WorkItemId, rulesEngine.BuildCompletionTags(context.WorkItem), cancellationToken);
+            context.WorkItem.WorkItemId,
+            rulesEngine.BuildCompletionTags(context.WorkItem),
+            cancellationToken
+        );
 
         var shortSha = commitSha.Length > 8 ? commitSha[..8] : commitSha;
         await azureDevOpsClient.AddCommentAsync(
             context.WorkItem.WorkItemId,
             $"PR review comments addressed — pushed commit `{shortSha}` to `{workspace.BranchName}` (PR !{prTarget.PullRequestId}).",
-            cancellationToken);
+            cancellationToken
+        );
 
         return PhaseTransition.Complete();
     }

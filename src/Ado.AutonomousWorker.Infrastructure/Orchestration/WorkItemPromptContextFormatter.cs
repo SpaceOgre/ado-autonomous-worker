@@ -31,16 +31,13 @@ internal static class WorkItemPromptContextFormatter
                 break;
             }
 
-            var trimmedComment = comment.Length <= remaining
-                ? comment
-                : $"{comment[..Math.Max(0, remaining - 3)].TrimEnd()}...";
+            var trimmedComment =
+                comment.Length <= remaining ? comment : $"{comment[..Math.Max(0, remaining - 3)].TrimEnd()}...";
 
             lines.Add($"- {trimmedComment}");
             usedCharacters += trimmedComment.Length;
         }
 
-        return lines.Count == 0
-            ? "-"
-            : string.Join(Environment.NewLine + Environment.NewLine, lines);
+        return lines.Count == 0 ? "-" : string.Join(Environment.NewLine + Environment.NewLine, lines);
     }
 }

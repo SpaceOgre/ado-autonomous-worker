@@ -17,7 +17,8 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         string? activityName,
         Func<ProcessOutputLine, CancellationToken, Task>? outputCallback,
         CancellationToken cancellationToken,
-        int? timeoutSeconds = null)
+        int? timeoutSeconds = null
+    )
     {
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
         var resolvedFileName = CommandPathResolver.ResolveOrOriginal(fileName);
@@ -83,8 +84,20 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         process.Start();
         var stdoutBuilder = new StringBuilder();
         var stderrBuilder = new StringBuilder();
-        var stdoutTask = PumpOutputAsync(process.StandardOutput, AgentOutputStream.Stdout, stdoutBuilder, outputCallback, effectiveCancellationToken);
-        var stderrTask = PumpOutputAsync(process.StandardError, AgentOutputStream.Stderr, stderrBuilder, outputCallback, effectiveCancellationToken);
+        var stdoutTask = PumpOutputAsync(
+            process.StandardOutput,
+            AgentOutputStream.Stdout,
+            stdoutBuilder,
+            outputCallback,
+            effectiveCancellationToken
+        );
+        var stderrTask = PumpOutputAsync(
+            process.StandardError,
+            AgentOutputStream.Stderr,
+            stderrBuilder,
+            outputCallback,
+            effectiveCancellationToken
+        );
         var waitForExitTask = process.WaitForExitAsync(effectiveCancellationToken);
         var heartbeatInterval = TimeSpan.FromSeconds(15);
 
@@ -93,7 +106,11 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             await Task.WhenAny(waitForExitTask, Task.Delay(heartbeatInterval, effectiveCancellationToken));
             if (!waitForExitTask.IsCompleted && !string.IsNullOrWhiteSpace(activityName))
             {
-                logger.LogInformation("{Activity} still running after {ElapsedSeconds}s.", activityName, (int)stopwatch.Elapsed.TotalSeconds);
+                logger.LogInformation(
+                    "{Activity} still running after {ElapsedSeconds}s.",
+                    activityName,
+                    (int)stopwatch.Elapsed.TotalSeconds
+                );
             }
         }
 
@@ -109,10 +126,16 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             }
             catch (Exception killException)
             {
-                logger.LogWarning(killException, "Failed to terminate timed out process for {Activity}.", activityName ?? fileName);
+                logger.LogWarning(
+                    killException,
+                    "Failed to terminate timed out process for {Activity}.",
+                    activityName ?? fileName
+                );
             }
 
-            throw new TimeoutException($"'{activityName ?? fileName}' exceeded the configured timeout of {timeoutSeconds} seconds.");
+            throw new TimeoutException(
+                $"'{activityName ?? fileName}' exceeded the configured timeout of {timeoutSeconds} seconds."
+            );
         }
 
         await Task.WhenAll(stdoutTask, stderrTask);
@@ -120,15 +143,15 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         var stderr = stderrBuilder.ToString();
 
         var transcript = $$"""
-        Command: {{resolvedFileName}} {{string.Join(" ", arguments)}}
-        ExitCode: {{process.ExitCode}}
+            Command: {{resolvedFileName}} {{string.Join(" ", arguments)}}
+            ExitCode: {{process.ExitCode}}
 
-        STDOUT
-        {{stdout}}
+            STDOUT
+            {{stdout}}
 
-        STDERR
-        {{stderr}}
-        """;
+            STDERR
+            {{stderr}}
+            """;
 
         await File.WriteAllTextAsync(artifactPath, transcript, cancellationToken);
         if (!string.IsNullOrWhiteSpace(activityName))
@@ -137,7 +160,8 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
                 "{Activity} finished with exit code {ExitCode} after {ElapsedSeconds}s.",
                 activityName,
                 process.ExitCode,
-                (int)stopwatch.Elapsed.TotalSeconds);
+                (int)stopwatch.Elapsed.TotalSeconds
+            );
         }
 
         return new CommandResult($"{resolvedFileName} {string.Join(" ", arguments)}", process.ExitCode, stdout, stderr);
@@ -147,7 +171,8 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         string script,
         string workingDirectory,
         string artifactPath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return RunAsync(
             "pwsh",
@@ -157,17 +182,24 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
             environmentVariables: null,
             activityName: $"PowerShell: {script}",
             outputCallback: null,
-            cancellationToken);
+            cancellationToken
+        );
     }
 
-    private static bool IsTimeoutCancellation(CancellationTokenSource? timeoutCts, CancellationToken outerCancellationToken)
+    private static bool IsTimeoutCancellation(
+        CancellationTokenSource? timeoutCts,
+        CancellationToken outerCancellationToken
+    )
     {
-        return timeoutCts is not null &&
-               timeoutCts.IsCancellationRequested &&
-               !outerCancellationToken.IsCancellationRequested;
+        return timeoutCts is not null
+            && timeoutCts.IsCancellationRequested
+            && !outerCancellationToken.IsCancellationRequested;
     }
 
-    private static (string FileName, ProcessArguments Arguments) PrepareProcessStart(string resolvedFileName, IReadOnlyList<string> arguments)
+    private static (string FileName, ProcessArguments Arguments) PrepareProcessStart(
+        string resolvedFileName,
+        IReadOnlyList<string> arguments
+    )
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -175,31 +207,34 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         }
 
         var extension = Path.GetExtension(resolvedFileName);
-        if (!string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase))
+        if (
+            !string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase)
+        )
         {
             return (resolvedFileName, new ProcessArguments(arguments));
         }
 
         var shellCommand = string.Join(
             " ",
-            new[] { QuoteForCmd(resolvedFileName) }
-                .Concat(arguments.Select(QuoteForCmd)));
+            new[] { QuoteForCmd(resolvedFileName) }.Concat(arguments.Select(QuoteForCmd))
+        );
 
         // Wrap the shellCommand in outer quotes so that cmd.exe /s /c strips exactly
         // the outermost pair and leaves the inner quoted tokens (e.g. the prompt argument)
         // intact.  Passing shellCommand as a separate ArgumentList entry would cause .NET
         // to re-escape every " as \" which cmd.exe does not handle.
         var rawArguments = $"/d /s /c \"{shellCommand}\"";
-        return (
-            Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
-            new ProcessArguments(rawArguments));
+        return (Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe", new ProcessArguments(rawArguments));
     }
 
     private readonly record struct ProcessArguments(IReadOnlyList<string>? List, string? RawArguments)
     {
-        public ProcessArguments(IReadOnlyList<string> list) : this(list, null) { }
-        public ProcessArguments(string raw) : this(null, raw) { }
+        public ProcessArguments(IReadOnlyList<string> list)
+            : this(list, null) { }
+
+        public ProcessArguments(string raw)
+            : this(null, raw) { }
     }
 
     private static string QuoteForCmd(string value)
@@ -220,7 +255,8 @@ public sealed class ProcessCommandRunner(ILogger<ProcessCommandRunner> logger)
         AgentOutputStream stream,
         StringBuilder builder,
         Func<ProcessOutputLine, CancellationToken, Task>? outputCallback,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         while (true)
         {

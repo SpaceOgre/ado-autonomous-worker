@@ -4,7 +4,11 @@ namespace Ado.AutonomousWorker.Infrastructure.Orchestration;
 
 public static class PromptTemplateLoader
 {
-    public static async Task<string> ApplyAsync(AgentRoleConfig config, string prompt, CancellationToken cancellationToken)
+    public static async Task<string> ApplyAsync(
+        AgentRoleConfig config,
+        string prompt,
+        CancellationToken cancellationToken
+    )
     {
         if (string.IsNullOrWhiteSpace(config.PromptTemplatePath) || !File.Exists(config.PromptTemplatePath))
         {

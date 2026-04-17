@@ -23,13 +23,36 @@ public sealed class CliCompletionServiceTests
     [Fact]
     public async Task GetSuggestionsAsync_SuggestsExecutionIdsForExecutionShow()
     {
-        var service = new CliCompletionService(new FakeStateStore(
-        [
-            new TaskExecutionRecord("exec-123", 1, "Title", QueueItemKind.AiWork, TaskPhase.Publishing, ExecutionStatus.Completed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
-            new TaskExecutionRecord("exec-456", 2, "Other", QueueItemKind.AiRework, TaskPhase.Reviewing, ExecutionStatus.Failed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
-        ]));
+        var service = new CliCompletionService(
+            new FakeStateStore([
+                new TaskExecutionRecord(
+                    "exec-123",
+                    1,
+                    "Title",
+                    QueueItemKind.AiWork,
+                    TaskPhase.Publishing,
+                    ExecutionStatus.Completed,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow
+                ),
+                new TaskExecutionRecord(
+                    "exec-456",
+                    2,
+                    "Other",
+                    QueueItemKind.AiRework,
+                    TaskPhase.Reviewing,
+                    ExecutionStatus.Failed,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow
+                ),
+            ])
+        );
 
-        var suggestions = await service.GetSuggestionsAsync("exec-", ["execution", "show", "--id"], CancellationToken.None);
+        var suggestions = await service.GetSuggestionsAsync(
+            "exec-",
+            ["execution", "show", "--id"],
+            CancellationToken.None
+        );
 
         Assert.Equal(["exec-123", "exec-456"], suggestions);
     }
@@ -93,58 +116,106 @@ public sealed class CliCompletionServiceTests
 
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
 
-        public Task<TaskExecutionRecord?> GetExecutionAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult(_executions.FirstOrDefault(item => item.ExecutionId == executionId));
+        public Task<TaskExecutionRecord?> GetExecutionAsync(string executionId, CancellationToken cancellationToken) =>
+            Task.FromResult(_executions.FirstOrDefault(item => item.ExecutionId == executionId));
 
-        public Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken)
-            => Task.FromResult(_executions);
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(_executions);
 
-        public Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken)
-            => Task.FromResult(_executions);
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(
+            CancellationToken cancellationToken
+        ) => Task.FromResult(_executions);
 
-        public Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
 
-        public Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UpdateStatusAsync(
+            string executionId,
+            ExecutionStatus status,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
 
-        public Task AppendEventAsync(ExecutionEventRecord executionEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task AppendEventAsync(ExecutionEventRecord executionEvent, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
 
-        public Task SaveAgentSessionAsync(string executionId, AgentSessionHandle session, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveAgentSessionAsync(
+            string executionId,
+            AgentSessionHandle session,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentSessionHandle>> GetAgentSessionsAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<AgentSessionHandle>>([]);
+        public Task<IReadOnlyList<AgentSessionHandle>> GetAgentSessionsAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<AgentSessionHandle>>([]);
 
-        public Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<ExecutionEventRecord>>([]);
+        public Task<IReadOnlyList<ExecutionEventRecord>> GetEventsAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<ExecutionEventRecord>>([]);
 
-        public Task AppendAgentOutputChunkAsync(string executionId, AgentOutputChunk chunk, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task AppendAgentOutputChunkAsync(
+            string executionId,
+            AgentOutputChunk chunk,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<AgentOutputChunk>>([]);
+        public Task<IReadOnlyList<AgentOutputChunk>> GetAgentOutputChunksAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<AgentOutputChunk>>([]);
 
-        public Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SavePlanAsync(string executionId, PlanResult planResult, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
 
-        public Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<PlanResult?>(null);
+        public Task<PlanResult?> GetPlanAsync(string executionId, CancellationToken cancellationToken) =>
+            Task.FromResult<PlanResult?>(null);
 
-        public Task SaveReviewResultAsync(string executionId, ReviewResult reviewResult, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveReviewResultAsync(
+            string executionId,
+            ReviewResult reviewResult,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
 
-        public Task<ReviewResult?> GetLatestReviewResultAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<ReviewResult?>(null);
+        public Task<ReviewResult?> GetLatestReviewResultAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<ReviewResult?>(null);
 
-        public Task RecordAgentUsageAsync(string executionId, TaskPhase phase, AgentRole role, AgentProvider provider, AgentUsage usage, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RecordAgentUsageAsync(
+            string executionId,
+            TaskPhase phase,
+            AgentRole role,
+            AgentProvider provider,
+            AgentUsage usage,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<AgentUsageRecord>>([]);
+        public Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<AgentUsageRecord>>([]);
 
-        public Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(int workItemId, CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>(
-                _executions.Where(e => e.WorkItemId == workItemId).ToList());
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(
+            int workItemId,
+            CancellationToken cancellationToken
+        ) =>
+            Task.FromResult<IReadOnlyList<TaskExecutionRecord>>(
+                _executions.Where(e => e.WorkItemId == workItemId).ToList()
+            );
 
-        public Task LinkPullRequestToExecutionAsync(string executionId, int pullRequestId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task LinkPullRequestToExecutionAsync(
+            string executionId,
+            int pullRequestId,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(string executionId, CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>([]);
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>([]);
     }
 }

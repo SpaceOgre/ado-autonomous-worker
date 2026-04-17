@@ -26,6 +26,7 @@ internal abstract record PhaseContext
     {
         /// <summary>Set by EligibilityHandler.</summary>
         public string? CurrentSprintPath { get; set; }
+
         /// <summary>Set by PlanningHandler; pre-loaded from stateStore on resume when startPhase > Planning.</summary>
         public PlanResult? Plan { get; set; }
     }
@@ -37,8 +38,10 @@ internal abstract record PhaseContext
     {
         /// <summary>Identifies the pull request being fixed.</summary>
         public required PrTarget PrTarget { get; init; }
+
         /// <summary>Set by EligibilityHandler — active review threads to address.</summary>
         public IReadOnlyList<PrReviewThread> PrThreads { get; set; } = [];
+
         /// <summary>Set by CodingHandler (from structured output); used by PublishingHandler for the commit.</summary>
         public string? CommitMessage { get; set; }
     }

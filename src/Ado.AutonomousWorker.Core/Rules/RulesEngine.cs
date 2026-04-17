@@ -13,7 +13,8 @@ public sealed partial class RulesEngine : IRulesEngine
     public IReadOnlyList<QueueItem> OrderQueue(
         IReadOnlyList<WorkItemSummary> aiWorkItems,
         IReadOnlyList<WorkItemSummary> aiReworkItems,
-        IReadOnlyList<QueueItem>? aiPrFixItems = null)
+        IReadOnlyList<QueueItem>? aiPrFixItems = null
+    )
     {
         // AiPrFix items are placed first in the rework tier — they are more specific than plain AiRework
         // for the same work item (an already-submitted PR just needs comment fixes).
@@ -26,12 +27,34 @@ public sealed partial class RulesEngine : IRulesEngine
                 aiReworkItems
                     .OrderBy(item => item.StackRank)
                     .ThenBy(item => item.Priority ?? int.MaxValue)
-                    .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiRework, item.StackRank, item.Priority, item.State, item.AssignedTo, ClassifyScopeFromTags(item.Tags))))
+                    .Select(item => new QueueItem(
+                        item.WorkItemId,
+                        item.WorkItemType,
+                        item.Title,
+                        QueueItemKind.AiRework,
+                        item.StackRank,
+                        item.Priority,
+                        item.State,
+                        item.AssignedTo,
+                        ClassifyScopeFromTags(item.Tags)
+                    ))
+            )
             .Concat(
                 aiWorkItems
                     .OrderBy(item => item.StackRank)
                     .ThenBy(item => item.Priority ?? int.MaxValue)
-                    .Select(item => new QueueItem(item.WorkItemId, item.WorkItemType, item.Title, QueueItemKind.AiWork, item.StackRank, item.Priority, item.State, item.AssignedTo, ClassifyScopeFromTags(item.Tags))))
+                    .Select(item => new QueueItem(
+                        item.WorkItemId,
+                        item.WorkItemType,
+                        item.Title,
+                        QueueItemKind.AiWork,
+                        item.StackRank,
+                        item.Priority,
+                        item.State,
+                        item.AssignedTo,
+                        ClassifyScopeFromTags(item.Tags)
+                    ))
+            )
             .GroupBy(item => item.WorkItemId)
             .Select(group => group.First())
             .ToList();
@@ -58,20 +81,21 @@ public sealed partial class RulesEngine : IRulesEngine
     public bool IsEligible(WorkItemDetails workItem, string defaultAssignee)
     {
         var tags = workItem.Tags.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var assigneeMatches = string.IsNullOrWhiteSpace(workItem.AssignedTo) ||
-                              string.Equals(workItem.AssignedTo, defaultAssignee, StringComparison.OrdinalIgnoreCase);
+        var assigneeMatches =
+            string.IsNullOrWhiteSpace(workItem.AssignedTo)
+            || string.Equals(workItem.AssignedTo, defaultAssignee, StringComparison.OrdinalIgnoreCase);
 
         return workItem.Kind switch
         {
-            QueueItemKind.AiWork => tags.Contains("AI-Work") &&
-                                    !tags.Contains("AI-Failed") &&
-                                    string.Equals(workItem.State, "New", StringComparison.OrdinalIgnoreCase) &&
-                                    assigneeMatches,
-            QueueItemKind.AiRework => tags.Contains("AI-Rework") &&
-                                      !tags.Contains("AI-Failed") &&
-                                      !string.Equals(workItem.State, "Closed", StringComparison.OrdinalIgnoreCase) &&
-                                      !string.Equals(workItem.State, "Removed", StringComparison.OrdinalIgnoreCase) &&
-                                      string.Equals(workItem.AssignedTo, defaultAssignee, StringComparison.OrdinalIgnoreCase),
+            QueueItemKind.AiWork => tags.Contains("AI-Work")
+                && !tags.Contains("AI-Failed")
+                && string.Equals(workItem.State, "New", StringComparison.OrdinalIgnoreCase)
+                && assigneeMatches,
+            QueueItemKind.AiRework => tags.Contains("AI-Rework")
+                && !tags.Contains("AI-Failed")
+                && !string.Equals(workItem.State, "Closed", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(workItem.State, "Removed", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(workItem.AssignedTo, defaultAssignee, StringComparison.OrdinalIgnoreCase),
             _ => false,
         };
     }
@@ -113,18 +137,18 @@ public sealed partial class RulesEngine : IRulesEngine
 
     public bool ExceedsAcceptanceCriteriaLimit(WorkItemDetails workItem, int maxLines, out int lineCount)
     {
-        lineCount = AcceptanceCriteriaLineRegex()
-            .Matches(workItem.AcceptanceCriteria ?? string.Empty)
-            .Count;
+        lineCount = AcceptanceCriteriaLineRegex().Matches(workItem.AcceptanceCriteria ?? string.Empty).Count;
 
         return lineCount > maxLines;
     }
 
     public IReadOnlyCollection<string> BuildCompletionTags(WorkItemDetails workItem)
     {
-        var tags = workItem.Tags
-            .Where(tag => !string.Equals(tag, "AI-Work", StringComparison.OrdinalIgnoreCase) &&
-                          !string.Equals(tag, "AI-Rework", StringComparison.OrdinalIgnoreCase))
+        var tags = workItem
+            .Tags.Where(tag =>
+                !string.Equals(tag, "AI-Work", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(tag, "AI-Rework", StringComparison.OrdinalIgnoreCase)
+            )
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         tags.Add("AI-Done");

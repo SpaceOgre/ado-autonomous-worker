@@ -9,16 +9,17 @@ using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class DeployCommand(
-    DeployService deployService,
-    IOptions<DeployOptions> deployOptions) : AsyncCommand<DeployCommand.Settings>
+public sealed class DeployCommand(DeployService deployService, IOptions<DeployOptions> deployOptions)
+    : AsyncCommand<DeployCommand.Settings>
 {
     private readonly DeployService _deployService = deployService;
     private readonly DeployOptions _options = deployOptions.Value;
 
     public sealed class Settings : CommandSettings
     {
-        [Description("Preview the work item changes that would be made without actually running pipelines or updating anything.")]
+        [Description(
+            "Preview the work item changes that would be made without actually running pipelines or updating anything."
+        )]
         [CommandOption("--dry-run")]
         public bool DryRun { get; init; }
 
@@ -26,16 +27,24 @@ public sealed class DeployCommand(
         [CommandOption("--tag <TAG>")]
         public string? Tag { get; init; }
 
-        [Description("Only trigger the backend pipeline. Cannot be combined with --frontend unless both are specified (which is the default).")]
+        [Description(
+            "Only trigger the backend pipeline. Cannot be combined with --frontend unless both are specified (which is the default)."
+        )]
         [CommandOption("--backend")]
         public bool BackendOnly { get; init; }
 
-        [Description("Only trigger the frontend pipeline. Cannot be combined with --backend unless both are specified (which is the default).")]
+        [Description(
+            "Only trigger the frontend pipeline. Cannot be combined with --backend unless both are specified (which is the default)."
+        )]
         [CommandOption("--frontend")]
         public bool FrontendOnly { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         RunPreambleDisplay.ShowSplash("Deploy");
 
@@ -60,11 +69,10 @@ public sealed class DeployCommand(
         (IReadOnlyList<DeployWorkItemChange> taskChanges, IReadOnlyList<DeployWorkItemChange> storyChanges) changes;
         try
         {
-            changes = await AnsiConsole.Status()
+            changes = await AnsiConsole
+                .Status()
                 .Spinner(Spinner.Known.Dots)
-                .StartAsync(
-                    "Querying Azure DevOps…",
-                    _ => _deployService.ComputeChangesAsync(cancellationToken));
+                .StartAsync("Querying Azure DevOps…", _ => _deployService.ComputeChangesAsync(cancellationToken));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -81,11 +89,18 @@ public sealed class DeployCommand(
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[yellow]Dry run complete.[/] [grey]{changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories would be updated.[/]");
+        AnsiConsole.MarkupLine(
+            $"[yellow]Dry run complete.[/] [grey]{changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories would be updated.[/]"
+        );
         return 0;
     }
 
-    private async Task<int> RunDeployAsync(string? tag, bool triggerBackend, bool triggerFrontend, CancellationToken cancellationToken)
+    private async Task<int> RunDeployAsync(
+        string? tag,
+        bool triggerBackend,
+        bool triggerFrontend,
+        CancellationToken cancellationToken
+    )
     {
         if (!ValidateConfig(triggerBackend, triggerFrontend))
             return 1;
@@ -100,8 +115,7 @@ public sealed class DeployCommand(
         };
 
         AnsiConsole.Write(CliStyle.SectionRule("Pipeline Configuration", "deepskyblue1"));
-        var configTable = new Table().Border(TableBorder.Rounded)
-            .AddColumns("Setting", "Value");
+        var configTable = new Table().Border(TableBorder.Rounded).AddColumns("Setting", "Value");
         if (triggerBackend)
             configTable.AddRow("Backend Pipeline ID", _options.BackendPipelineId.ToString());
         if (triggerFrontend)
@@ -113,8 +127,10 @@ public sealed class DeployCommand(
         AnsiConsole.Write(configTable);
         AnsiConsole.WriteLine();
 
-        if (AnsiConsole.Profile.Capabilities.Interactive &&
-            !AnsiConsole.Confirm($"Trigger {pipelineLabel} and wait for completion?"))
+        if (
+            AnsiConsole.Profile.Capabilities.Interactive
+            && !AnsiConsole.Confirm($"Trigger {pipelineLabel} and wait for completion?")
+        )
         {
             return 0;
         }
@@ -127,10 +143,15 @@ public sealed class DeployCommand(
 
         try
         {
-            var progress = new Progress<string>(msg =>
-                AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
+            var progress = new Progress<string>(msg => AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
 
-            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(progress, cancellationToken, tag, triggerBackend, triggerFrontend);
+            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(
+                progress,
+                cancellationToken,
+                tag,
+                triggerBackend,
+                triggerFrontend
+            );
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -142,12 +163,15 @@ public sealed class DeployCommand(
 
         // ── Step 2: Wait for pipelines ────────────────────────────────────
         AnsiConsole.Write(CliStyle.SectionRule("Waiting for Pipelines", "deepskyblue1"));
-        AnsiConsole.MarkupLine($"[grey]Polling every {_options.PollIntervalSeconds}s (timeout {_options.TimeoutMinutes}m)…[/]");
+        AnsiConsole.MarkupLine(
+            $"[grey]Polling every {_options.PollIntervalSeconds}s (timeout {_options.TimeoutMinutes}m)…[/]"
+        );
         AnsiConsole.WriteLine();
 
         try
         {
-            await AnsiConsole.Status()
+            await AnsiConsole
+                .Status()
                 .Spinner(Spinner.Known.Dots)
                 .StartAsync(
                     "Pipelines running…",
@@ -158,8 +182,14 @@ public sealed class DeployCommand(
                             ctx.Status(Markup.Escape(msg));
                             AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}");
                         });
-                        await _deployService.WaitForPipelinesAsync(backendRunId, frontendRunId, progress, cancellationToken);
-                    });
+                        await _deployService.WaitForPipelinesAsync(
+                            backendRunId,
+                            frontendRunId,
+                            progress,
+                            cancellationToken
+                        );
+                    }
+                );
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -168,7 +198,9 @@ public sealed class DeployCommand(
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[green]✓ {Markup.Escape(char.ToUpper(pipelineLabel[0]) + pipelineLabel[1..])} completed successfully.[/]");
+        AnsiConsole.MarkupLine(
+            $"[green]✓ {Markup.Escape(char.ToUpper(pipelineLabel[0]) + pipelineLabel[1..])} completed successfully.[/]"
+        );
         AnsiConsole.WriteLine();
 
         // ── Step 3: Compute work item changes ─────────────────────────────
@@ -177,11 +209,10 @@ public sealed class DeployCommand(
         (IReadOnlyList<DeployWorkItemChange> taskChanges, IReadOnlyList<DeployWorkItemChange> storyChanges) changes;
         try
         {
-            changes = await AnsiConsole.Status()
+            changes = await AnsiConsole
+                .Status()
                 .Spinner(Spinner.Known.Dots)
-                .StartAsync(
-                    "Querying Azure DevOps…",
-                    _ => _deployService.ComputeChangesAsync(cancellationToken));
+                .StartAsync("Querying Azure DevOps…", _ => _deployService.ComputeChangesAsync(cancellationToken));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -207,10 +238,14 @@ public sealed class DeployCommand(
 
         try
         {
-            var progress = new Progress<string>(msg =>
-                AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
+            var progress = new Progress<string>(msg => AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
 
-            await _deployService.ApplyChangesAsync(changes.taskChanges, changes.storyChanges, progress, cancellationToken);
+            await _deployService.ApplyChangesAsync(
+                changes.taskChanges,
+                changes.storyChanges,
+                progress,
+                cancellationToken
+            );
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -219,7 +254,9 @@ public sealed class DeployCommand(
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[green]✓ Deploy complete.[/] Updated {changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories to [deepskyblue1]Ready for test[/].");
+        AnsiConsole.MarkupLine(
+            $"[green]✓ Deploy complete.[/] Updated {changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories to [deepskyblue1]Ready for test[/]."
+        );
         return 0;
     }
 
@@ -234,8 +271,7 @@ public sealed class DeployCommand(
             return;
         }
 
-        var table = new Table().Border(TableBorder.Rounded)
-            .AddColumns("ID", "Type", "Title", "State", "→", "Assignee");
+        var table = new Table().Border(TableBorder.Rounded).AddColumns("ID", "Type", "Title", "State", "→", "Assignee");
 
         foreach (var change in changes)
         {
@@ -245,7 +281,8 @@ public sealed class DeployCommand(
                 Markup.Escape(change.Title.Length > 60 ? change.Title[..60] + "…" : change.Title),
                 CliStyle.WorkItemState(change.CurrentState),
                 CliStyle.WorkItemState(change.NewState),
-                Markup.Escape(change.NewAssignee));
+                Markup.Escape(change.NewAssignee)
+            );
         }
 
         AnsiConsole.Write(table);
@@ -267,7 +304,9 @@ public sealed class DeployCommand(
 
         foreach (var error in errors)
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
-        AnsiConsole.MarkupLine("[red]Deploy configuration is incomplete. Check your appsettings.local.json or config.jsonc.[/]");
+        AnsiConsole.MarkupLine(
+            "[red]Deploy configuration is incomplete. Check your appsettings.local.json or config.jsonc.[/]"
+        );
         return false;
     }
 }

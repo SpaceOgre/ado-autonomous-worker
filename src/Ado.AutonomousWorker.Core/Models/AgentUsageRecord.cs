@@ -14,4 +14,5 @@ public sealed record AgentUsageRecord(
     int OutputTokens,
     int CachedInputTokens,
     decimal? CostUsd,
-    DateTimeOffset Timestamp);
+    DateTimeOffset Timestamp
+);

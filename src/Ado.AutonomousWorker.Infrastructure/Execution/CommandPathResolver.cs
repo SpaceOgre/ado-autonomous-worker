@@ -24,8 +24,10 @@ internal static class CommandPathResolver
             return ResolveRooted(commandPath);
         }
 
-        var searchFolders = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var searchFolders = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(
+            Path.PathSeparator,
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        );
 
         var candidateNames = GetCandidateNames(commandPath);
         foreach (var folder in searchFolders)

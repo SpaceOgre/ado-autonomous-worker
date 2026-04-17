@@ -19,7 +19,8 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
     // ISO 8601 strings sort lexicographically in the same order as DateTimeOffset chronologically.
     private static readonly ValueConverter<DateTimeOffset, string> DateTimeOffsetConverter = new(
         v => v.ToString("O"),
-        v => DateTimeOffset.Parse(v));
+        v => DateTimeOffset.Parse(v)
+    );
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

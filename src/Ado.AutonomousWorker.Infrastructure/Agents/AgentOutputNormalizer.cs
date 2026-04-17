@@ -85,10 +85,7 @@ public static class AgentOutputNormalizer
             }
         }
 
-        return messages
-            .Select(m => m.Trim())
-            .Where(m => !string.IsNullOrWhiteSpace(m))
-            .ToArray();
+        return messages.Select(m => m.Trim()).Where(m => !string.IsNullOrWhiteSpace(m)).ToArray();
     }
 
     public static IReadOnlyList<string> NormalizeCodexLine(ProcessOutputLine line)
@@ -118,16 +115,13 @@ public static class AgentOutputNormalizer
                 return [];
             }
 
-            var payload = root.TryGetProperty("payload", out var payloadElement)
-                ? payloadElement
-                : root;
+            var payload = root.TryGetProperty("payload", out var payloadElement) ? payloadElement : root;
 
             var messages = new List<string>();
             if (IsCommandType(type))
             {
-                var command = TryGetString(payload, "command") ??
-                              TryGetString(payload, "cmd") ??
-                              TryGetString(payload, "title");
+                var command =
+                    TryGetString(payload, "command") ?? TryGetString(payload, "cmd") ?? TryGetString(payload, "title");
 
                 if (!string.IsNullOrWhiteSpace(command))
                 {
@@ -199,8 +193,7 @@ public static class AgentOutputNormalizer
 
     private static bool LooksLikeJson(string value)
     {
-        return (value.StartsWith('{') && value.EndsWith('}')) ||
-               (value.StartsWith('[') && value.EndsWith(']'));
+        return (value.StartsWith('{') && value.EndsWith('}')) || (value.StartsWith('[') && value.EndsWith(']'));
     }
 
     private static IReadOnlyList<string> NormalizeClaudeStructuredJson(string content)
@@ -249,13 +242,14 @@ public static class AgentOutputNormalizer
             return false;
         }
 
-        return type is "session_meta" or
-            "token_count" or
-            "usage" or
-            "turn_started" or
-            "turn_completed" or
-            "trace" or
-            "debug";
+        return type
+            is "session_meta"
+                or "token_count"
+                or "usage"
+                or "turn_started"
+                or "turn_completed"
+                or "trace"
+                or "debug";
     }
 
     private static bool IsCommandType(string? type)
@@ -265,8 +259,8 @@ public static class AgentOutputNormalizer
             return false;
         }
 
-        return type.Contains("command", StringComparison.OrdinalIgnoreCase) ||
-               type.Contains("tool", StringComparison.OrdinalIgnoreCase);
+        return type.Contains("command", StringComparison.OrdinalIgnoreCase)
+            || type.Contains("tool", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? TryGetString(JsonElement element, string propertyName)

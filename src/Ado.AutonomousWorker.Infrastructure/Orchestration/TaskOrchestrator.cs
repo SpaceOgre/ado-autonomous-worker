@@ -17,7 +17,8 @@ internal sealed class TaskOrchestrator(
     TaskStateMachine stateMachine,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
-    ILogger<TaskOrchestrator> logger) : ITaskOrchestrator
+    ILogger<TaskOrchestrator> logger
+) : ITaskOrchestrator
 {
     public Task<string> RunTaskAsync(QueueItem item, CancellationToken cancellationToken)
     {
@@ -27,14 +28,16 @@ internal sealed class TaskOrchestrator(
         return RunTaskAsync(item.WorkItemId, prTarget, cancellationToken);
     }
 
-    public Task<string> RunTaskAsync(int workItemId, CancellationToken cancellationToken)
-        => RunTaskAsync(workItemId, prTarget: null, cancellationToken);
+    public Task<string> RunTaskAsync(int workItemId, CancellationToken cancellationToken) =>
+        RunTaskAsync(workItemId, prTarget: null, cancellationToken);
 
     public async Task<string> RunPrFixAsync(int pullRequestId, CancellationToken cancellationToken)
     {
-        var item = await azureDevOpsClient.GetPrFixItemAsync(pullRequestId, cancellationToken)
+        var item =
+            await azureDevOpsClient.GetPrFixItemAsync(pullRequestId, cancellationToken)
             ?? throw new InvalidOperationException(
-                $"PR #{pullRequestId} does not have the required AI-Rework label or has no linked work items.");
+                $"PR #{pullRequestId} does not have the required AI-Rework label or has no linked work items."
+            );
         return await RunTaskAsync(item, cancellationToken);
     }
 
@@ -54,7 +57,8 @@ internal sealed class TaskOrchestrator(
             ExecutionStatus.Running,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
-            PullRequestId: prTarget?.PullRequestId);
+            PullRequestId: prTarget?.PullRequestId
+        );
 
         await stateStore.SaveExecutionAsync(record, cancellationToken);
         if (prTarget is not null)
@@ -63,10 +67,15 @@ internal sealed class TaskOrchestrator(
             executionId,
             TaskPhase.Queued,
             $"Created execution for work item #{workItem.WorkItemId}.",
-            cancellationToken);
+            cancellationToken
+        );
         logger.LogInformation(
             "Execution {ExecutionId} created for #{WorkItemId} '{Title}' ({Kind}).",
-            executionId, workItem.WorkItemId, workItem.Title, kind);
+            executionId,
+            workItem.WorkItemId,
+            workItem.Title,
+            kind
+        );
 
         PhaseContext context = prTarget is not null
             ? new PhaseContext.PrFixContext
@@ -93,7 +102,8 @@ internal sealed class TaskOrchestrator(
     {
         await PrepareRuntimeAsync(cancellationToken);
 
-        var execution = await stateStore.GetExecutionAsync(executionId, cancellationToken)
+        var execution =
+            await stateStore.GetExecutionAsync(executionId, cancellationToken)
             ?? throw new InvalidOperationException($"Execution '{executionId}' was not found.");
 
         var workItem = await azureDevOpsClient.GetWorkItemAsync(execution.WorkItemId, cancellationToken);
@@ -104,21 +114,28 @@ internal sealed class TaskOrchestrator(
             executionId,
             execution.Phase,
             $"Resuming execution from phase {startPhase}.",
-            cancellationToken);
+            cancellationToken
+        );
         logger.LogInformation(
             "Resuming execution {ExecutionId} for #{WorkItemId} at phase {Phase}.",
-            executionId, execution.WorkItemId, startPhase);
+            executionId,
+            execution.WorkItemId,
+            startPhase
+        );
 
         PhaseContext context;
 
         if (execution.Kind == QueueItemKind.AiPrFix && execution.PullRequestId is not null)
         {
             var location = await azureDevOpsClient.GetPullRequestLocationAsync(
-                execution.PullRequestId.Value, cancellationToken);
+                execution.PullRequestId.Value,
+                cancellationToken
+            );
             var prTarget = location is not null
                 ? new PrTarget(execution.PullRequestId.Value, location.Value.RepositoryName, location.Value.BranchName)
                 : throw new InvalidOperationException(
-                    $"Cannot resume AiPrFix execution '{executionId}': PR #{execution.PullRequestId} was not found.");
+                    $"Cannot resume AiPrFix execution '{executionId}': PR #{execution.PullRequestId} was not found."
+                );
 
             var prFixContext = new PhaseContext.PrFixContext
             {
@@ -133,8 +150,10 @@ internal sealed class TaskOrchestrator(
             // that phase is skipped, so we must rebuild it here.
             if (startPhase >= TaskPhase.Validating)
             {
-                prFixContext.RepositoryExecutions = [await RebuildPrFixRepositoryExecutionAsync(
-                    workItem, prTarget, executionId, cancellationToken)];
+                prFixContext.RepositoryExecutions =
+                [
+                    await RebuildPrFixRepositoryExecutionAsync(workItem, prTarget, executionId, cancellationToken),
+                ];
             }
 
             context = prFixContext;
@@ -151,14 +170,19 @@ internal sealed class TaskOrchestrator(
 
             if (startPhase > TaskPhase.Planning)
             {
-                wiContext.Plan = await stateStore.GetPlanAsync(executionId, cancellationToken)
+                wiContext.Plan =
+                    await stateStore.GetPlanAsync(executionId, cancellationToken)
                     ?? throw new InvalidOperationException("Cannot resume without a persisted plan.");
             }
 
             if (startPhase > TaskPhase.Coding && wiContext.Plan is not null)
             {
                 wiContext.RepositoryExecutions = await RebuildRepositoryExecutionsAsync(
-                    workItem, wiContext.Plan, executionId, cancellationToken);
+                    workItem,
+                    wiContext.Plan,
+                    executionId,
+                    cancellationToken
+                );
             }
 
             context = wiContext;
@@ -178,7 +202,11 @@ internal sealed class TaskOrchestrator(
         await RunWithMachineAsync(context, startPhase, cancellationToken);
     }
 
-    private async Task RunWithMachineAsync(PhaseContext context, TaskPhase startPhase, CancellationToken cancellationToken)
+    private async Task RunWithMachineAsync(
+        PhaseContext context,
+        TaskPhase startPhase,
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -192,9 +220,12 @@ internal sealed class TaskOrchestrator(
         {
             // Status is already set to Failed by the machine's internal catch.
             // Handle ADO side effects here.
-            logger.LogError(ex,
+            logger.LogError(
+                ex,
                 "Execution {ExecutionId} failed for work item {WorkItemId}",
-                context.ExecutionId, context.WorkItem.WorkItemId);
+                context.ExecutionId,
+                context.WorkItem.WorkItemId
+            );
 
             // Write the full stack trace to a file so it can be inspected after the fact,
             // since the terminal UI may obscure console log output.
@@ -202,11 +233,14 @@ internal sealed class TaskOrchestrator(
             {
                 var exceptionLogPath = Path.Combine(
                     storageOptions.Value.GetExecutionArtifactRoot(context.WorkItem.WorkItemId, context.ExecutionId),
-                    "exception.log");
+                    "exception.log"
+                );
                 Directory.CreateDirectory(Path.GetDirectoryName(exceptionLogPath)!);
                 await File.WriteAllTextAsync(exceptionLogPath, ex.ToString(), CancellationToken.None);
             }
-            catch { /* best-effort */ }
+            catch
+            { /* best-effort */
+            }
 
             // For AiPrFix failures, do not modify work item tags — leave the "AI-Rework" PR label
             // intact so the developer knows the fix still needs attention.
@@ -215,13 +249,15 @@ internal sealed class TaskOrchestrator(
                 await azureDevOpsClient.UpdateTagsAsync(
                     context.WorkItem.WorkItemId,
                     rulesEngine.BuildFailureTags(context.WorkItem),
-                    cancellationToken);
+                    cancellationToken
+                );
             }
 
             await azureDevOpsClient.AddCommentAsync(
                 context.WorkItem.WorkItemId,
                 WorkItemCommentFormatter.BuildFailureComment(context.ExecutionId, ex),
-                cancellationToken);
+                cancellationToken
+            );
             throw;
         }
     }
@@ -230,7 +266,8 @@ internal sealed class TaskOrchestrator(
         WorkItemDetails workItem,
         PlanResult plan,
         string executionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var slug = RepositoryWorkflowHelpers.ComputeSlug(workItem.Title);
         var executionArtifactRoot = storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId);
@@ -238,33 +275,45 @@ internal sealed class TaskOrchestrator(
 
         foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
         {
-            var childTask = workItem.WorkItemType == WorkItemType.Bug
-                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
-                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                    ?? throw new InvalidOperationException(
-                        $"Cannot resume: no child task found for {repoKind} on work item #{workItem.WorkItemId}.");
+            var childTask =
+                workItem.WorkItemType == WorkItemType.Bug
+                    ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+                    : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                        ?? throw new InvalidOperationException(
+                            $"Cannot resume: no child task found for {repoKind} on work item #{workItem.WorkItemId}."
+                        );
 
             var profile = repoKind switch
             {
                 RepoKind.Backend => repositoryOptions.Value.Backend,
                 RepoKind.Frontend => repositoryOptions.Value.Frontend,
-                _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'.")
+                _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
             };
 
             var workspace = await workspaceManager.CreateRepoExecutionAsync(
-                workItem.WorkItemId, childTask.WorkItemId, repoKind, slug,
-                preserveExistingWorkspace: true, cancellationToken);
+                workItem.WorkItemId,
+                childTask.WorkItemId,
+                repoKind,
+                slug,
+                preserveExistingWorkspace: true,
+                cancellationToken
+            );
 
-            result.Add(new RepositoryExecution(
-                childTask,
-                profile,
-                workspace,
-                Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant())));
+            result.Add(
+                new RepositoryExecution(
+                    childTask,
+                    profile,
+                    workspace,
+                    Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant())
+                )
+            );
         }
 
         logger.LogInformation(
             "Execution {ExecutionId}: rebuilt {Count} repository execution(s) for resume.",
-            executionId, result.Count);
+            executionId,
+            result.Count
+        );
 
         return result;
     }
@@ -273,27 +322,37 @@ internal sealed class TaskOrchestrator(
         WorkItemDetails workItem,
         PrTarget prTarget,
         string executionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var repoKind = repositoryOptions.Value.GetRepoKindFromRepository(prTarget.RepositoryName);
         var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
 
-        var childTask = workItem.WorkItemType == WorkItemType.Bug
-            ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
-            : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
+        var childTask =
+            workItem.WorkItemType == WorkItemType.Bug
+                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                    ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
 
         var workspace = await workspaceManager.CheckoutPrBranchAsync(
-            workItem.WorkItemId, childTask.WorkItemId, repoKind,
-            prTarget.BranchName, preserveExistingWorkspace: true, cancellationToken);
+            workItem.WorkItemId,
+            childTask.WorkItemId,
+            repoKind,
+            prTarget.BranchName,
+            preserveExistingWorkspace: true,
+            cancellationToken
+        );
 
         var artifactDirectory = Path.Combine(
             storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId),
-            repoKind.ToString().ToLowerInvariant());
+            repoKind.ToString().ToLowerInvariant()
+        );
 
         logger.LogInformation(
             "Execution {ExecutionId}: rebuilt PR fix repository execution for resume at worktree '{WorktreePath}'.",
-            executionId, workspace.WorkingDirectory);
+            executionId,
+            workspace.WorkingDirectory
+        );
 
         return new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory);
     }

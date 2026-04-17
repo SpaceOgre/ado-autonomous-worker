@@ -9,7 +9,8 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 public sealed class ResumeTaskCommand(
     ITaskOrchestrator taskOrchestrator,
     IStateStore stateStore,
-    ExecutionLiveDisplay liveDisplay) : AsyncCommand<ResumeTaskCommand.Settings>
+    ExecutionLiveDisplay liveDisplay
+) : AsyncCommand<ResumeTaskCommand.Settings>
 {
     public sealed class Settings : CommandSettings
     {
@@ -22,12 +23,18 @@ public sealed class ResumeTaskCommand(
         public bool Last { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         var hasExecutionId = !string.IsNullOrWhiteSpace(settings.ExecutionId);
         if (settings.Last == hasExecutionId)
         {
-            AnsiConsole.MarkupLine("[red]Specify exactly one of:[/] [yellow]--execution-id <execution-id>[/] or [yellow]--last[/]");
+            AnsiConsole.MarkupLine(
+                "[red]Specify exactly one of:[/] [yellow]--execution-id <execution-id>[/] or [yellow]--last[/]"
+            );
             return 1;
         }
 
@@ -46,7 +53,8 @@ public sealed class ResumeTaskCommand(
         await liveDisplay.RunForExecutionAsync(
             executionId!,
             token => taskOrchestrator.ResumeTaskAsync(executionId!, token),
-            cancellationToken);
+            cancellationToken
+        );
 
         AnsiConsole.MarkupLine($"[green]Execution finished.[/] Id: {executionId}");
         return 0;

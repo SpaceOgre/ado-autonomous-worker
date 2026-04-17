@@ -13,47 +13,71 @@ internal sealed class ApplyingReviewHandler(
     ExecutionJournal executionJournal,
     IOptions<AgentOptions> agentOptions,
     IOptions<StorageOptions> storageOptions,
-    ILogger<ApplyingReviewHandler> logger) : WorkItemHandler
+    ILogger<ApplyingReviewHandler> logger
+) : WorkItemHandler
 {
     public override TaskPhase Phase => TaskPhase.ApplyingReview;
 
-    protected override async Task<PhaseTransition> ExecuteAsync(PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(
+        PhaseContext.WorkItemContext context,
+        CancellationToken cancellationToken
+    )
     {
-        var codeSession = context.CodeSession
+        var codeSession =
+            context.CodeSession
             ?? throw new InvalidOperationException("CodeSession must be set before entering ApplyingReview phase.");
 
         // On resume, AcceptedFindings may be null — re-derive from the persisted review result.
-        var acceptedFindings = context.AcceptedFindings
+        var acceptedFindings =
+            context.AcceptedFindings
             ?? context.LatestReview?.Findings.Where(ReviewFindingFilter.ShouldAccept).ToArray()
             ?? [];
 
         var repositoryExecutions = context.RepositoryExecutions;
         var scopeLabel = RepositoryWorkflowHelpers.FormatRepoKinds(repositoryExecutions.Select(r => r.RepoKind));
         var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory(
-            repositoryExecutions.Select(r => r.Workspace.WorkingDirectory));
+            repositoryExecutions.Select(r => r.Workspace.WorkingDirectory)
+        );
         var implementationArtifactRoot = Path.Combine(
-            storageOptions.Value.GetExecutionArtifactRoot(context.WorkItem.WorkItemId, context.ExecutionId), "implementation");
+            storageOptions.Value.GetExecutionArtifactRoot(context.WorkItem.WorkItemId, context.ExecutionId),
+            "implementation"
+        );
 
         await context.Journal.AppendEventAsync(
-            context.ExecutionId, TaskPhase.ApplyingReview,
+            context.ExecutionId,
+            TaskPhase.ApplyingReview,
             $"Resuming coding agent to apply {acceptedFindings.Count} accepted findings for {scopeLabel}.",
-            cancellationToken);
+            cancellationToken
+        );
 
         logger.LogInformation(
             "Execution {ExecutionId}: applying {Count} review findings for {ScopeLabel}.",
-            context.ExecutionId, acceptedFindings.Count, scopeLabel);
+            context.ExecutionId,
+            acceptedFindings.Count,
+            scopeLabel
+        );
 
         var config = agentOptions.Value.Code;
-        var resumeResult = await agentRunnerFactory.GetRunner(config.Provider).ResumeSessionAsync(
-            codeSession,
-            config,
-            BuildReviewResumePrompt(acceptedFindings),
-            Path.Combine(implementationArtifactRoot, "resume"),
-            executionJournal.CreateOutputObserver(context.ExecutionId),
-            cancellationToken);
+        var resumeResult = await agentRunnerFactory
+            .GetRunner(config.Provider)
+            .ResumeSessionAsync(
+                codeSession,
+                config,
+                BuildReviewResumePrompt(acceptedFindings),
+                Path.Combine(implementationArtifactRoot, "resume"),
+                executionJournal.CreateOutputObserver(context.ExecutionId),
+                cancellationToken
+            );
 
         if (resumeResult.Usage is not null)
-            await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.ApplyingReview, AgentRole.Code, config.Provider, resumeResult.Usage, cancellationToken);
+            await stateStore.RecordAgentUsageAsync(
+                context.ExecutionId,
+                TaskPhase.ApplyingReview,
+                AgentRole.Code,
+                config.Provider,
+                resumeResult.Usage,
+                cancellationToken
+            );
 
         return PhaseTransition.To(TaskPhase.Validating);
     }
@@ -69,17 +93,18 @@ internal sealed class ApplyingReviewHandler(
                     ? string.Empty
                     : $"{Environment.NewLine}  Fix: {f.SuggestedFix}";
                 return $"- [{f.Severity}{categoryLabel}] {f.Title}: {f.Rationale}{fix}";
-            }));
+            })
+        );
 
         return $$"""
-        Apply the accepted review findings and leave the repository ready for validation.
+            Apply the accepted review findings and leave the repository ready for validation.
 
-        Accepted findings:
-        {{formattedFindings}}
+            Accepted findings:
+            {{formattedFindings}}
 
-        Requirements:
-        - Address each finding using the suggested fix where provided.
-        - Do not create commits, push branches, open pull requests, link work items, or publish changes.
-        """;
+            Requirements:
+            - Address each finding using the suggested fix where provided.
+            - Do not create commits, push branches, open pull requests, link work items, or publish changes.
+            """;
     }
 }

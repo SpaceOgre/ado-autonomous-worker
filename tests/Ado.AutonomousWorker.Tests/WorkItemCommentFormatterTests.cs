@@ -11,27 +11,31 @@ public sealed class WorkItemCommentFormatterTests
     {
         var formatterType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.WorkItemCommentFormatter",
-            throwOnError: true);
+            throwOnError: true
+        );
         var validationFailureType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.ValidationFailureException",
-            throwOnError: true);
+            throwOnError: true
+        );
 
         Assert.NotNull(formatterType);
         Assert.NotNull(validationFailureType);
 
-        var exception = (Exception?)Activator.CreateInstance(
-            validationFailureType!,
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
-            binder: null,
-            args:
-            [
-                RepoKind.Backend,
-                "dotnet test tests/Backend.Tests.csproj --no-build",
-                @"C:\logs\backend-validation.log",
-                string.Empty,
-                "Expected 200 OK but got 500.",
-            ],
-            culture: null);
+        var exception = (Exception?)
+            Activator.CreateInstance(
+                validationFailureType!,
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
+                binder: null,
+                args:
+                [
+                    RepoKind.Backend,
+                    "dotnet test tests/Backend.Tests.csproj --no-build",
+                    @"C:\logs\backend-validation.log",
+                    string.Empty,
+                    "Expected 200 OK but got 500.",
+                ],
+                culture: null
+            );
 
         Assert.NotNull(exception);
 

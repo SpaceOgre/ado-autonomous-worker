@@ -15,7 +15,11 @@ public sealed class ResetCommand(IOptions<StorageOptions> storageOptions) : Asyn
         public bool Force { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         var dbPath = storageOptions.Value.DatabasePath;
 
@@ -28,7 +32,8 @@ public sealed class ResetCommand(IOptions<StorageOptions> storageOptions) : Asyn
         if (!settings.Force)
         {
             var confirmed = AnsiConsole.Confirm(
-                $"[red]Delete[/] the worker database at [grey]{Markup.Escape(dbPath)}[/]? This cannot be undone.");
+                $"[red]Delete[/] the worker database at [grey]{Markup.Escape(dbPath)}[/]? This cannot be undone."
+            );
             if (!confirmed)
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");

@@ -10,4 +10,5 @@ public sealed record ReviewFinding(
     string? FilePath = null,
     ReviewDisposition Disposition = ReviewDisposition.Pending,
     string? Category = null,
-    string? SuggestedFix = null);
+    string? SuggestedFix = null
+);

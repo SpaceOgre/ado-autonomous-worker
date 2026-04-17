@@ -15,7 +15,11 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
         public bool ActiveOnly { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         await stateStore.InitializeAsync(cancellationToken);
 
@@ -25,13 +29,15 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
 
         if (executions.Count == 0)
         {
-            AnsiConsole.MarkupLine(settings.ActiveOnly
-                ? "[yellow]No active executions found.[/]"
-                : "[yellow]No local executions found.[/]");
+            AnsiConsole.MarkupLine(
+                settings.ActiveOnly ? "[yellow]No active executions found.[/]" : "[yellow]No local executions found.[/]"
+            );
             return 0;
         }
 
-        var table = new Table().Border(TableBorder.Rounded).AddColumns("Execution Id", "Work Item", "Kind", "Phase", "Status", "Updated", "Title");
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .AddColumns("Execution Id", "Work Item", "Kind", "Phase", "Status", "Updated", "Title");
         foreach (var execution in executions)
         {
             table.AddRow(
@@ -41,7 +47,8 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
                 CliStyle.Phase(execution.Phase),
                 CliStyle.Status(execution.Status),
                 execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
-                Markup.Escape(execution.Title));
+                Markup.Escape(execution.Title)
+            );
         }
 
         AnsiConsole.Write(table);

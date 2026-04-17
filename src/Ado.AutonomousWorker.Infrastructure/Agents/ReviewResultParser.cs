@@ -23,7 +23,8 @@ internal static class ReviewResultParser
                     f.Rationale ?? string.Empty,
                     f.FilePath,
                     Category: f.Category,
-                    SuggestedFix: f.SuggestedFix))
+                    SuggestedFix: f.SuggestedFix
+                ))
                 .ToList();
             return new ReviewResult(summary, findings, transcriptPath, payload);
         }
@@ -35,7 +36,8 @@ internal static class ReviewResultParser
 
     private sealed record ReviewPayload(
         [property: JsonPropertyName("summary")] string? Summary,
-        [property: JsonPropertyName("findings")] IReadOnlyList<ReviewFindingPayload>? Findings);
+        [property: JsonPropertyName("findings")] IReadOnlyList<ReviewFindingPayload>? Findings
+    );
 
     private sealed record ReviewFindingPayload(
         [property: JsonPropertyName("id")] string? Id,
@@ -44,5 +46,6 @@ internal static class ReviewResultParser
         [property: JsonPropertyName("title")] string? Title,
         [property: JsonPropertyName("rationale")] string? Rationale,
         [property: JsonPropertyName("suggestedFix")] string? SuggestedFix,
-        [property: JsonPropertyName("filePath")] string? FilePath);
+        [property: JsonPropertyName("filePath")] string? FilePath
+    );
 }

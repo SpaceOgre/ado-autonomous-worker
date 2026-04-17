@@ -5,11 +5,11 @@ using Microsoft.Extensions.Logging;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
-internal sealed partial class ValidatingHandler(
-    ProcessCommandRunner commandRunner,
-    ILogger<ValidatingHandler> logger) : IPhaseHandler
+internal sealed partial class ValidatingHandler(ProcessCommandRunner commandRunner, ILogger<ValidatingHandler> logger)
+    : IPhaseHandler
 {
     public TaskPhase Phase => TaskPhase.Validating;
+
     public bool Accepts(PhaseContext context) => true;
 
     public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
@@ -21,37 +21,57 @@ internal sealed partial class ValidatingHandler(
             var artifactDirectory = repositoryExecution.ArtifactDirectory;
 
             await context.Journal.AppendEventAsync(
-                context.ExecutionId, TaskPhase.Validating, $"Running validation for {repoKind}.", cancellationToken);
+                context.ExecutionId,
+                TaskPhase.Validating,
+                $"Running validation for {repoKind}.",
+                cancellationToken
+            );
 
             foreach (var validationCommand in repositoryExecution.Profile.ValidationCommands)
             {
                 logger.LogInformation(
                     "Execution {ExecutionId}: running validation for {RepoKind}: {Command}",
-                    context.ExecutionId, repoKind, validationCommand);
+                    context.ExecutionId,
+                    repoKind,
+                    validationCommand
+                );
 
                 var artifactPath = Path.Combine(artifactDirectory, $"{NormalizeFileName(validationCommand)}.log");
-                var validationWorkingDirectory = string.IsNullOrWhiteSpace(repositoryExecution.Profile.ValidationWorkingDirectory)
+                var validationWorkingDirectory = string.IsNullOrWhiteSpace(
+                    repositoryExecution.Profile.ValidationWorkingDirectory
+                )
                     ? workspace.WorkingDirectory
                     : Path.Combine(workspace.WorkingDirectory, repositoryExecution.Profile.ValidationWorkingDirectory);
                 var result = await commandRunner.RunPowerShellAsync(
-                    validationCommand, validationWorkingDirectory, artifactPath, cancellationToken);
+                    validationCommand,
+                    validationWorkingDirectory,
+                    artifactPath,
+                    cancellationToken
+                );
 
                 if (!result.Success)
                     throw new ValidationFailureException(
-                        repoKind, validationCommand, artifactPath,
-                        result.StandardOutput, result.StandardError);
+                        repoKind,
+                        validationCommand,
+                        artifactPath,
+                        result.StandardOutput,
+                        result.StandardError
+                    );
 
                 logger.LogInformation(
                     "Execution {ExecutionId}: validation passed for {RepoKind}: {Command}",
-                    context.ExecutionId, repoKind, validationCommand);
+                    context.ExecutionId,
+                    repoKind,
+                    validationCommand
+                );
             }
         }
 
         return PhaseTransition.To(TaskPhase.Publishing);
     }
 
-    private static string NormalizeFileName(string value)
-        => NormalizeRegex().Replace(value.ToLowerInvariant(), "-").Trim('-');
+    private static string NormalizeFileName(string value) =>
+        NormalizeRegex().Replace(value.ToLowerInvariant(), "-").Trim('-');
 
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.IgnoreCase)]
     private static partial Regex NormalizeRegex();

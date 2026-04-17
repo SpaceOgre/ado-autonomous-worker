@@ -10,4 +10,5 @@ public sealed record AgentOutputChunk(
     AgentOutputStream Stream,
     long Sequence,
     DateTimeOffset Timestamp,
-    string Content);
+    string Content
+);

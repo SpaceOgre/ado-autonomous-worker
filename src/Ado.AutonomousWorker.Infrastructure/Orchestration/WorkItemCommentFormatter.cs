@@ -8,12 +8,11 @@ internal static class WorkItemCommentFormatter
     public static string BuildSuccessComment(
         string executionId,
         IReadOnlyList<RepositoryPublishResult> repositories,
-        ImplementationRunResult implementation)
+        ImplementationRunResult implementation
+    )
     {
         var shortId = executionId.Length > 8 ? executionId[..8] : executionId;
-        var builder = new StringBuilder()
-            .AppendLine($"Execution `{shortId}` completed successfully.")
-            .AppendLine();
+        var builder = new StringBuilder().AppendLine($"Execution `{shortId}` completed successfully.").AppendLine();
 
         foreach (var repository in repositories.OrderBy(item => item.RepoKind))
         {
@@ -35,11 +34,14 @@ internal static class WorkItemCommentFormatter
         builder.AppendLine("### Review").AppendLine();
 
         if (implementation.AcceptedFindingCount.HasValue)
-            builder.AppendLine($"{implementation.Review.Findings.Count} findings, {implementation.AcceptedFindingCount.Value} accepted.");
+            builder.AppendLine(
+                $"{implementation.Review.Findings.Count} findings, {implementation.AcceptedFindingCount.Value} accepted."
+            );
         else if (implementation.Review.Findings.Count > 0)
             builder.AppendLine($"{implementation.Review.Findings.Count} findings.");
 
-        var hasMeaningfulSummary = !string.IsNullOrWhiteSpace(implementation.Review.Summary)
+        var hasMeaningfulSummary =
+            !string.IsNullOrWhiteSpace(implementation.Review.Summary)
             && !implementation.Review.Summary.Equals("No review available.", StringComparison.OrdinalIgnoreCase);
 
         if (hasMeaningfulSummary)
@@ -52,20 +54,21 @@ internal static class WorkItemCommentFormatter
 
     public static string BuildFailureComment(string executionId, Exception exception)
     {
-        var builder = new StringBuilder()
-            .AppendLine($"Execution {executionId} failed.");
+        var builder = new StringBuilder().AppendLine($"Execution {executionId} failed.");
 
         if (exception is ValidationFailureException validationFailure)
         {
             var output = FirstNonEmpty(validationFailure.StandardError, validationFailure.StandardOutput);
-            builder.AppendLine()
+            builder
+                .AppendLine()
                 .AppendLine($"Validation failed for {validationFailure.RepoKind}.")
                 .AppendLine($"Command: `{validationFailure.Command}`")
                 .AppendLine($"Log: `{validationFailure.ArtifactPath}`");
 
             if (!string.IsNullOrWhiteSpace(output))
             {
-                builder.AppendLine("Output:")
+                builder
+                    .AppendLine("Output:")
                     .AppendLine("```text")
                     .AppendLine(TrimToMaxLength(output, 1500))
                     .AppendLine("```");
@@ -73,16 +76,15 @@ internal static class WorkItemCommentFormatter
         }
         else
         {
-            builder.AppendLine()
-                .AppendLine($"Reason: {exception.Message}");
+            builder.AppendLine().AppendLine($"Reason: {exception.Message}");
         }
 
         return builder.ToString().TrimEnd();
     }
 
-    private static string FirstNonEmpty(params string[] values)
-        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+    private static string FirstNonEmpty(params string[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 
-    private static string TrimToMaxLength(string value, int maxLength)
-        => value.Length <= maxLength ? value.Trim() : $"{value[..maxLength].TrimEnd()}...";
+    private static string TrimToMaxLength(string value, int maxLength) =>
+        value.Length <= maxLength ? value.Trim() : $"{value[..maxLength].TrimEnd()}...";
 }

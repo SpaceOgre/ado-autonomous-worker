@@ -31,18 +31,26 @@ public sealed class SetPhaseCommand(IStateStore stateStore) : AsyncCommand<SetPh
         public string? Phase { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         var hasExecutionId = !string.IsNullOrWhiteSpace(settings.ExecutionId);
         if (settings.Last == hasExecutionId)
         {
-            AnsiConsole.MarkupLine("[red]Specify exactly one of:[/] [yellow]--execution-id <id>[/] or [yellow]--last[/]");
+            AnsiConsole.MarkupLine(
+                "[red]Specify exactly one of:[/] [yellow]--execution-id <id>[/] or [yellow]--last[/]"
+            );
             return 1;
         }
 
-        if (string.IsNullOrWhiteSpace(settings.Phase) ||
-            !Enum.TryParse<TaskPhase>(settings.Phase, ignoreCase: true, out var targetPhase) ||
-            !AllowedPhases.Contains(targetPhase))
+        if (
+            string.IsNullOrWhiteSpace(settings.Phase)
+            || !Enum.TryParse<TaskPhase>(settings.Phase, ignoreCase: true, out var targetPhase)
+            || !AllowedPhases.Contains(targetPhase)
+        )
         {
             var valid = string.Join(", ", AllowedPhases.Select(p => p.ToString()));
             AnsiConsole.MarkupLine($"[red]--phase must be one of:[/] {valid}");
@@ -73,9 +81,10 @@ public sealed class SetPhaseCommand(IStateStore stateStore) : AsyncCommand<SetPh
         await stateStore.UpdateStatusAsync(executionId!, ExecutionStatus.Failed, cancellationToken);
 
         AnsiConsole.MarkupLine(
-            $"[green]✓[/] Execution [grey]{executionId}[/] reset to " +
-            $"Phase=[deepskyblue1]{targetPhase}[/] Status=[red]Failed[/]. " +
-            $"Run [yellow]task resume --execution-id {executionId}[/] to continue.");
+            $"[green]✓[/] Execution [grey]{executionId}[/] reset to "
+                + $"Phase=[deepskyblue1]{targetPhase}[/] Status=[red]Failed[/]. "
+                + $"Run [yellow]task resume --execution-id {executionId}[/] to continue."
+        );
 
         return 0;
     }

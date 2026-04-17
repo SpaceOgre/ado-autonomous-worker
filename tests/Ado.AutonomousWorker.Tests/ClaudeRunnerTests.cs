@@ -44,7 +44,8 @@ public sealed class ClaudeRunnerTests
     [Fact]
     public void ParseEnvelope_FallsBackToSingleBlobForOldJsonFormat()
     {
-        const string raw = """{"type":"result","subtype":"success","result":"Legacy result.","model":"claude-opus-4-6","total_cost_usd":0.001}""";
+        const string raw =
+            """{"type":"result","subtype":"success","result":"Legacy result.","model":"claude-opus-4-6","total_cost_usd":0.001}""";
 
         var (summary, _, usage) = ClaudeRunner.ParseEnvelope(raw, hasSchema: false);
 

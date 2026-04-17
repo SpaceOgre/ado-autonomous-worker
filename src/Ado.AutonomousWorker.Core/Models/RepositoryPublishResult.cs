@@ -8,4 +8,5 @@ public sealed record RepositoryPublishResult(
     string BranchName,
     string CommitSha,
     IReadOnlyList<string> ValidationCommands,
-    PullRequestInfo PullRequest);
+    PullRequestInfo PullRequest
+);

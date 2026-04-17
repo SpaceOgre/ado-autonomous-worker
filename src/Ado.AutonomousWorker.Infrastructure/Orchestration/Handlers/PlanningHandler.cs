@@ -19,47 +19,64 @@ internal sealed class PlanningHandler(
     IOptions<WorkerOptions> workerOptions,
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
-    ILogger<PlanningHandler> logger) : WorkItemHandler
+    ILogger<PlanningHandler> logger
+) : WorkItemHandler
 {
     public override TaskPhase Phase => TaskPhase.Planning;
 
-    protected override async Task<PhaseTransition> ExecuteAsync(PhaseContext.WorkItemContext context, CancellationToken cancellationToken)
+    protected override async Task<PhaseTransition> ExecuteAsync(
+        PhaseContext.WorkItemContext context,
+        CancellationToken cancellationToken
+    )
     {
         var workItem = context.WorkItem;
         var config = agentOptions.Value.Plan;
         var runner = agentRunnerFactory.GetRunner(config.Provider);
         var artifactDirectory = Path.Combine(
-            storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, context.ExecutionId), "plan");
+            storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, context.ExecutionId),
+            "plan"
+        );
         var commentsBlock = WorkItemPromptContextFormatter.FormatComments(
-            workItem.Comments, workerOptions.Value.MaxPromptComments, workerOptions.Value.MaxPromptCommentCharacters);
+            workItem.Comments,
+            workerOptions.Value.MaxPromptComments,
+            workerOptions.Value.MaxPromptCommentCharacters
+        );
 
         await workspaceManager.PullAllBaseClonesAsync(artifactDirectory, cancellationToken);
 
         await context.Journal.AppendEventAsync(
-            context.ExecutionId, TaskPhase.Planning, "Running planning agent.", cancellationToken);
+            context.ExecutionId,
+            TaskPhase.Planning,
+            "Running planning agent.",
+            cancellationToken
+        );
 
         var rawPrompt = $$"""
-        Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
+            Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
 
-        Work item: #{{workItem.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(workItem.WorkItemType)}} {{workItem.Title}}
-        State: {{workItem.State}}
-        Assigned to: {{workItem.AssignedTo}}
-        Iteration: {{workItem.IterationPath}}
-        Tags: {{string.Join(", ", workItem.Tags)}}
-        Parent feature: {{workItem.ParentFeatureTitle ?? "-"}}
+            Work item: #{{workItem.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(
+                workItem.WorkItemType
+            )}} {{workItem.Title}}
+            State: {{workItem.State}}
+            Assigned to: {{workItem.AssignedTo}}
+            Iteration: {{workItem.IterationPath}}
+            Tags: {{string.Join(", ", workItem.Tags)}}
+            Parent feature: {{workItem.ParentFeatureTitle ?? "-"}}
 
-        Description:
-        {{workItem.Description}}
+            Description:
+            {{workItem.Description}}
 
-        Acceptance Criteria:
-        {{workItem.AcceptanceCriteria}}
+            Acceptance Criteria:
+            {{workItem.AcceptanceCriteria}}
 
-        Recent comments:
-        {{commentsBlock}}
-        """;
+            Recent comments:
+            {{commentsBlock}}
+            """;
 
-        var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory(
-            [repositoryOptions.Value.Backend.BaseClonePath, repositoryOptions.Value.Frontend.BaseClonePath]);
+        var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory([
+            repositoryOptions.Value.Backend.BaseClonePath,
+            repositoryOptions.Value.Frontend.BaseClonePath,
+        ]);
 
         var prompt = await PromptTemplateLoader.ApplyAsync(config, rawPrompt, cancellationToken);
         var startResult = await runner.StartSessionAsync(
@@ -70,22 +87,38 @@ internal sealed class PlanningHandler(
             artifactDirectory,
             AgentOutputSchemas.Plan,
             executionJournal.CreateOutputObserver(context.ExecutionId),
-            cancellationToken);
+            cancellationToken
+        );
 
         await stateStore.SaveAgentSessionAsync(context.ExecutionId, startResult.Session, cancellationToken);
         if (startResult.Result.Usage is not null)
-            await stateStore.RecordAgentUsageAsync(context.ExecutionId, TaskPhase.Planning, AgentRole.Plan, config.Provider, startResult.Result.Usage, cancellationToken);
+            await stateStore.RecordAgentUsageAsync(
+                context.ExecutionId,
+                TaskPhase.Planning,
+                AgentRole.Plan,
+                config.Provider,
+                startResult.Result.Usage,
+                cancellationToken
+            );
 
-        var plan = ParsePlan(startResult.Result.StructuredPayload)
+        var plan =
+            ParsePlan(startResult.Result.StructuredPayload)
             ?? throw new InvalidOperationException("Planning agent returned invalid or empty structured output.");
 
         await stateStore.SavePlanAsync(context.ExecutionId, plan, cancellationToken);
         await context.Journal.AppendEventAsync(
-            context.ExecutionId, TaskPhase.Planning, plan.Summary, cancellationToken);
+            context.ExecutionId,
+            TaskPhase.Planning,
+            plan.Summary,
+            cancellationToken
+        );
 
         logger.LogInformation(
             "Execution {ExecutionId} plan complete: scope {Scope}, repos {Repositories}.",
-            context.ExecutionId, plan.Scope, string.Join(", ", plan.Repositories));
+            context.ExecutionId,
+            plan.Scope,
+            string.Join(", ", plan.Repositories)
+        );
 
         context.Plan = plan;
         return PhaseTransition.To(TaskPhase.Coding);
@@ -109,7 +142,8 @@ internal sealed class PlanningHandler(
                 plan.ValidationTargets?.ToArray() ?? [],
                 plan.TestIntent?.ToArray() ?? [],
                 plan.Risks?.ToArray() ?? [],
-                plan.Summary ?? "Planning completed.");
+                plan.Summary ?? "Planning completed."
+            );
         }
         catch (Exception)
         {
@@ -123,5 +157,6 @@ internal sealed class PlanningHandler(
         [property: JsonPropertyName("validationTargets")] IReadOnlyList<string>? ValidationTargets,
         [property: JsonPropertyName("testIntent")] IReadOnlyList<string>? TestIntent,
         [property: JsonPropertyName("risks")] IReadOnlyList<string>? Risks,
-        [property: JsonPropertyName("summary")] string? Summary);
+        [property: JsonPropertyName("summary")] string? Summary
+    );
 }

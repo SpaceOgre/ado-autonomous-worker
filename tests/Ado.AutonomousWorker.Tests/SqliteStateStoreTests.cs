@@ -7,7 +7,11 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class SqliteStateStoreTests : IDisposable
 {
-    private readonly string _rootPath = Path.Combine(Path.GetTempPath(), "ado-worker-tests", Guid.NewGuid().ToString("N"));
+    private readonly string _rootPath = Path.Combine(
+        Path.GetTempPath(),
+        "ado-worker-tests",
+        Guid.NewGuid().ToString("N")
+    );
 
     [Fact]
     public async Task AppendAgentOutputChunkAsync_TrimsStoredChunksPerSession()
@@ -28,8 +32,10 @@ public sealed class SqliteStateStoreTests : IDisposable
                     AgentOutputStream.Stdout,
                     index,
                     DateTimeOffset.UtcNow.AddSeconds(index),
-                    $"line-{index}"),
-                CancellationToken.None);
+                    $"line-{index}"
+                ),
+                CancellationToken.None
+            );
         }
 
         var chunks = await store.GetAgentOutputChunksAsync("exec-1", CancellationToken.None);
@@ -61,9 +67,7 @@ public sealed class SqliteStateStoreTests : IDisposable
     {
         public WorkerDbContext CreateDbContext()
         {
-            var options = new DbContextOptionsBuilder<WorkerDbContext>()
-                .UseSqlite($"Data Source={dbPath}")
-                .Options;
+            var options = new DbContextOptionsBuilder<WorkerDbContext>().UseSqlite($"Data Source={dbPath}").Options;
             return new WorkerDbContext(options);
         }
     }

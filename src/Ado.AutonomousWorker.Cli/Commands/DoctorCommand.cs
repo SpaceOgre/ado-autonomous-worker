@@ -14,10 +14,7 @@ public sealed class DoctorCommand(DoctorService doctorService) : AsyncCommand
 
         foreach (var result in results)
         {
-            table.AddRow(
-                result.Name,
-                CliStyle.DoctorStatus(result.Success),
-                Markup.Escape(result.Detail));
+            table.AddRow(result.Name, CliStyle.DoctorStatus(result.Success), Markup.Escape(result.Detail));
         }
 
         AnsiConsole.Write(table);

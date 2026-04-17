@@ -6,4 +6,5 @@ public sealed record ExecutionEventRecord(
     string ExecutionId,
     DateTimeOffset Timestamp,
     TaskPhase Phase,
-    string Message);
+    string Message
+);

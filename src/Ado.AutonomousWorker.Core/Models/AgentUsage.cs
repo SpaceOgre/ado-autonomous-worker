@@ -6,4 +6,5 @@ public sealed record AgentUsage(
     int InputTokens,
     int OutputTokens,
     int CachedInputTokens,
-    decimal? CostUsd);
+    decimal? CostUsd
+);

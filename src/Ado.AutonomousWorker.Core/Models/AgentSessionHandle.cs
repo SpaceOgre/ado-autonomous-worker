@@ -8,4 +8,5 @@ public sealed record AgentSessionHandle(
     AgentRole Role,
     string WorkingDirectory,
     string TranscriptPath,
-    string? ProviderSessionId = null);
+    string? ProviderSessionId = null
+);

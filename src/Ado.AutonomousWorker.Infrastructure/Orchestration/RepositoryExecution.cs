@@ -8,7 +8,8 @@ internal sealed record RepositoryExecution(
     ChildTaskRecord ChildTask,
     RepositoryProfile Profile,
     RepoExecutionContext Workspace,
-    string ArtifactDirectory)
+    string ArtifactDirectory
+)
 {
     public RepoKind RepoKind => Workspace.RepoKind;
 }

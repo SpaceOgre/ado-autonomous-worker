@@ -12,17 +12,21 @@ public sealed class RunCommand(
     ITaskOrchestrator taskOrchestrator,
     QueueInspector queueInspector,
     ExecutionLiveDisplay liveDisplay,
-    IOptions<WorkerOptions> workerOptions) : AsyncCommand
+    IOptions<WorkerOptions> workerOptions
+) : AsyncCommand
 {
     protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
-        var queue = eligibleQueue
-            .Take(workerOptions.Value.MaxItemsPerRun)
-            .ToArray();
+        var queue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
 
         RunPreambleDisplay.ShowSplash("Queue run");
-        RunPreambleDisplay.ShowQueuePreview(queue, eligibleQueue.Count, workerOptions.Value.MaxItemsPerRun, previewOnly: false);
+        RunPreambleDisplay.ShowQueuePreview(
+            queue,
+            eligibleQueue.Count,
+            workerOptions.Value.MaxItemsPerRun,
+            previewOnly: false
+        );
 
         if (queue.Length == 0)
         {
@@ -43,7 +47,8 @@ public sealed class RunCommand(
                 title,
                 item.WorkItemId,
                 token => taskOrchestrator.RunTaskAsync(item, token),
-                cancellationToken);
+                cancellationToken
+            );
 
             executionIds.Add(executionId);
         }

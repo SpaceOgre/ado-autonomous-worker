@@ -69,9 +69,7 @@ public sealed class TerminalTitleService
 
     private static void TrySetTitle(string title)
     {
-        var sanitizedTitle = title
-            .ReplaceLineEndings(" ")
-            .Trim();
+        var sanitizedTitle = title.ReplaceLineEndings(" ").Trim();
 
         if (OperatingSystem.IsWindows())
         {
@@ -120,8 +118,6 @@ public sealed class TerminalTitleService
     {
         public static NoopDisposable Instance { get; } = new();
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
     }
 }

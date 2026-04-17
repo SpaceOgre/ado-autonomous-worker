@@ -20,7 +20,11 @@ namespace Ado.AutonomousWorker.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddAutonomousWorker(this IServiceCollection services, IConfiguration configuration, string? storageBaseOverride = null)
+    public static IServiceCollection AddAutonomousWorker(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string? storageBaseOverride = null
+    )
     {
         services.Configure<AgentOptions>(configuration.GetSection("Agents"));
         services.Configure<AzureDevOpsOptions>(configuration.GetSection("AzureDevOps"));
@@ -30,12 +34,15 @@ public static class DependencyInjection
         services.Configure<WorkerOptions>(configuration.GetSection("Worker"));
         services.Configure<DeployOptions>(configuration.GetSection("Deploy"));
 
-        services.AddDbContextFactory<WorkerDbContext>((provider, options) =>
-        {
-            var storage = provider.GetRequiredService<IOptions<StorageOptions>>().Value;
-            Directory.CreateDirectory(Path.GetDirectoryName(storage.DatabasePath)!);
-            options.UseSqlite($"Data Source={storage.DatabasePath}");
-        }, ServiceLifetime.Singleton);
+        services.AddDbContextFactory<WorkerDbContext>(
+            (provider, options) =>
+            {
+                var storage = provider.GetRequiredService<IOptions<StorageOptions>>().Value;
+                Directory.CreateDirectory(Path.GetDirectoryName(storage.DatabasePath)!);
+                options.UseSqlite($"Data Source={storage.DatabasePath}");
+            },
+            ServiceLifetime.Singleton
+        );
 
         services.AddSingleton<IRulesEngine, RulesEngine>();
         services.AddSingleton<IStateStore, SqliteStateStore>();
@@ -62,16 +69,23 @@ public static class DependencyInjection
         services.AddTransient<CodexRunner>();
         services.AddTransient<ClaudeRunner>();
 
-        services.AddHttpClient<IAzureDevOpsClient, AzureDevOpsClient>((provider, client) =>
-        {
-            var options = provider.GetRequiredService<IOptions<AzureDevOpsOptions>>().Value;
-            client.BaseAddress = new Uri(options.OrganizationUrl.TrimEnd('/') + "/");
-            if (!string.IsNullOrWhiteSpace(options.PersonalAccessToken))
+        services.AddHttpClient<IAzureDevOpsClient, AzureDevOpsClient>(
+            (provider, client) =>
             {
-                var token = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($":{options.PersonalAccessToken}"));
-                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+                var options = provider.GetRequiredService<IOptions<AzureDevOpsOptions>>().Value;
+                client.BaseAddress = new Uri(options.OrganizationUrl.TrimEnd('/') + "/");
+                if (!string.IsNullOrWhiteSpace(options.PersonalAccessToken))
+                {
+                    var token = Convert.ToBase64String(
+                        System.Text.Encoding.ASCII.GetBytes($":{options.PersonalAccessToken}")
+                    );
+                    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                        "Basic",
+                        token
+                    );
+                }
             }
-        });
+        );
 
         return services;
     }
