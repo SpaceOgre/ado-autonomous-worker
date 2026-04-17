@@ -19,6 +19,8 @@ public sealed class AzureDevOpsClient(
 {
     private const string ApiVersion = "7.1";
 
+    private static string? _cachedSprintPath;
+
     private readonly HttpClient _httpClient = httpClient;
     private readonly AzureDevOpsOptions _options = options.Value;
     private readonly RepositoryOptions _repositoryOptions = repositoryOptions.Value;
@@ -26,6 +28,9 @@ public sealed class AzureDevOpsClient(
 
     public async Task<string?> GetCurrentSprintPathAsync(CancellationToken cancellationToken)
     {
+        if (_cachedSprintPath is not null)
+            return _cachedSprintPath;
+
         var team = Uri.EscapeDataString(_options.Team);
         var response = await _httpClient.GetAsync(
             $"{_options.Project}/{team}/_apis/work/teamsettings/iterations?$timeframe=current&api-version={ApiVersion}",
@@ -33,9 +38,11 @@ public sealed class AzureDevOpsClient(
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<AdoIterationsResponse>(cancellationToken);
-        return result?.Value
+        _cachedSprintPath = result?.Value
             .FirstOrDefault(i => string.Equals(i.Attributes?.TimeFrame, "current", StringComparison.OrdinalIgnoreCase))
             ?.Path;
+
+        return _cachedSprintPath;
     }
 
     public Task<IReadOnlyList<WorkItemSummary>> QueryAiWorkAsync(CancellationToken cancellationToken)
@@ -102,9 +109,32 @@ public sealed class AzureDevOpsClient(
                 parentIds.Add(relatedId.Value);
         }
 
-        var children = childIds.Count == 0 ? [] : await GetChildTasksAsync(childIds, cancellationToken);
-        var parentFeatureTitle = parentIds.Count == 0 ? null : await TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
-        var comments = await GetWorkItemCommentsAsync(workItemId, cancellationToken);
+        var childrenTask = childIds.Count == 0
+            ? Task.FromResult<IReadOnlyList<ChildTaskRecord>>([])
+            : GetChildTasksAsync(childIds, cancellationToken);
+        var parentFeatureTask = parentIds.Count == 0
+            ? Task.FromResult<string?>(null)
+            : TryGetParentFeatureTitleAsync(parentIds, cancellationToken);
+        var commentsTask = GetWorkItemCommentsAsync(workItemId, cancellationToken);
+
+        try
+        {
+            await Task.WhenAll(childrenTask, parentFeatureTask, commentsTask);
+        }
+        catch
+        {
+            if (childrenTask.IsFaulted)
+                _logger.LogError(childrenTask.Exception, "Failed to fetch child tasks for work item {WorkItemId}", workItemId);
+            if (parentFeatureTask.IsFaulted)
+                _logger.LogError(parentFeatureTask.Exception, "Failed to fetch parent feature for work item {WorkItemId}", workItemId);
+            if (commentsTask.IsFaulted)
+                _logger.LogError(commentsTask.Exception, "Failed to fetch comments for work item {WorkItemId}", workItemId);
+            throw;
+        }
+
+        var children = await childrenTask;
+        var parentFeatureTitle = await parentFeatureTask;
+        var comments = await commentsTask;
 
         return new WorkItemDetails
         {
@@ -157,8 +187,12 @@ public sealed class AzureDevOpsClient(
             ?? throw new InvalidOperationException("Azure DevOps did not return a work item ID for the new child task.");
         var childTaskId = created.Id;
 
-        await UpdateWorkItemStateAsync(childTaskId, "Active", cancellationToken);
-        await PatchFieldsAsync(childTaskId, [PatchRelation(parentWorkItemId)], cancellationToken);
+        // ADO processes JSON Patch operations in document order: state transitions before relation validation.
+        await PatchFieldsAsync(childTaskId,
+        [
+            PatchField("/fields/System.State", "Active"),
+            PatchRelation(parentWorkItemId),
+        ], cancellationToken);
         return childTaskId;
     }
 
@@ -764,41 +798,30 @@ public sealed class AzureDevOpsClient(
 
     private async Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> GetChildWorkItemIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken)
     {
-        var result = new Dictionary<int, IReadOnlyList<int>>();
-        using var semaphore = new SemaphoreSlim(8);
+        if (parentIds.Count == 0)
+            return new Dictionary<int, IReadOnlyList<int>>();
 
-        var tasks = parentIds.Select(async id =>
-        {
-            await semaphore.WaitAsync(cancellationToken);
-            try
-            {
-                var response = await _httpClient.GetAsync(
-                    $"{_options.Project}/_apis/wit/workitems/{id}?$expand=Relations&api-version={ApiVersion}",
-                    cancellationToken);
+        var idList = string.Join(", ", parentIds);
+        var query = $"""
+            SELECT [System.Id]
+            FROM WorkItemLinks
+            WHERE [Source].[System.Id] IN ({idList})
+              AND [System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward'
+              AND [Target].[System.TeamProject] = '{_options.Project}'
+            MODE (MayContain)
+            """;
 
-                if (!response.IsSuccessStatusCode)
-                    return (id, (IReadOnlyList<int>)[]);
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_options.Project}/_apis/wit/wiql?api-version={ApiVersion}",
+            new { query },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
 
-                var item = await response.Content.ReadFromJsonAsync<AdoWorkItemResponse>(cancellationToken);
-                var childIds = (item?.Relations ?? [])
-                    .Where(r => string.Equals(r.Rel, "System.LinkTypes.Hierarchy-Forward", StringComparison.OrdinalIgnoreCase))
-                    .Select(r => TryParseWorkItemId(r.Url))
-                    .Where(cid => cid.HasValue)
-                    .Select(cid => cid!.Value)
-                    .ToArray();
+        var result = await response.Content.ReadFromJsonAsync<AdoWiqlTreeResponse>(cancellationToken);
 
-                return (id, (IReadOnlyList<int>)childIds);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        var results = await Task.WhenAll(tasks);
-        foreach (var (id, children) in results)
-            result[id] = children;
-
-        return result;
+        return (result?.WorkItemRelations ?? [])
+            .Where(r => r.Source is not null && r.Target is not null)
+            .GroupBy(r => r.Source!.Id, r => r.Target!.Id)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<int>)g.ToList());
     }
 }

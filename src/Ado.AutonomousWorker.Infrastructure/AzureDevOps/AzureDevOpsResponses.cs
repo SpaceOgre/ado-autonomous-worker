@@ -134,6 +134,14 @@ internal sealed record AdoPipelineResponse(
 internal sealed record AdoSprintWorkItemsResponse(
     [property: JsonPropertyName("workItems")] IReadOnlyList<AdoWorkItemRef>? WorkItems);
 
+internal sealed record AdoWiqlTreeResponse(
+    [property: JsonPropertyName("workItemRelations")]
+    IReadOnlyList<AdoWorkItemLinkRelation>? WorkItemRelations);
+
+internal sealed record AdoWorkItemLinkRelation(
+    [property: JsonPropertyName("source")] AdoWorkItemRef? Source,
+    [property: JsonPropertyName("target")] AdoWorkItemRef? Target);
+
 internal sealed record AdoWorkItemRelationsResponse(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("fields")] AdoWorkItemBaseFields Fields,
