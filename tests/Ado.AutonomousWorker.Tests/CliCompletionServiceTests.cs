@@ -7,20 +7,20 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class CliCompletionServiceTests
 {
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsTopLevelCommands()
     {
         var service = new CliCompletionService(new FakeStateStore());
 
         var suggestions = await service.GetSuggestionsAsync(string.Empty, [], CancellationToken.None);
 
-        Assert.Contains("ui", suggestions);
-        Assert.Contains("version", suggestions);
-        Assert.Contains("execution", suggestions);
-        Assert.Contains("executions", suggestions);
+        await Assert.That(suggestions).Contains("ui");
+        await Assert.That(suggestions).Contains("version");
+        await Assert.That(suggestions).Contains("execution");
+        await Assert.That(suggestions).Contains("executions");
     }
 
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsExecutionIdsForExecutionShow()
     {
         var service = new CliCompletionService(
@@ -54,60 +54,60 @@ public sealed class CliCompletionServiceTests
             CancellationToken.None
         );
 
-        Assert.Equal(["exec-123", "exec-456"], suggestions);
+        await Assert.That(suggestions).IsEquivalentTo(new[] { "exec-123", "exec-456" });
     }
 
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsLastForTaskResume()
     {
         var service = new CliCompletionService(new FakeStateStore());
 
         var suggestions = await service.GetSuggestionsAsync("--", ["task", "resume"], CancellationToken.None);
 
-        Assert.Contains("--execution-id", suggestions);
-        Assert.Contains("--last", suggestions);
+        await Assert.That(suggestions).Contains("--execution-id");
+        await Assert.That(suggestions).Contains("--last");
     }
 
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsUiBranchCommands()
     {
         var service = new CliCompletionService(new FakeStateStore());
 
         var suggestions = await service.GetSuggestionsAsync("r", ["ui"], CancellationToken.None);
 
-        Assert.Contains("run-preview", suggestions);
-        Assert.DoesNotContain("splash", suggestions);
+        await Assert.That(suggestions).Contains("run-preview");
+        await Assert.That(suggestions).DoesNotContain("splash");
     }
 
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsUiSplashOptions()
     {
         var service = new CliCompletionService(new FakeStateStore());
 
         var suggestions = await service.GetSuggestionsAsync("--", ["ui", "splash"], CancellationToken.None);
 
-        Assert.Equal(["--status"], suggestions);
+        await Assert.That(suggestions).IsEquivalentTo(new[] { "--status" });
     }
 
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsDashboardTopLevel()
     {
         var service = new CliCompletionService(new FakeStateStore());
 
         var suggestions = await service.GetSuggestionsAsync(string.Empty, [], CancellationToken.None);
 
-        Assert.Contains("dashboard", suggestions);
+        await Assert.That(suggestions).Contains("dashboard");
     }
 
-    [Fact]
+    [Test]
     public async Task GetSuggestionsAsync_SuggestsDashboardOptions()
     {
         var service = new CliCompletionService(new FakeStateStore());
 
         var suggestions = await service.GetSuggestionsAsync("--", ["dashboard"], CancellationToken.None);
 
-        Assert.Contains("--port", suggestions);
-        Assert.Contains("--no-open", suggestions);
+        await Assert.That(suggestions).Contains("--port");
+        await Assert.That(suggestions).Contains("--no-open");
     }
 
     private sealed class FakeStateStore(IReadOnlyList<TaskExecutionRecord>? executions = null) : IStateStore

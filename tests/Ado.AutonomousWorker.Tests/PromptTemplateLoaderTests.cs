@@ -19,7 +19,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         Directory.CreateDirectory(_rootPath);
     }
 
-    [Fact]
+    [Test]
     public async Task ApplyAsync_PrependsTemplateWhenFileExists()
     {
         var templatePath = Path.Combine(_rootPath, "agents.md");
@@ -31,11 +31,11 @@ public sealed class PromptTemplateLoaderTests : IDisposable
             CancellationToken.None
         );
 
-        Assert.StartsWith("## Repository conventions", result);
-        Assert.Contains("Implement feature X.", result);
+        await Assert.That(result).StartsWith("## Repository conventions");
+        await Assert.That(result).Contains("Implement feature X.");
     }
 
-    [Fact]
+    [Test]
     public async Task ApplyAsync_ReturnsOriginalPromptWhenPathIsEmpty()
     {
         var result = await PromptTemplateLoader.ApplyAsync(
@@ -44,10 +44,10 @@ public sealed class PromptTemplateLoaderTests : IDisposable
             CancellationToken.None
         );
 
-        Assert.Equal("Implement feature X.", result);
+        await Assert.That(result).IsEqualTo("Implement feature X.");
     }
 
-    [Fact]
+    [Test]
     public async Task ApplyAsync_TrimsTrailingWhitespaceBeforeJoining()
     {
         var templatePath = Path.Combine(_rootPath, "agents-trailing.md");
@@ -59,29 +59,29 @@ public sealed class PromptTemplateLoaderTests : IDisposable
             CancellationToken.None
         );
 
-        Assert.Contains($"Template content.{Environment.NewLine}{Environment.NewLine}Main prompt.", result);
+        await Assert.That(result).Contains($"Template content.{Environment.NewLine}{Environment.NewLine}Main prompt.");
     }
 
-    [Fact]
-    public void BuildCodePrompt_IncludesDescriptionAndAcceptanceCriteria()
+    [Test]
+    public async Task BuildCodePrompt_IncludesDescriptionAndAcceptanceCriteria()
     {
         var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
             throwOnError: true
         );
-        Assert.NotNull(repositoryWorkflowServiceType);
+        await Assert.That(repositoryWorkflowServiceType).IsNotNull();
 
         var method = repositoryWorkflowServiceType!.GetMethod(
             "BuildCodePrompt",
             BindingFlags.NonPublic | BindingFlags.Static
         );
-        Assert.NotNull(method);
+        await Assert.That(method).IsNotNull();
 
         var repositoryExecutionType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.RepositoryExecution",
             throwOnError: true
         );
-        Assert.NotNull(repositoryExecutionType);
+        await Assert.That(repositoryExecutionType).IsNotNull();
 
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
@@ -91,7 +91,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
             @"D:\artifacts"
         );
 
-        Assert.NotNull(repositoryExecution);
+        await Assert.That(repositoryExecution).IsNotNull();
 
         var repositoryExecutions = Array.CreateInstance(repositoryExecutionType!, 1);
         repositoryExecutions.SetValue(repositoryExecution, 0);
@@ -122,32 +122,32 @@ public sealed class PromptTemplateLoaderTests : IDisposable
                 ]
             );
 
-        Assert.NotNull(prompt);
-        Assert.Contains("Detailed business description.", prompt);
-        Assert.Contains("1. Save data", prompt);
-        Assert.Contains("Acceptance Criteria:", prompt);
+        await Assert.That(prompt).IsNotNull();
+        await Assert.That(prompt).Contains("Detailed business description.");
+        await Assert.That(prompt).Contains("1. Save data");
+        await Assert.That(prompt).Contains("Acceptance Criteria:");
     }
 
-    [Fact]
-    public void BuildCodePrompt_IncludesParentFeatureAndComments()
+    [Test]
+    public async Task BuildCodePrompt_IncludesParentFeatureAndComments()
     {
         var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
             throwOnError: true
         );
-        Assert.NotNull(repositoryWorkflowServiceType);
+        await Assert.That(repositoryWorkflowServiceType).IsNotNull();
 
         var method = repositoryWorkflowServiceType!.GetMethod(
             "BuildCodePrompt",
             BindingFlags.NonPublic | BindingFlags.Static
         );
-        Assert.NotNull(method);
+        await Assert.That(method).IsNotNull();
 
         var repositoryExecutionType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.RepositoryExecution",
             throwOnError: true
         );
-        Assert.NotNull(repositoryExecutionType);
+        await Assert.That(repositoryExecutionType).IsNotNull();
 
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
@@ -157,7 +157,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
             @"D:\artifacts"
         );
 
-        Assert.NotNull(repositoryExecution);
+        await Assert.That(repositoryExecution).IsNotNull();
 
         var repositoryExecutions = Array.CreateInstance(repositoryExecutionType!, 1);
         repositoryExecutions.SetValue(repositoryExecution, 0);
@@ -188,11 +188,11 @@ public sealed class PromptTemplateLoaderTests : IDisposable
                 ]
             );
 
-        Assert.NotNull(prompt);
-        Assert.Contains("Parent feature: Feature - Accounts", prompt);
-        Assert.Contains("Recent comments:", prompt);
-        Assert.Contains("Please fix the failing save flow.", prompt);
-        Assert.Contains("Update the validation message.", prompt);
+        await Assert.That(prompt).IsNotNull();
+        await Assert.That(prompt).Contains("Parent feature: Feature - Accounts");
+        await Assert.That(prompt).Contains("Recent comments:");
+        await Assert.That(prompt).Contains("Please fix the failing save flow.");
+        await Assert.That(prompt).Contains("Update the validation message.");
     }
 
     public void Dispose()

@@ -27,10 +27,10 @@ dotnet build src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj
 dotnet build src/Ado.AutonomousWorker.Dashboard/Ado.AutonomousWorker.Dashboard.csproj
 
 # Run all tests
-dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj
+dotnet run --project tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj
 
 # Run a single test class
-dotnet test tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj --filter "FullyQualifiedName~RulesEngineTests"
+dotnet run --project tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj -- --filter "FullyQualifiedName~RulesEngineTests"
 
 # Install as local dotnet tool (adds `ado-worker` to the shell)
 .\scripts\install-local-tool.ps1

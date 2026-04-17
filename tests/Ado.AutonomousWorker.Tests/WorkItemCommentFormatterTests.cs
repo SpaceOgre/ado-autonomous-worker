@@ -6,8 +6,8 @@ namespace Ado.AutonomousWorker.Tests;
 
 public sealed class WorkItemCommentFormatterTests
 {
-    [Fact]
-    public void BuildFailureComment_ForValidationFailure_IncludesCommandAndLogPath()
+    [Test]
+    public async Task BuildFailureComment_ForValidationFailure_IncludesCommandAndLogPath()
     {
         var formatterType = typeof(PromptTemplateLoader).Assembly.GetType(
             "Ado.AutonomousWorker.Infrastructure.Orchestration.WorkItemCommentFormatter",
@@ -18,8 +18,8 @@ public sealed class WorkItemCommentFormatterTests
             throwOnError: true
         );
 
-        Assert.NotNull(formatterType);
-        Assert.NotNull(validationFailureType);
+        await Assert.That(formatterType).IsNotNull();
+        await Assert.That(validationFailureType).IsNotNull();
 
         var exception = (Exception?)
             Activator.CreateInstance(
@@ -37,18 +37,18 @@ public sealed class WorkItemCommentFormatterTests
                 culture: null
             );
 
-        Assert.NotNull(exception);
+        await Assert.That(exception).IsNotNull();
 
         var method = formatterType!.GetMethod("BuildFailureComment", BindingFlags.Public | BindingFlags.Static);
-        Assert.NotNull(method);
+        await Assert.That(method).IsNotNull();
 
         var comment = (string?)method!.Invoke(null, ["exec-123", exception!]);
 
-        Assert.NotNull(comment);
-        Assert.Contains("Execution exec-123 failed.", comment);
-        Assert.Contains("Validation failed for Backend.", comment);
-        Assert.Contains("dotnet test tests/Backend.Tests.csproj --no-build", comment);
-        Assert.Contains(@"C:\logs\backend-validation.log", comment);
-        Assert.Contains("Expected 200 OK but got 500.", comment);
+        await Assert.That(comment).IsNotNull();
+        await Assert.That(comment).Contains("Execution exec-123 failed.");
+        await Assert.That(comment).Contains("Validation failed for Backend.");
+        await Assert.That(comment).Contains("dotnet test tests/Backend.Tests.csproj --no-build");
+        await Assert.That(comment).Contains(@"C:\logs\backend-validation.log");
+        await Assert.That(comment).Contains("Expected 200 OK but got 500.");
     }
 }
