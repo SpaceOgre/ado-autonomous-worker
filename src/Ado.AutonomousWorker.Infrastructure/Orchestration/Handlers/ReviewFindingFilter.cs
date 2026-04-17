@@ -4,6 +4,8 @@ namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
 internal static class ReviewFindingFilter
 {
+    // test-coverage is intentionally excluded: missing-test findings are caught by the keyword
+    // fallback below, keeping them subject to the same severity gate as unstructured findings.
     private static readonly HashSet<string> ActionableCategories =
         new(StringComparer.OrdinalIgnoreCase) { "bugs", "security", "error-handling" };
 
@@ -13,7 +15,7 @@ internal static class ReviewFindingFilter
         if (severity.Contains("critical") || severity.Contains("high"))
             return true;
 
-        if (finding.Category is not null && ActionableCategories.Contains(finding.Category))
+        if (finding.Category is not null && ActionableCategories.Contains(finding.Category) && !severity.Contains("low"))
             return true;
 
         var text = $"{finding.Title} {finding.Rationale}".ToLowerInvariant();

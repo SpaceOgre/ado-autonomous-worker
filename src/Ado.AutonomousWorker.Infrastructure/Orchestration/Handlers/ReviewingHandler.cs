@@ -92,10 +92,10 @@ internal sealed class ReviewingHandler(
         Parent feature: {{parent.ParentFeatureTitle ?? "-"}}
 
         Description:
-        {{parent.Description}}
+        {{parent.Description ?? "-"}}
 
         Acceptance Criteria:
-        {{parent.AcceptanceCriteria}}
+        {{parent.AcceptanceCriteria ?? "-"}}
 
         Recent comments:
         {{commentsBlock}}
