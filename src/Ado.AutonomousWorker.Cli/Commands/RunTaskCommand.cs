@@ -19,6 +19,12 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
         [CommandOption("--pr <PULL_REQUEST_ID>")]
         public int? PullRequestId { get; init; }
 
+        [Description(
+            "Override the iteration path used for backlog items (e.g. 'MyProject\\Sprint 5'). Has no effect on items already assigned to a sprint."
+        )]
+        [CommandOption("--iteration [ITERATION_PATH]")]
+        public string? Iteration { get; init; }
+
         public override ValidationResult Validate()
         {
             if (WorkItemId is null && PullRequestId is null)
@@ -50,7 +56,7 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
         {
             executionId = await liveDisplay.RunForWorkItemAsync(
                 settings.WorkItemId!.Value,
-                token => taskOrchestrator.RunTaskAsync(settings.WorkItemId.Value, token),
+                token => taskOrchestrator.RunTaskAsync(settings.WorkItemId.Value, settings.Iteration, token),
                 cancellationToken
             );
         }

@@ -24,6 +24,9 @@ internal abstract record PhaseContext
     /// </summary>
     internal sealed record WorkItemContext : PhaseContext
     {
+        /// <summary>When set, overrides the current-sprint lookup for backlog items.</summary>
+        public string? IterationOverride { get; init; }
+
         /// <summary>Set by EligibilityHandler.</summary>
         public string? CurrentSprintPath { get; set; }
 

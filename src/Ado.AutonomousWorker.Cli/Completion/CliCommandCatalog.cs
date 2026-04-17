@@ -65,10 +65,14 @@ public static class CliCommandCatalog
         {
             [string.Empty] = ["--force"],
         },
+        ["run"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [string.Empty] = ["--iteration"],
+        },
         ["task"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["resume"] = ["--execution-id", "--last"],
-            ["run"] = ["--id", "--pr"],
+            ["run"] = ["--id", "--pr", "--iteration"],
             ["set-phase"] = ["--execution-id", "--last", "--phase"],
         },
         ["ui"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)

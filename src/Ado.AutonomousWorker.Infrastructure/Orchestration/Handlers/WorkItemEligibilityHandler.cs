@@ -52,8 +52,18 @@ internal sealed class WorkItemEligibilityHandler(
             return PhaseTransition.Skip();
         }
 
-        context.CurrentSprintPath =
-            await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken) ?? workItem.IterationPath;
+        var currentSprint =
+            context.IterationOverride ?? await azureDevOpsClient.GetCurrentSprintPathAsync(cancellationToken);
+
+        // Backlog items have a path that is a strict ancestor of the sprint path
+        // (e.g. "PRIIS\03 Basuppföljning" is a parent of "PRIIS\03 Basuppföljning\Sprint 39").
+        // Items already in any sprint (current, past, or future) have a path that is not
+        // a strict ancestor, so they are left in their assigned sprint.
+        var isInBacklog = currentSprint is not null
+            ? currentSprint.StartsWith(workItem.IterationPath + '\\', StringComparison.OrdinalIgnoreCase)
+            : !workItem.IterationPath.Contains('\\');
+
+        context.CurrentSprintPath = isInBacklog ? currentSprint ?? workItem.IterationPath : workItem.IterationPath;
 
         await EnsureWorkItemReadyAsync(workItem, context.CurrentSprintPath, cancellationToken);
         return PhaseTransition.To(TaskPhase.Planning);
@@ -85,7 +95,11 @@ internal sealed class WorkItemEligibilityHandler(
             );
         }
 
-        if (workItem.Kind == QueueItemKind.AiWork && !string.IsNullOrWhiteSpace(currentSprint))
+        if (
+            workItem.Kind == QueueItemKind.AiWork
+            && !string.IsNullOrWhiteSpace(currentSprint)
+            && !string.Equals(workItem.IterationPath, currentSprint, StringComparison.OrdinalIgnoreCase)
+        )
         {
             await azureDevOpsClient.UpdateIterationPathAsync(workItem.WorkItemId, currentSprint, cancellationToken);
             logger.LogInformation(

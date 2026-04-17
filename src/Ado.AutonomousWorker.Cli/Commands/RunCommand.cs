@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Ado.AutonomousWorker.Cli.Presentation;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
@@ -13,9 +14,22 @@ public sealed class RunCommand(
     QueueInspector queueInspector,
     ExecutionLiveDisplay liveDisplay,
     IOptions<WorkerOptions> workerOptions
-) : AsyncCommand
+) : AsyncCommand<RunCommand.Settings>
 {
-    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public sealed class Settings : CommandSettings
+    {
+        [Description(
+            "Override the iteration path used for backlog items (e.g. 'MyProject\\Sprint 5'). Has no effect on items already assigned to a sprint."
+        )]
+        [CommandOption("--iteration [ITERATION_PATH]")]
+        public string? Iteration { get; init; }
+    }
+
+    protected override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    )
     {
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
         var queue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
@@ -46,7 +60,7 @@ public sealed class RunCommand(
             var executionId = await liveDisplay.RunForWorkItemAsync(
                 title,
                 item.WorkItemId,
-                token => taskOrchestrator.RunTaskAsync(item, token),
+                token => taskOrchestrator.RunTaskAsync(item, settings.Iteration, token),
                 cancellationToken
             );
 

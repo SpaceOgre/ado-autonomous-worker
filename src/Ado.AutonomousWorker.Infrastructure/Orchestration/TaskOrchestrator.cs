@@ -20,16 +20,16 @@ internal sealed class TaskOrchestrator(
     ILogger<TaskOrchestrator> logger
 ) : ITaskOrchestrator
 {
-    public Task<string> RunTaskAsync(QueueItem item, CancellationToken cancellationToken)
+    public Task<string> RunTaskAsync(QueueItem item, string? iterationOverride, CancellationToken cancellationToken)
     {
         var prTarget = item.PullRequestId is not null
             ? new PrTarget(item.PullRequestId.Value, item.PrRepositoryName!, item.PrBranchName!)
             : null;
-        return RunTaskAsync(item.WorkItemId, prTarget, cancellationToken);
+        return RunTaskAsync(item.WorkItemId, iterationOverride, prTarget, cancellationToken);
     }
 
-    public Task<string> RunTaskAsync(int workItemId, CancellationToken cancellationToken) =>
-        RunTaskAsync(workItemId, prTarget: null, cancellationToken);
+    public Task<string> RunTaskAsync(int workItemId, string? iterationOverride, CancellationToken cancellationToken) =>
+        RunTaskAsync(workItemId, iterationOverride, prTarget: null, cancellationToken);
 
     public async Task<string> RunPrFixAsync(int pullRequestId, CancellationToken cancellationToken)
     {
@@ -38,10 +38,15 @@ internal sealed class TaskOrchestrator(
             ?? throw new InvalidOperationException(
                 $"PR #{pullRequestId} does not have the required AI-Rework label or has no linked work items."
             );
-        return await RunTaskAsync(item, cancellationToken);
+        return await RunTaskAsync(item, iterationOverride: null, cancellationToken);
     }
 
-    private async Task<string> RunTaskAsync(int workItemId, PrTarget? prTarget, CancellationToken cancellationToken)
+    private async Task<string> RunTaskAsync(
+        int workItemId,
+        string? iterationOverride,
+        PrTarget? prTarget,
+        CancellationToken cancellationToken
+    )
     {
         await PrepareRuntimeAsync(cancellationToken);
 
@@ -92,6 +97,7 @@ internal sealed class TaskOrchestrator(
                 WorkItem = workItem,
                 IsExplicitResume = false,
                 Journal = executionJournal,
+                IterationOverride = iterationOverride,
             };
 
         await RunWithMachineAsync(context, TaskPhase.Queued, cancellationToken);
