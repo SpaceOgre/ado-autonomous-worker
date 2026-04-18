@@ -51,31 +51,78 @@ internal sealed class PlanningHandler(
             cancellationToken
         );
 
+        var backendPath = repositoryOptions.Value.Backend.BaseClonePath;
+        var frontendPath = repositoryOptions.Value.Frontend.BaseClonePath;
+
+        if (string.IsNullOrWhiteSpace(backendPath))
+            throw new InvalidOperationException(
+                "RepositoryOptions.Backend.BaseClonePath is not configured. Check appsettings.json."
+            );
+        if (string.IsNullOrWhiteSpace(frontendPath))
+            throw new InvalidOperationException(
+                "RepositoryOptions.Frontend.BaseClonePath is not configured. Check appsettings.json."
+            );
+
+        logger.LogDebug(
+            "Execution {ExecutionId}: planning with backend '{BackendPath}', frontend '{FrontendPath}'.",
+            context.ExecutionId,
+            backendPath,
+            frontendPath
+        );
+
         var rawPrompt = $$"""
             Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
 
-            Work item: #{{workItem.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(
-                workItem.WorkItemType
-            )}} {{workItem.Title}}
-            State: {{workItem.State}}
-            Assigned to: {{workItem.AssignedTo}}
-            Iteration: {{workItem.IterationPath}}
-            Tags: {{string.Join(", ", workItem.Tags)}}
-            Parent feature: {{workItem.ParentFeatureTitle ?? "-"}}
-
-            Description:
+            <work-item id="{{workItem.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(workItem.WorkItemType)}}" title="{{workItem.Title}}">
+            <state>{{workItem.State}}</state>
+            <assigned-to>{{workItem.AssignedTo}}</assigned-to>
+            <iteration>{{workItem.IterationPath}}</iteration>
+            <tags>{{string.Join(", ", workItem.Tags)}}</tags>
+            <parent-feature>{{workItem.ParentFeatureTitle ?? "-"}}</parent-feature>
+            <description>
             {{workItem.Description}}
-
-            Acceptance Criteria:
+            </description>
+            <acceptance-criteria>
             {{workItem.AcceptanceCriteria}}
-
-            Recent comments:
+            </acceptance-criteria>
+            <recent-comments>
             {{commentsBlock}}
+            </recent-comments>
+            </work-item>
+
+            ## Step 1: Explore the repositories
+
+            Before deciding scope, read the repository structure to understand the tech stack, existing conventions, and where the relevant code lives. Look at directory layout, key entry points, and test file locations.
+
+            Repository paths:
+            - {{backendPath}}
+            - {{frontendPath}}
+
+            ## Step 2: Determine scope
+
+            Choose exactly one value:
+            - `Backend` — all changes are server-side only (API, domain logic, database, background jobs).
+            - `Frontend` — all changes are client-side only (UI components, styles, browser logic).
+            - `Fullstack` — changes span both repositories (e.g. new API endpoint consumed by new UI, schema change visible to the frontend).
+
+            Prefer a narrower scope over `Fullstack` when in doubt.
+
+            ## Step 3: Output rules
+
+            Return JSON matching the supplied schema exactly. Field guidance:
+            - `scope`: one of `Backend`, `Frontend`, `Fullstack`.
+            - `repositories`: absolute paths of the repositories that must be modified (only those in scope).
+            - `validationTargets`: shell commands that verify the change is correct (build + test commands for each in-scope repository). Use commands you observed in the repository (e.g. `dotnet build`, `dotnet test`, `npm run test`).
+            - `testIntent`: specific descriptions of tests to add or update. Name the component or function and the behavior to test. Omit entries for trivial getters or pure configuration — only include non-trivial logic.
+            - `risks`: open questions or implementation risks that could affect delivery (breaking changes, missing requirements, migration concerns). Empty array if none.
+            - `summary`: one or two sentences — what will be built and why. This is shown in the execution log.
+
+            Do not speculate beyond what the acceptance criteria describe.
             """;
 
         var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory([
-            repositoryOptions.Value.Backend.BaseClonePath,
-            repositoryOptions.Value.Frontend.BaseClonePath,
+            backendPath,
+            frontendPath,
         ]);
 
         var prompt = await PromptTemplateLoader.ApplyAsync(config, rawPrompt, cancellationToken);
@@ -102,29 +149,33 @@ internal sealed class PlanningHandler(
             );
 
         var plan =
-            ParsePlan(startResult.Result.StructuredPayload)
+            ParsePlan(startResult.Result.StructuredPayload, logger)
             ?? throw new InvalidOperationException("Planning agent returned invalid or empty structured output.");
 
+        ValidatePlanRepositories(plan, backendPath, frontendPath);
+
+        var safeSummary = plan.Summary.ReplaceLineEndings(" ");
         await stateStore.SavePlanAsync(context.ExecutionId, plan, cancellationToken);
         await context.Journal.AppendEventAsync(
             context.ExecutionId,
             TaskPhase.Planning,
-            plan.Summary,
+            safeSummary,
             cancellationToken
         );
 
         logger.LogInformation(
-            "Execution {ExecutionId} plan complete: scope {Scope}, repos {Repositories}.",
+            "Execution {ExecutionId} plan complete: scope {Scope}, repos {Repositories}, testIntent {TestIntentCount} item(s).",
             context.ExecutionId,
             plan.Scope,
-            string.Join(", ", plan.Repositories)
+            string.Join(", ", plan.Repositories),
+            plan.TestIntent.Count
         );
 
         context.Plan = plan;
         return PhaseTransition.To(TaskPhase.Coding);
     }
 
-    private static PlanResult? ParsePlan(string? payload)
+    private static PlanResult? ParsePlan(string? payload, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(payload))
             return null;
@@ -140,14 +191,35 @@ internal sealed class PlanningHandler(
                 scope,
                 plan.Repositories?.ToArray() ?? [],
                 plan.ValidationTargets?.ToArray() ?? [],
-                plan.TestIntent?.ToArray() ?? [],
+                plan.TestIntent?.Select(t => t.ReplaceLineEndings(" ").Trim())
+                               .Where(t => t.Length > 0)
+                               .ToArray() ?? [],
                 plan.Risks?.ToArray() ?? [],
                 plan.Summary ?? "Planning completed."
             );
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            logger.LogWarning(
+                ex,
+                "Failed to parse planning output. Payload length: {PayloadLength}.",
+                payload.Length
+            );
             return null;
+        }
+    }
+
+    private static void ValidatePlanRepositories(PlanResult plan, string backendPath, string frontendPath)
+    {
+        foreach (var repo in plan.Repositories)
+        {
+            if (!repo.StartsWith(backendPath, StringComparison.OrdinalIgnoreCase) &&
+                !repo.StartsWith(frontendPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Planning agent returned a repository path outside configured roots: '{repo}'."
+                );
+            }
         }
     }
 

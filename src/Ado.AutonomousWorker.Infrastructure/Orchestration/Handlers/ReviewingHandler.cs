@@ -129,20 +129,20 @@ internal sealed class ReviewingHandler(
         return $$"""
             You are performing a focused code review of a completed implementation. Your job is to find real problems, not speculate.
 
-            Parent item: #{{parent.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(
-                parent.WorkItemType
-            )}} {{parent.Title}}
             Agent working directory: {{agentWorkingDirectory}}
-            Parent feature: {{parent.ParentFeatureTitle ?? "-"}}
 
-            Description:
+            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}}" title="{{parent.Title}}">
+            <parent-feature>{{parent.ParentFeatureTitle ?? "-"}}</parent-feature>
+            <description>
             {{parent.Description ?? "-"}}
-
-            Acceptance Criteria:
+            </description>
+            <acceptance-criteria>
             {{parent.AcceptanceCriteria ?? "-"}}
-
-            Recent comments:
+            </acceptance-criteria>
+            <recent-comments>
             {{commentsBlock}}
+            </recent-comments>
+            </work-item>
 
             Repositories:
             {{repositorySummary}}
@@ -190,7 +190,7 @@ internal sealed class ReviewingHandler(
             - Return JSON matching the supplied schema exactly.
 
             Requirements:
-            - Do not create commits, push branches, open pull requests, link work items, or publish changes.
+            - Do not create commits, push branches, open pull requests, link work items, or publish changes to Azure DevOps or Git hosting systems.
             """;
     }
 }

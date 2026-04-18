@@ -14,6 +14,29 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         await context.Database.EnsureCreatedAsync(cancellationToken);
+        await MigrateSchemaAsync(cancellationToken);
+    }
+
+    private async Task MigrateSchemaAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var connection = context.Database.GetDbConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        using var pragmaCmd = connection.CreateCommand();
+        pragmaCmd.CommandText = "PRAGMA table_info(execution_plans)";
+        using var reader = await pragmaCmd.ExecuteReaderAsync(cancellationToken);
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (await reader.ReadAsync(cancellationToken))
+            columns.Add(reader.GetString(1));
+
+        if (!columns.Contains("test_intent_json"))
+        {
+            using var alterCmd = connection.CreateCommand();
+            alterCmd.CommandText =
+                "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
+            await alterCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
@@ -447,7 +470,8 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
 
     private static string Serialize(IReadOnlyList<string> values) => JsonSerializer.Serialize(values);
 
-    private static IReadOnlyList<string> Deserialize(string json) => JsonSerializer.Deserialize<string[]>(json) ?? [];
+    private static IReadOnlyList<string> Deserialize(string? json) =>
+        string.IsNullOrWhiteSpace(json) ? [] : JsonSerializer.Deserialize<string[]>(json) ?? [];
 
     private static string Truncate(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength];

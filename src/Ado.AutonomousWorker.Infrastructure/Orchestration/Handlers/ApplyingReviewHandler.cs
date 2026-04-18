@@ -89,10 +89,12 @@ internal sealed class ApplyingReviewHandler(
             findings.Select(f =>
             {
                 var categoryLabel = f.Category is not null ? $" ({f.Category})" : string.Empty;
+                var title = f.Title.ReplaceLineEndings(" ").Trim();
+                var rationale = f.Rationale.ReplaceLineEndings(" ").Trim();
                 var fix = string.IsNullOrWhiteSpace(f.SuggestedFix)
                     ? string.Empty
-                    : $"{Environment.NewLine}  Fix: {f.SuggestedFix}";
-                return $"- [{f.Severity}{categoryLabel}] {f.Title}: {f.Rationale}{fix}";
+                    : $"{Environment.NewLine}  Fix: {f.SuggestedFix.ReplaceLineEndings(" ").Trim()}";
+                return $"- [{f.Severity}{categoryLabel}] {title}: {rationale}{fix}";
             })
         );
 
@@ -104,7 +106,7 @@ internal sealed class ApplyingReviewHandler(
 
             Requirements:
             - Address each finding using the suggested fix where provided.
-            - Do not create commits, push branches, open pull requests, link work items, or publish changes.
+            - Do not create commits, push branches, open pull requests, link work items, or publish changes to Azure DevOps or Git hosting systems.
             """;
     }
 }

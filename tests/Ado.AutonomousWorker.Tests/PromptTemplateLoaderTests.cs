@@ -125,7 +125,7 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         await Assert.That(prompt).IsNotNull();
         await Assert.That(prompt).Contains("Detailed business description.");
         await Assert.That(prompt).Contains("1. Save data");
-        await Assert.That(prompt).Contains("Acceptance Criteria:");
+        await Assert.That(prompt).Contains("acceptance-criteria");
     }
 
     [Test]
@@ -189,10 +189,75 @@ public sealed class PromptTemplateLoaderTests : IDisposable
             );
 
         await Assert.That(prompt).IsNotNull();
-        await Assert.That(prompt).Contains("Parent feature: Feature - Accounts");
-        await Assert.That(prompt).Contains("Recent comments:");
+        await Assert.That(prompt).Contains("Feature - Accounts");
+        await Assert.That(prompt).Contains("recent-comments");
         await Assert.That(prompt).Contains("Please fix the failing save flow.");
         await Assert.That(prompt).Contains("Update the validation message.");
+    }
+
+    [Test]
+    public async Task BuildCodePrompt_InjectsTestIntentBulletsWhenNonEmpty()
+    {
+        var repositoryWorkflowServiceType = typeof(PromptTemplateLoader).Assembly.GetType(
+            "Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers.WorkItemCodingHandler",
+            throwOnError: true
+        );
+        await Assert.That(repositoryWorkflowServiceType).IsNotNull();
+
+        var method = repositoryWorkflowServiceType!.GetMethod(
+            "BuildCodePrompt",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        await Assert.That(method).IsNotNull();
+
+        var repositoryExecutionType = typeof(PromptTemplateLoader).Assembly.GetType(
+            "Ado.AutonomousWorker.Infrastructure.Orchestration.RepositoryExecution",
+            throwOnError: true
+        );
+        await Assert.That(repositoryExecutionType).IsNotNull();
+
+        var repositoryExecution = Activator.CreateInstance(
+            repositoryExecutionType!,
+            new ChildTaskRecord(28883, RepoKind.Backend, "Backend - Story", "Active"),
+            new RepositoryProfile { Kind = RepoKind.Backend, ValidationCommands = ["dotnet build --no-restore"] },
+            new RepoExecutionContext(28639, 28883, RepoKind.Backend, "feature/28883_story", @"D:\worktrees\backend"),
+            @"D:\artifacts"
+        );
+
+        var repositoryExecutions = Array.CreateInstance(repositoryExecutionType!, 1);
+        repositoryExecutions.SetValue(repositoryExecution, 0);
+
+        var prompt = (string?)
+            method!.Invoke(
+                null,
+                [
+                    new WorkItemDetails
+                    {
+                        WorkItemId = 1,
+                        WorkItemType = WorkItemType.UserStory,
+                        Title = "T",
+                    },
+                    repositoryExecutions,
+                    new PlanResult(
+                        WorkItemScope.Backend,
+                        ["Backend"],
+                        ["dotnet build"],
+                        [
+                            "UserService.CreateAsync — validates duplicate email",
+                            "OrderRepository.SaveAsync — rolls back on DB error",
+                        ],
+                        [],
+                        "Summary."
+                    ),
+                    @"D:\worktrees",
+                    string.Empty,
+                ]
+            );
+
+        await Assert.That(prompt).IsNotNull();
+        await Assert.That(prompt).Contains("- UserService.CreateAsync — validates duplicate email");
+        await Assert.That(prompt).Contains("- OrderRepository.SaveAsync — rolls back on DB error");
+        await Assert.That(prompt).DoesNotContain("Update or add tests where the change introduces non-trivial logic.");
     }
 
     public void Dispose()

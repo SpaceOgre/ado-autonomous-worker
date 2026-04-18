@@ -95,6 +95,12 @@ internal sealed class WorkItemCodingHandler(
             cancellationToken
         );
 
+        logger.LogDebug(
+            "Execution {ExecutionId}: coding with {TestIntentCount} test intent item(s).",
+            context.ExecutionId,
+            plan.TestIntent.Count
+        );
+
         var config = agentOptions.Value.Code;
         var codeStart = await agentRunnerFactory
             .GetRunner(config.Provider)
@@ -103,7 +109,13 @@ internal sealed class WorkItemCodingHandler(
                 config,
                 await PromptTemplateLoader.ApplyAsync(
                     config,
-                    BuildCodePrompt(workItem, repositoryExecutions, plan, agentWorkingDirectory, commentsBlock),
+                    BuildCodePrompt(
+                        workItem,
+                        repositoryExecutions,
+                        plan,
+                        agentWorkingDirectory,
+                        commentsBlock
+                    ),
                     cancellationToken
                 ),
                 agentWorkingDirectory,
@@ -166,34 +178,59 @@ internal sealed class WorkItemCodingHandler(
             repositoryExecutions,
             agentWorkingDirectory
         );
+        var testIntentBlock =
+            plan.TestIntent.Count > 0
+                ? $"Add or update tests for the following:\n{string.Join("\n", plan.TestIntent.Select(t => $"- {t}"))}"
+                : "Update or add tests where the change introduces non-trivial logic.";
+
         return $$"""
             Implement this Azure DevOps work item across the listed repositories as one coordinated change.
 
-            Parent item: #{{parent.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(
-                parent.WorkItemType
-            )}} {{parent.Title}}
             Agent working directory: {{agentWorkingDirectory}}
             Plan summary: {{plan.Summary}}
-            Parent feature: {{parent.ParentFeatureTitle ?? "-"}}
 
-            Description:
+            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}}" title="{{parent.Title}}">
+            <parent-feature>{{parent.ParentFeatureTitle ?? "-"}}</parent-feature>
+            <description>
             {{parent.Description}}
-
-            Acceptance Criteria:
+            </description>
+            <acceptance-criteria>
             {{parent.AcceptanceCriteria}}
-
-            Recent comments:
+            </acceptance-criteria>
+            <recent-comments>
             {{commentsBlock}}
+            </recent-comments>
+            </work-item>
 
             Repositories:
             {{repositorySummary}}
+
+            ## Step 1: Explore before implementing
+
+            Before writing any code, read the existing code in the areas you will modify. Understand:
+            - File structure and naming conventions in use.
+            - How similar features are already implemented.
+            - What test patterns and helper utilities exist.
+
+            ## Step 2: Implement
+
+            Make all changes needed to satisfy the acceptance criteria. Follow the conventions you observed. When more than one repository is in scope, coordinate backend and frontend changes as a single unit — changes that belong together must be consistent across both.
+
+            Only modify files under the listed repository paths. Keep each repository on its prepared branch.
+
+            ## Step 3: Tests
+
+            {{testIntentBlock}}
+
+            ## Step 4: Validate
+
+            After implementing, run the validation commands listed for each repository above to confirm the change compiles and tests pass. Fix any failures before finishing.
 
             Requirements:
             - Treat the listed repositories as one implementation scope.
             - Only modify files under the listed repository paths.
             - Coordinate backend and frontend changes together when more than one repository is listed.
             - Keep each repository on its prepared branch.
-            - Update or add tests when relevant.
             - Do not create commits, push branches, open pull requests, link work items, or publish changes to Azure DevOps or Git hosting systems.
             - Leave every listed repository in a reviewable state for validation and PR creation.
             """;
