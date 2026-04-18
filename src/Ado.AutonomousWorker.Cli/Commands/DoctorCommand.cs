@@ -9,7 +9,11 @@ public sealed class DoctorCommand(DoctorService doctorService) : AsyncCommand
 {
     protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var results = await doctorService.RunAsync(cancellationToken);
+        var results = await AnsiConsole
+            .Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("Running diagnostics…", _ => doctorService.RunAsync(cancellationToken));
+
         var table = new Table().Border(TableBorder.Rounded).AddColumns("Check", "Status", "Detail");
 
         foreach (var result in results)
