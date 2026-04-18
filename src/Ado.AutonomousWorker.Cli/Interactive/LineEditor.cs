@@ -45,10 +45,12 @@ public sealed class LineEditor
 
         while (!ct.IsCancellationRequested)
         {
-            if (!Console.KeyAvailable)
+            // Wait for key availability, checking cancellation periodically.
+            while (!Console.KeyAvailable)
             {
-                Thread.Sleep(15);
-                continue;
+                if (ct.IsCancellationRequested)
+                    return null;
+                Thread.Sleep(50);
             }
 
             var key = Console.ReadKey(intercept: true);

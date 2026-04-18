@@ -12,6 +12,7 @@ namespace Ado.AutonomousWorker.Cli.Interactive;
 public sealed class InteractiveSession(IServiceProvider services)
 {
     private readonly SlashCommandRegistry _registry = new();
+    private bool _exitRequested;
 
     public async Task<int> RunAsync(CancellationToken ct)
     {
@@ -20,7 +21,7 @@ public sealed class InteractiveSession(IServiceProvider services)
 
         RenderWelcome();
 
-        while (!ct.IsCancellationRequested)
+        while (!ct.IsCancellationRequested && !_exitRequested)
         {
             string? input;
             try
@@ -100,8 +101,7 @@ public sealed class InteractiveSession(IServiceProvider services)
             case "exit":
             case "quit":
             case "q":
-                RenderGoodbye();
-                Environment.Exit(0);
+                _exitRequested = true;
                 return true;
 
             default:
