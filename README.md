@@ -2,6 +2,21 @@
 
 A `.NET 10` console application for automating repetitive Azure DevOps work around PRIIS backlog items.
 
+## Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [`claude` CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- [`codex` CLI](https://github.com/openai/codex) installed and authenticated (if using Codex as a provider)
+- Azure DevOps organisation with a project containing the backlog
+- A PAT with scopes: **Work Items** (Read & Write), **Code** (Read & Write), **Build** (Read & Execute), **Pull Request Threads** (Read & Write)
+
+## Quick Start
+
+1. Copy `src/Ado.AutonomousWorker.Cli/appsettings.json` to `src/Ado.AutonomousWorker.Cli/appsettings.local.json` and fill in your `AzureDevOps` and `Agents` settings.
+2. Run `ado-worker doctor` to verify connectivity.
+3. Run `ado-worker queue` to preview the current backlog slice.
+4. Run `ado-worker run` to start processing.
+
 ## How It Works
 
 The worker picks up work items tagged `AI-Work` (or `AI-Rework`) from the Azure DevOps backlog, runs them through a phase-based AI pipeline, and publishes a draft PR linked back to the work item. It also monitors existing AI-generated PRs for reviewer feedback and addresses review comments automatically.
@@ -10,23 +25,14 @@ The worker picks up work items tagged `AI-Work` (or `AI-Rework`) from the Azure 
 
 | Kind          | Trigger                      | Phase flow                                                       | On success                                      | On failure                                                                                         |
 | ------------- | ---------------------------- | ---------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **AI Work**   | Work item tagged `AI-Work`   | Queued → Planning → Coding → Reviewing → Validating → Publishing | Tag `AI-Done`, post success comment             | Tag `AI-Failed`, post failure comment                                                              |
-| **AI Rework** | Work item tagged `AI-Rework` | Same as AI Work                                                  | Same as AI Work                                 | Same as AI Work                                                                                    |
+| **AI Work**   | Work item tagged `AI-Work`   | Queued → Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing | Tag `AI-Done`, post success comment             | Tag `AI-Failed`, post failure comment                                                              |
+| **AI Rework** | Work item tagged `AI-Rework` | Same as AI Work                                                                    | Same as AI Work                                 | Same as AI Work                                                                                    |
 | **PR Fix**    | PR has the `AI-Rework` label | Queued → Coding → Validating → Publishing                        | Remove `AI-Rework` label from PR, tag `AI-Done` | Leave `AI-Rework` label intact (so developer knows it still needs attention), post failure comment |
 
 PR Fix skips Planning and Reviewing — the existing PR branch defines the scope and the reviewer's comments are the quality signal.
 
 ```mermaid
 flowchart TD
-    classDef ado     fill:#4A90D9,stroke:#2C5F8A,color:#fff
-    classDef queue   fill:#8E44AD,stroke:#6C3483,color:#fff
-    classDef agent   fill:#1A8C5E,stroke:#116040,color:#fff
-    classDef infra   fill:#5D6D7E,stroke:#3D4F5E,color:#fff
-    classDef check   fill:#D4840A,stroke:#A0620A,color:#fff
-    classDef success fill:#27AE60,stroke:#1A7A42,color:#fff
-    classDef failure fill:#C0392B,stroke:#8E2418,color:#fff
-    classDef skipped fill:#7F8C8D,stroke:#5D6D6E,color:#fff
-
     ADO["Azure DevOps<br/>Work item tagged AI-Work / AI-Rework"]
     Queue["Queue inspection<br/>Order by stack rank → priority<br/>Cap at MaxItemsPerRun"]
     TooLarge["Tag: AI-TooLarge<br/>Skip item"]
@@ -54,28 +60,31 @@ flowchart TD
     Publish --> Done
     Plan -- "Error" --> Failed
     Code -- "Error" --> Failed
+```
 
-    class ADO ado
-    class Queue queue
-    class TooLarge skipped
-    class Plan,Code,Review,ApplyReview agent
-    class Worktree infra
-    class Validate check
-    class Publish check
-    class Done success
-    class Failed failure
+### PR Fix flow
+
+```mermaid
+flowchart TD
+    PR["PR labelled AI-Rework"]
+    Code["Coding<br/>Claude addresses review comments"]
+    Validate["Validation<br/>dotnet build / npm run build"]
+    Publish["Publishing<br/>Commit pushed, PR updated"]
+    Done["Tag: AI-Done added<br/>AI-Rework label removed"]
+    Failed["AI-Rework label left intact<br/>Failure comment posted"]
+
+    PR --> Code
+    Code --> Validate
+    Validate -- "Build fails" --> Failed
+    Validate -- "Build passes" --> Publish
+    Publish --> Done
+    Code -- "Error" --> Failed
 ```
 
 ### Task Phases
 
 ```mermaid
 stateDiagram-v2
-    classDef agent   fill:#1A8C5E,stroke:#116040,color:#fff
-    classDef check   fill:#D4840A,stroke:#A0620A,color:#fff
-    classDef success fill:#27AE60,stroke:#1A7A42,color:#fff
-    classDef failure fill:#C0392B,stroke:#8E2418,color:#fff
-    classDef skipped fill:#7F8C8D,stroke:#5D6D6E,color:#fff
-
     [*] --> Queued
     Queued --> Planning
     Planning --> Coding
@@ -93,12 +102,6 @@ stateDiagram-v2
     Completed --> [*]
     Failed --> [*]
     Skipped --> [*]
-
-    class Planning,Coding,Reviewing,ApplyingReview agent
-    class Validating,Publishing check
-    class Completed success
-    class Failed failure
-    class Skipped skipped
 ```
 
 `task resume` is phase-aware: it reuses an existing plan instead of re-running planning, and resumes at the `Validating` checkpoint while preserving the worktree so you can fix issues manually and retry.
@@ -119,15 +122,6 @@ stateDiagram-v2
 | -------------- | ---------------------------------------- | --------------------------------- |
 | `AI-Generated` | PR is created by the worker              | —                                 |
 | `AI-Rework`    | Manually by reviewer to request AI fixes | PR Fix run completes successfully |
-
-## Features
-
-- Query eligible `AI-Work` and `AI-Rework` user stories.
-- Update work item state, tags, iteration path, comments, and child tasks.
-- Orchestrate separate `Plan`, `Code`, and `Review` AI roles with configurable `Codex CLI` and `Claude Code CLI` providers.
-- Create isolated git worktrees per repo task.
-- Persist execution state in SQLite and keep append-only runtime logs/artifacts.
-- Provide a terminal UI with commands for queue inspection, execution, resume, bootstrap, and health checks.
 
 ## Commands
 
@@ -169,25 +163,31 @@ ado-worker ui run-preview
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
 
+`ado-worker bootstrap` performs first-time setup: creates the local SQLite database, validates configuration, and confirms agent connectivity.
+
+`ado-worker reset` removes all execution state from the local database. Pass `--force` to skip the confirmation prompt.
+
+`ado-worker version` prints the current tool version.
+
+`ado-worker executions` lists recent executions. Pass `--active` to show only in-progress executions.
+
+`ado-worker execution show --id <execution-id>` (or `--last`) displays the full detail for a single execution: phases, agent output, plan, and review results.
+
 `ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive. Pass `--iteration` to override the iteration path the work item is assigned to (e.g. `--iteration "MyProject\Sprint 5"`); this has no effect on items that already belong to a sprint.
 
-`ado-worker run` accepts the same `--iteration` flag to override the iteration path for all items in the queue.
+`ado-worker run` first previews the exact queue slice it will execute (including the current ordering and `MaxItemsPerRun` cap) and then starts immediately. It is intentionally fail-fast: if one queued work item fails, the command stops so you can inspect and fix before spending more agent tokens. Pass `--iteration` to override the iteration path for all items in the queue.
 
 `ado-worker deploy` triggers the configured backend and frontend Azure Pipelines from `main`, polls until both succeed (or times out), then promotes all resolved tasks and bugs in the current sprint to **Ready for test** and assigns them to the configured tester. User stories whose every child is now **Ready for test** or **Closed** are also promoted. Pass `--dry-run` to preview the work item changes without triggering any pipelines or making any updates. Pass `--tag <tagname>` to trigger both pipelines from a specific git tag instead of the default branch (e.g. `ado-worker deploy --tag v1.2.3`). Pass `--backend` to trigger only the backend pipeline, or `--frontend` to trigger only the frontend pipeline — useful when you know changes are limited to one service.
 
-`ado-worker run` first previews the exact queue slice it will execute, including the current ordering and `MaxItemsPerRun` cap, and then starts immediately.
-
-`ado-worker run` is intentionally fail-fast. If one queued work item fails, the command stops immediately so you can inspect and fix the issue before spending more agent tokens on the remaining backlog items.
-
 Use `ado-worker task set-phase` to rewind a completed or failed execution to an earlier phase (`Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`) and reset its status to `Failed` so `task resume` can continue from that point.
+
+`ado-worker task resume` is phase-aware. When a plan already exists it is reused instead of rerunning planning, and resumes after validation or publishing preserve the existing worktree so you can fix the issue manually and retry validation without resetting the branch.
 
 Use `ado-worker agent test` to verify agent connectivity before running real tasks. It sends a minimal prompt to each configured agent (Plan, Code, Review, Pr) and reports whether each one responded successfully. Pass `--role plan|code|review|pr` to test a single agent.
 
 Use `ado-worker ado comment-test --work-item <ID>` to post a sample markdown comment to a work item and verify that it renders correctly in Azure DevOps.
 
 Use `ado-worker ui splash` to test the branded run banner without touching queue state, and `ado-worker ui run-preview` to render the exact queue slice that `ado-worker run` would process without starting any agent work.
-
-`ado-worker task resume` is phase-aware. When a plan already exists it is reused instead of rerunning planning, and resumes after validation or publishing preserve the existing worktree so you can fix the issue manually and retry validation without resetting the branch.
 
 ## Configuration
 
@@ -216,7 +216,7 @@ The `deploy` command is controlled by the `Deploy` section:
 | `Deploy:TimeoutMinutes`       | `60`     | Maximum total time to wait for both pipelines combined before aborting.          |
 | `Deploy:ReadyForTestAssignee` | `""`     | Email of the user to assign when transitioning work items to **Ready for test**. |
 
-Set these in `appsettings.local.json` (or `config.jsonc`). You can find pipeline definition IDs in Azure DevOps under **Pipelines** → select the pipeline → the ID is in the URL (`?definitionId=<id>`).
+Set these in `appsettings.local.json`. You can find pipeline definition IDs in Azure DevOps under **Pipelines** → select the pipeline → the ID is in the URL (`?definitionId=<id>`).
 
 Execution state, logs, artifacts, and the local SQLite database are stored under:
 
@@ -227,23 +227,34 @@ You can still override the storage paths in `appsettings.local.json` with absolu
 ## Development
 
 ```powershell
+# Build the CLI
 dotnet build src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj
+
+# Build the dashboard
+dotnet build src/Ado.AutonomousWorker.Dashboard/Ado.AutonomousWorker.Dashboard.csproj
+
+# Run all tests
 dotnet run --project tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj
+
+# Run a single test class
+dotnet run --project tests/Ado.AutonomousWorker.Tests/Ado.AutonomousWorker.Tests.csproj -- --filter "FullyQualifiedName~RulesEngineTests"
+
+# Format code
 dotnet csharpier format .
 ```
 
+Use `dotnet run --project` rather than `dotnet test` — the test project uses a custom entry-point runner.
+
 Run `dotnet csharpier format .` after making code changes to keep formatting consistent.
 
-## Which Install Mode
+## Installation
 
-- Local tool: use this when you only need the command inside this repository.
-- Global tool: use this when you want `ado-worker` to work from any folder on your machine.
+- **Local tool** — available only inside this repository. Good for contributors.
+- **Global tool** — available from any folder on your machine. Good for day-to-day use.
 
-## Local Tool
+### Local Tool
 
-Use this when you want the tool to be available only inside this repository.
-
-### Install
+#### Install
 
 Install or refresh the repo-local .NET tool:
 
@@ -251,7 +262,7 @@ Install or refresh the repo-local .NET tool:
 .\scripts\install-local-tool.ps1
 ```
 
-### Run
+#### Run
 
 Run the local tool from the repository root:
 
@@ -271,7 +282,7 @@ Then you can run:
 ado-worker queue
 ```
 
-### PowerShell Completion
+#### PowerShell Completion
 
 Print the registration script:
 
@@ -292,11 +303,11 @@ Add-Content -Path $PROFILE -Value "`nfunction ado-worker { dotnet tool run ado-w
 Add-Content -Path $PROFILE -Value "`nInvoke-Expression (((& { dotnet tool run ado-worker -- completion powershell }) -join \"`n\"))"
 ```
 
-## Global Tool
+### Global Tool
 
 Use this when you want `ado-worker` to work from any folder on your machine.
 
-### Install
+#### Install
 
 Install or refresh the global tool:
 
@@ -304,7 +315,7 @@ Install or refresh the global tool:
 .\scripts\install-local-tool.ps1 -Scope Global
 ```
 
-### Run
+#### Run
 
 Run the tool from any folder:
 
@@ -316,7 +327,7 @@ If `ado-worker` is not found after install, add this path to `PATH`:
 
 - `$HOME\.dotnet\tools`
 
-### PowerShell Completion
+#### PowerShell Completion
 
 Load completion in the current shell:
 
