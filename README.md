@@ -132,6 +132,8 @@ stateDiagram-v2
 ## Commands
 
 ```powershell
+ado-worker                              # Launch interactive mode (when no args)
+ado-worker interactive                  # Launch interactive mode explicitly
 ado-worker bootstrap
 ado-worker dashboard
 ado-worker dashboard --port 8080
@@ -168,6 +170,8 @@ ado-worker ui run-preview
 
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
+
+`ado-worker` with no arguments launches **interactive mode** — a REPL with slash commands, tab completion, ghost text suggestions, and command history. All commands are available as `/command` (e.g. `/queue`, `/task run --id 123`). Press Tab to cycle completions, arrow keys for history, and `/help` to see all commands and keyboard shortcuts. You can also launch it explicitly with `ado-worker interactive`.
 
 `ado-worker dashboard` starts a local Blazor web dashboard (default port 5173) and opens it in the browser. The dashboard shows active tasks, recent executions, events, agent output, plan and review results, and token usage. Pass `--port` to change the port or `--no-open` to suppress the automatic browser launch. The dashboard reads the same SQLite database as the CLI.
 

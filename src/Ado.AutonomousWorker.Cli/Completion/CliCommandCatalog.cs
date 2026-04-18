@@ -13,6 +13,7 @@ public static class CliCommandCatalog
         "doctor",
         "execution",
         "executions",
+        "interactive",
         "queue",
         "reset",
         "run",
