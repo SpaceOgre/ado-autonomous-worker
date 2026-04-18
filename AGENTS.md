@@ -51,7 +51,6 @@ dotnet tool run ado-worker -- task set-phase --execution-id <executionId> --phas
 dotnet tool run ado-worker -- agent test
 dotnet tool run ado-worker -- agent test --role review
 dotnet tool run ado-worker -- agent test --role pr
-dotnet tool run ado-worker -- ado comment-test --work-item <workItemId>
 dotnet tool run ado-worker -- doctor
 
 # Run the dashboard standalone (development)

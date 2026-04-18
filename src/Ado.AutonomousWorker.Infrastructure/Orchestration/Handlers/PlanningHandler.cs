@@ -73,9 +73,7 @@ internal sealed class PlanningHandler(
         var rawPrompt = $$"""
             Produce a concise implementation plan for this Azure DevOps work item and return JSON matching the provided schema exactly.
 
-            <work-item id="{{workItem.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(
-                workItem.WorkItemType
-            )}}" title="{{workItem.Title}}">
+            <work-item id="{{workItem.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(workItem.WorkItemType)}}" title="{{workItem.Title}}">
             <state>{{workItem.State}}</state>
             <assigned-to>{{workItem.AssignedTo}}</assigned-to>
             <iteration>{{workItem.IterationPath}}</iteration>
@@ -158,7 +156,12 @@ internal sealed class PlanningHandler(
 
         var safeSummary = plan.Summary.ReplaceLineEndings(" ");
         await stateStore.SavePlanAsync(context.ExecutionId, plan, cancellationToken);
-        await context.Journal.AppendEventAsync(context.ExecutionId, TaskPhase.Planning, safeSummary, cancellationToken);
+        await context.Journal.AppendEventAsync(
+            context.ExecutionId,
+            TaskPhase.Planning,
+            safeSummary,
+            cancellationToken
+        );
 
         logger.LogInformation(
             "Execution {ExecutionId} plan complete: scope {Scope}, repos {Repositories}, testIntent {TestIntentCount} item(s).",
@@ -188,14 +191,20 @@ internal sealed class PlanningHandler(
                 scope,
                 plan.Repositories?.ToArray() ?? [],
                 plan.ValidationTargets?.ToArray() ?? [],
-                plan.TestIntent?.Select(t => t.ReplaceLineEndings(" ").Trim()).Where(t => t.Length > 0).ToArray() ?? [],
+                plan.TestIntent?.Select(t => t.ReplaceLineEndings(" ").Trim())
+                               .Where(t => t.Length > 0)
+                               .ToArray() ?? [],
                 plan.Risks?.ToArray() ?? [],
                 plan.Summary ?? "Planning completed."
             );
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to parse planning output. Payload length: {PayloadLength}.", payload.Length);
+            logger.LogWarning(
+                ex,
+                "Failed to parse planning output. Payload length: {PayloadLength}.",
+                payload.Length
+            );
             return null;
         }
     }
@@ -204,10 +213,8 @@ internal sealed class PlanningHandler(
     {
         foreach (var repo in plan.Repositories)
         {
-            if (
-                !repo.StartsWith(backendPath, StringComparison.OrdinalIgnoreCase)
-                && !repo.StartsWith(frontendPath, StringComparison.OrdinalIgnoreCase)
-            )
+            if (!repo.StartsWith(backendPath, StringComparison.OrdinalIgnoreCase) &&
+                !repo.StartsWith(frontendPath, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     $"Planning agent returned a repository path outside configured roots: '{repo}'."

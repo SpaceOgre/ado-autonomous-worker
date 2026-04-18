@@ -33,7 +33,8 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         if (!columns.Contains("test_intent_json"))
         {
             using var alterCmd = connection.CreateCommand();
-            alterCmd.CommandText = "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
+            alterCmd.CommandText =
+                "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
             await alterCmd.ExecuteNonQueryAsync(cancellationToken);
         }
     }
