@@ -26,6 +26,7 @@ flowchart TD
     classDef skipped fill:#7F8C8D,stroke:#5D6D6E,color:#fff
 
     ADO["Azure DevOps<br/>Work item tagged AI-Work / AI-Rework"]
+    PR["PR with AI-Rework label"]
     Queue["Queue inspection<br/>PR Fix → Rework → Work<br/>then stack rank → priority<br/>Cap at MaxItemsPerRun"]
     TooLarge["Tag: AI-TooLarge<br/>Skip item"]
     Plan["Planning<br/>AI decomposes scope,<br/>target repos, risks → PlanResult"]
@@ -33,30 +34,35 @@ flowchart TD
     Code["Coding<br/>AI implements in worktree"]
     Review["Review<br/>AI critiques code → ReviewResult"]
     ApplyReview["Apply review findings<br/>AI re-implements"]
+    PrFixCode["Coding<br/>AI addresses PR review comments<br/>on existing branch"]
     Validate["Validation<br/>dotnet build / npm run build"]
     Publish["Publishing<br/>Draft PR created & linked to work item"]
     Done["Tag: AI-Done<br/>Success comment posted"]
     Failed["Tag: AI-Failed<br/>Failure comment posted<br/>Queue stops"]
 
     ADO --> Queue
+    PR --> Queue
     Queue -- "Acceptance criteria too large" --> TooLarge
-    Queue -- "Eligible" --> Plan
+    Queue -- "AI-Work / AI-Rework" --> Plan
+    Queue -- "PR Fix" --> PrFixCode
     Plan --> Worktree
     Worktree --> Code
     Code --> Review
     Review -- "Findings found (within ReviewCycleLimit)" --> ApplyReview
     ApplyReview --> Review
     Review -- "Approved" --> Validate
+    PrFixCode --> Validate
     Validate -- "Build fails" --> Failed
     Validate -- "Build passes" --> Publish
     Publish --> Done
     Plan -- "Error" --> Failed
     Code -- "Error" --> Failed
+    PrFixCode -- "Error" --> Failed
 
-    class ADO ado
+    class ADO,PR ado
     class Queue queue
     class TooLarge skipped
-    class Plan,Code,Review,ApplyReview agent
+    class Plan,Code,Review,ApplyReview,PrFixCode agent
     class Worktree infra
     class Validate check
     class Publish check
