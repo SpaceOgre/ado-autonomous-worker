@@ -147,12 +147,14 @@ ado-worker execution show --id <execution-id>
 ado-worker execution show --last
 ado-worker completion powershell
 ado-worker run
+ado-worker run --iteration "MyProject\Sprint 5"
 ado-worker deploy
 ado-worker deploy --dry-run
 ado-worker deploy --tag v1.2.3
 ado-worker deploy --backend
 ado-worker deploy --frontend
 ado-worker task run --id 12345
+ado-worker task run --id 12345 --iteration "MyProject\Sprint 5"
 ado-worker task run --pr 42
 ado-worker task resume --execution-id <execution-id>
 ado-worker task resume --last
@@ -161,6 +163,7 @@ ado-worker task set-phase --execution-id <execution-id> --phase Validating
 ado-worker agent test
 ado-worker agent test --role review
 ado-worker agent test --role pr
+ado-worker ado comment-test --work-item 12345
 ado-worker ui splash
 ado-worker ui splash --status "Queue run"
 ado-worker ui run-preview
@@ -169,9 +172,11 @@ ado-worker ui run-preview
 The commands above assume `ado-worker` is available as a command name.
 Use the local or global installation flow below depending on how you want to run it.
 
-`ado-worker dashboard` starts a local Blazor web dashboard (default port 5173) and opens it in the browser. The dashboard shows active tasks, recent executions, events, agent output, plan and review results, and token usage. Pass `--port` to change the port or `--no-open` to suppress the automatic browser launch. The dashboard reads the same SQLite database as the CLI.
+`ado-worker dashboard` starts a local Blazor web dashboard (default port 5138) and opens it in the browser. The dashboard shows active tasks, recent executions, events, agent output, plan and review results, and token usage. Pass `--port` to change the port or `--no-open` to suppress the automatic browser launch. The dashboard reads the same SQLite database as the CLI.
 
-`ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive.
+`ado-worker task run --id` runs a single work item immediately. `ado-worker task run --pr` runs a PR fix for the given pull request ID — the linked work item is resolved automatically from the PR. `--id` and `--pr` are mutually exclusive. Pass `--iteration` to override the iteration path the work item is assigned to (e.g. `--iteration "MyProject\Sprint 5"`); this has no effect on items that already belong to a sprint.
+
+`ado-worker run` accepts the same `--iteration` flag to override the iteration path for all items in the queue.
 
 `ado-worker deploy` triggers the configured backend and frontend Azure Pipelines from `main`, polls until both succeed (or times out), then promotes all resolved tasks and bugs in the current sprint to **Ready for test** and assigns them to the configured tester. User stories whose every child is now **Ready for test** or **Closed** are also promoted. Pass `--dry-run` to preview the work item changes without triggering any pipelines or making any updates. Pass `--tag <tagname>` to trigger both pipelines from a specific git tag instead of the default branch (e.g. `ado-worker deploy --tag v1.2.3`). Pass `--backend` to trigger only the backend pipeline, or `--frontend` to trigger only the frontend pipeline — useful when you know changes are limited to one service.
 
@@ -182,6 +187,8 @@ Use the local or global installation flow below depending on how you want to run
 Use `ado-worker task set-phase` to rewind a completed or failed execution to an earlier phase (`Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`) and reset its status to `Failed` so `task resume` can continue from that point.
 
 Use `ado-worker agent test` to verify agent connectivity before running real tasks. It sends a minimal prompt to each configured agent (Plan, Code, Review, Pr) and reports whether each one responded successfully. Pass `--role plan|code|review|pr` to test a single agent.
+
+Use `ado-worker ado comment-test --work-item <ID>` to post a sample markdown comment to a work item and verify that it renders correctly in Azure DevOps.
 
 Use `ado-worker ui splash` to test the branded run banner without touching queue state, and `ado-worker ui run-preview` to render the exact queue slice that `ado-worker run` would process without starting any agent work.
 

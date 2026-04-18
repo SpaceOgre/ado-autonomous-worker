@@ -109,13 +109,7 @@ internal sealed class WorkItemCodingHandler(
                 config,
                 await PromptTemplateLoader.ApplyAsync(
                     config,
-                    BuildCodePrompt(
-                        workItem,
-                        repositoryExecutions,
-                        plan,
-                        agentWorkingDirectory,
-                        commentsBlock
-                    ),
+                    BuildCodePrompt(workItem, repositoryExecutions, plan, agentWorkingDirectory, commentsBlock),
                     cancellationToken
                 ),
                 agentWorkingDirectory,
@@ -189,7 +183,9 @@ internal sealed class WorkItemCodingHandler(
             Agent working directory: {{agentWorkingDirectory}}
             Plan summary: {{plan.Summary}}
 
-            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}}" title="{{parent.Title}}">
+            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(
+                parent.WorkItemType
+            )}}" title="{{parent.Title}}">
             <parent-feature>{{parent.ParentFeatureTitle ?? "-"}}</parent-feature>
             <description>
             {{parent.Description}}

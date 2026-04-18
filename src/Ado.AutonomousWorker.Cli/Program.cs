@@ -30,6 +30,7 @@ builder.Logging.AddSerilog(WorkerLoggingSetup.CreateLogger(builder.Configuration
 
 builder.Services.AddAutonomousWorker(builder.Configuration, storageBaseOverride);
 builder.Services.AddSingleton<BootstrapCommand>();
+builder.Services.AddSingleton<DashboardCommand>();
 builder.Services.AddSingleton<DoctorCommand>();
 builder.Services.AddSingleton<QueueCommand>();
 builder.Services.AddSingleton<ExecutionsCommand>();
@@ -89,6 +90,9 @@ app.Configure(config =>
         .WithDescription("Verify configuration, repos, CLI tools, and Azure DevOps access.");
     config.AddCommand<QueueCommand>("queue").WithDescription("List eligible AI-Work and AI-Rework items.");
     config.AddCommand<ExecutionsCommand>("executions").WithDescription("List local task executions.");
+    config
+        .AddCommand<DashboardCommand>("dashboard")
+        .WithDescription("Start the local Blazor web dashboard and open it in the browser.");
     config
         .AddCommand<RunCommand>("run")
         .WithDescription("Preview the selected queue, then process it and stop on the first failure.");
