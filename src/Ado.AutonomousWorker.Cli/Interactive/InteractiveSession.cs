@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ado.AutonomousWorker.Cli.Presentation;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -182,9 +183,11 @@ public sealed class InteractiveSession(IServiceProvider services)
 
     private static void RenderWelcome()
     {
-        var version = typeof(InteractiveSession).Assembly.GetName().Version;
-        var versionText = version is not null ? $"v{version.Major}.{version.Minor}.{version.Build}" : "dev";
-        RunPreambleDisplay.ShowInteractiveSplash(versionText);
+        var assembly = typeof(InteractiveSession).Assembly;
+        var versionText = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "dev";
+        RunPreambleDisplay.ShowInteractiveSplash($"v{versionText}");
     }
 
     private void RenderHelp()

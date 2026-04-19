@@ -41,7 +41,7 @@ try
         Write-Host ""
         Write-Host "Packing $packageId..."
         Get-ChildItem -Path $packageOutputPath -Filter "$packageId.*.nupkg" -File -ErrorAction SilentlyContinue | Remove-Item -Force
-        dotnet pack $projectPath -c Release -o $packageOutputPath /p:PackageVersion=$Version
+        dotnet pack $projectPath -c Release -o $packageOutputPath /p:PackageVersion=$Version /p:Version=$Version
 
         $scopeFlag = if ($Scope -eq "Local") { "--local" } else { "--global" }
 
