@@ -21,7 +21,7 @@ public sealed class RunCommand(
         [Description(
             "Override the iteration path used for backlog items (e.g. 'MyProject\\Sprint 5'). Has no effect on items already assigned to a sprint."
         )]
-        [CommandOption("--iteration [ITERATION_PATH]")]
+        [CommandOption("--iteration <ITERATION_PATH>")]
         public string? Iteration { get; init; }
     }
 
@@ -34,7 +34,6 @@ public sealed class RunCommand(
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
         var queue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
 
-        RunPreambleDisplay.ShowSplash("Queue run");
         RunPreambleDisplay.ShowQueuePreview(
             queue,
             eligibleQueue.Count,

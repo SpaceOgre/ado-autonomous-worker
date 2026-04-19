@@ -26,6 +26,43 @@ public static class RunPreambleDisplay
         "hotpink",
     ];
 
+    public static void ShowInteractiveSplash(string versionText)
+    {
+        AnsiConsole.WriteLine();
+
+        if (AnsiConsole.Profile.Capabilities.Interactive)
+        {
+            var rows = new List<IRenderable>
+            {
+                new Markup($"[deepskyblue1]{Markup.Escape(HeaderText)}[/]"),
+                new Markup("[grey]Autonomous Azure DevOps backlog worker[/]"),
+                new Markup(BuildAuthorMarkup()),
+                Text.Empty,
+                new Markup(
+                    $"[grey]{Markup.Escape(versionText)}[/]  [grey dim]·[/]  "
+                        + "[grey]Type[/] [deepskyblue1]/help[/] [grey]for commands[/]  [grey dim]·[/]  "
+                        + "[grey]Tab[/] [grey]to complete[/]  [grey dim]·[/]  "
+                        + "[deepskyblue1]/exit[/] [grey]to quit[/]"
+                ),
+            };
+
+            AnsiConsole.Write(
+                new Panel(new Rows(rows.ToArray()))
+                {
+                    Border = BoxBorder.Rounded,
+                    BorderStyle = new Style(Color.DeepSkyBlue1),
+                }
+            );
+        }
+        else
+        {
+            AnsiConsole.MarkupLine("[deepskyblue1]ado-worker[/] Autonomous Azure DevOps backlog worker");
+            AnsiConsole.MarkupLine(BuildAuthorMarkup());
+        }
+
+        AnsiConsole.WriteLine();
+    }
+
     public static void ShowSplash(string? status = null)
     {
         if (AnsiConsole.Profile.Capabilities.Interactive)

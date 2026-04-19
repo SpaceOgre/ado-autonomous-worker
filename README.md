@@ -150,9 +150,55 @@ Each work item is classified as **Backend**, **Frontend**, or **Fullstack** to d
 2. If no tags are present, keyword matching against the description and acceptance criteria is used (`api`, `database`, `service`, `migration`, `endpoint` → Backend; `ui`, `component`, `page`, `styling`, `screen` → Frontend).
 3. If both or neither match, the scope defaults to **Fullstack**.
 
+## Interactive Mode
+
+Running `ado-worker` without arguments in an interactive terminal launches the REPL. You can also start it explicitly:
+
+```powershell
+ado-worker interactive
+```
+
+The session opens with the ASCII art splash banner and a prompt. Every command is available as a slash command:
+
+```
+❯ /run
+❯ /task run --id 42
+❯ /deploy --dry-run
+```
+
+### Completion
+
+The popup opens as you type and narrows with each character. Completion is context-aware — it shows commands first, then subcommands, then flags:
+
+| What you type | Popup shows |
+| ------------- | ----------- |
+| `/d` | `/deploy`, `/doctor` |
+| `/deploy` → Tab | accepts, then shows `--dry-run`, `--tag`, `--backend`, `--frontend` |
+| `/deploy --b` | `--backend` |
+| `/task ` | `/task run`, `/task resume`, `/task set-phase` |
+| `/task run ` | `--id`, `--pr`, `--iteration` |
+
+Already-used flags are excluded from subsequent suggestions. Navigating history with `↑` and pressing `Tab` opens the popup for that command so you can add or change flags.
+
+### Keyboard Shortcuts
+
+| Key | Action |
+| --- | ------ |
+| `↑` / `↓` | Navigate completion list or command history |
+| `Tab` | Accept highlighted suggestion and open next completion level |
+| `Enter` | Accept highlighted suggestion and run the command immediately |
+| `→` | Accept ghost text suggestion |
+| `Esc` | Dismiss completions / clear input |
+| `Ctrl+L` | Clear the screen |
+| `Ctrl+U` | Clear the input line |
+| `Ctrl+W` | Delete word backward |
+| `Ctrl+C` | Exit interactive mode |
+
 ## Commands
 
 ```powershell
+ado-worker                                                    # Launch interactive mode (no arguments in interactive terminal)
+ado-worker interactive                                        # Launch interactive mode explicitly
 ado-worker bootstrap                                          # Initialize storage and create user config
 ado-worker doctor                                             # Verify configuration, repos, CLI tools, ADO access, pipelines
 ado-worker queue                                              # List eligible AI-Work and AI-Rework items
@@ -190,6 +236,7 @@ ado-worker ui run-preview                                     # Preview queue sl
 
 | Command | Description |
 | ------- | ----------- |
+| `interactive` | Launches the REPL with slash commands, context-aware tab completion, ghost text, and command history. Started automatically when `ado-worker` is run with no arguments in an interactive terminal. |
 | `bootstrap` | Creates the storage directory, SQLite database, and a starter `config.jsonc` with commented-out examples. Run this once after first install. |
 | `doctor` | Runs diagnostics: checks storage, agent CLI availability, repository paths, remote branches, ADO connectivity, and pipeline IDs. Exit code 1 if any check fails. |
 | `queue` | Queries Azure DevOps for eligible `AI-Work` and `AI-Rework` items and displays them in queue order. |

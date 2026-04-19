@@ -46,8 +46,6 @@ public sealed class DeployCommand(DeployService deployService, IOptions<DeployOp
         CancellationToken cancellationToken
     )
     {
-        RunPreambleDisplay.ShowSplash("Deploy");
-
         if (settings.DryRun)
         {
             return await RunDryRunAsync(cancellationToken);
