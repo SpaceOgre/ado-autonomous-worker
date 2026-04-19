@@ -34,7 +34,6 @@ public sealed class RunCommand(
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
         var queue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
 
-        RunPreambleDisplay.ShowSplash("Queue run");
         RunPreambleDisplay.ShowQueuePreview(
             queue,
             eligibleQueue.Count,

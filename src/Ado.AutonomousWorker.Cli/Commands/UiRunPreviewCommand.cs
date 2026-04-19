@@ -14,7 +14,6 @@ public sealed class UiRunPreviewCommand(QueueInspector queueInspector, IOptions<
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
         var selectedQueue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
 
-        RunPreambleDisplay.ShowSplash("Run preview");
         RunPreambleDisplay.ShowQueuePreview(
             selectedQueue,
             eligibleQueue.Count,

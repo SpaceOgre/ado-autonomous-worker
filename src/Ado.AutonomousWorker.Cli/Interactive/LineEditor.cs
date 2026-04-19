@@ -21,9 +21,11 @@ public sealed class LineEditor
     private int _cursor;
 
     // Completion state
-    private IReadOnlyList<SlashCommandDescriptor> _completions = [];
+    private IReadOnlyList<CompletionItem> _completions = [];
     private int _selectedIndex = -1;
+    private int _previousSelectedIndex = -1;
     private bool _completionsVisible;
+    private bool _selectionChangedOnly;
     private int _completionLinesDrawn;
 
     // Ghost text
@@ -164,7 +166,7 @@ public sealed class LineEditor
         if (_completionsVisible && _selectedIndex >= 0 && _selectedIndex < _completions.Count)
         {
             AcceptCompletion();
-            return KeyAction.Continue;
+            return KeyAction.Submit; // run the accepted command immediately
         }
 
         return KeyAction.Submit;
@@ -173,6 +175,7 @@ public sealed class LineEditor
     private string SubmitLine()
     {
         ClearCompletionArea();
+        RenderPromptLine(); // ensure the accepted command is visible before execution
         Console.WriteLine();
         var result = _buffer.ToString();
         if (!string.IsNullOrWhiteSpace(result))
@@ -182,30 +185,28 @@ public sealed class LineEditor
 
     private void HandleTab(bool reverse)
     {
-        if (!_completionsVisible)
+        if (_completionsVisible && _completions.Count > 0)
         {
-            // First tab press: update completions and show
-            var prefix = _buffer.ToString();
-            _completions = _registry.Search(prefix);
-            if (_completions.Count == 1)
-            {
-                // Single match: auto-complete immediately
-                ApplyCompletion(_completions[0]);
-                _completionsVisible = false;
-                return;
-            }
-
-            if (_completions.Count > 0)
-            {
-                _completionsVisible = true;
+            if (_selectedIndex < 0)
                 _selectedIndex = 0;
-            }
-
+            var accepted = _completions[_selectedIndex];
+            AcceptCompletion();
+            // Tab opens the next completion level (flags/subcommands); Enter does not.
+            if (!accepted.Label.StartsWith('-'))
+                RefreshCompletions();
             return;
         }
 
-        // Cycle through completions
-        MoveSelection(reverse ? -1 : 1);
+        // Popup not visible: accept ghost text if present, then open completions.
+        // This lets Tab work naturally after history navigation.
+        if (_ghostText.Length > 0)
+        {
+            _buffer.Append(_ghostText);
+            _cursor = _buffer.Length;
+            _ghostText = string.Empty;
+        }
+
+        RefreshCompletions();
     }
 
     private void HandleEscape()
@@ -295,41 +296,30 @@ public sealed class LineEditor
         if (_completions.Count == 0)
             return;
 
+        _previousSelectedIndex = _selectedIndex;
         _selectedIndex += direction;
         if (_selectedIndex < 0)
             _selectedIndex = _completions.Count - 1;
         else if (_selectedIndex >= _completions.Count)
             _selectedIndex = 0;
+        _selectionChangedOnly = true;
     }
 
     private void AcceptCompletion()
     {
         if (_selectedIndex >= 0 && _selectedIndex < _completions.Count)
-        {
             ApplyCompletion(_completions[_selectedIndex]);
-        }
-
-        _completionsVisible = false;
-        _selectedIndex = -1;
+        // ApplyCompletion owns visibility state; nothing else to do here
     }
 
-    private void ApplyCompletion(SlashCommandDescriptor cmd)
+    private void ApplyCompletion(CompletionItem item)
     {
         _buffer.Clear();
-        _buffer.Append(cmd.Command);
-        // Add trailing space so user can start typing args
-        if (!cmd.Command.Contains(' ') || HasSubcommand(cmd.Command))
-            _buffer.Append(' ');
+        _buffer.Append(item.AcceptText);
         _cursor = _buffer.Length;
         _completionsVisible = false;
         _selectedIndex = -1;
         _completions = [];
-    }
-
-    private static bool HasSubcommand(string command)
-    {
-        // Commands like "/task run" already have a subcommand
-        return command.TrimStart('/').Contains(' ');
     }
 
     private void NavigateHistory(int direction)
@@ -364,19 +354,19 @@ public sealed class LineEditor
 
     private void RefreshCompletions()
     {
-        if (!_completionsVisible)
-            return;
+        var buffer = _buffer.ToString();
+        _completions = _registry.GetCompletions(buffer);
+        _selectionChangedOnly = false; // list changed; need full redraw
 
-        var prefix = _buffer.ToString();
-        _completions = _registry.Search(prefix);
-        if (_completions.Count == 0)
+        if (buffer.Length == 0 || _completions.Count == 0)
         {
             _completionsVisible = false;
             _selectedIndex = -1;
         }
         else
         {
-            _selectedIndex = Math.Min(_selectedIndex, _completions.Count - 1);
+            _selectedIndex = 0;
+            _completionsVisible = true;
         }
     }
 
@@ -387,14 +377,13 @@ public sealed class LineEditor
             return;
 
         var text = _buffer.ToString();
-        var matches = _registry.Search(text);
-        if (matches.Count > 0)
+        var completions = _registry.GetCompletions(text);
+        if (completions.Count > 0)
         {
-            var best = matches[0];
-            if (best.Command.Length > text.Length && best.Command.StartsWith(text, StringComparison.OrdinalIgnoreCase))
-            {
-                _ghostText = best.Command[text.Length..];
-            }
+            var best = completions[0];
+            var acceptText = best.AcceptText.TrimEnd();
+            if (acceptText.Length > text.Length && acceptText.StartsWith(text, StringComparison.OrdinalIgnoreCase))
+                _ghostText = acceptText[text.Length..];
         }
     }
 
@@ -405,7 +394,9 @@ public sealed class LineEditor
         _historyIndex = _history.Count;
         _completions = [];
         _selectedIndex = -1;
+        _previousSelectedIndex = -1;
         _completionsVisible = false;
+        _selectionChangedOnly = false;
         _completionLinesDrawn = 0;
         _ghostText = string.Empty;
     }
@@ -414,13 +405,80 @@ public sealed class LineEditor
 
     private void RenderAll()
     {
-        ClearCompletionArea();
-        RenderPromptLine();
+        Console.Write("\x1b[?25l"); // hide cursor while rendering
+        try
+        {
+            if (_selectionChangedOnly && _completionsVisible)
+            {
+                _selectionChangedOnly = false;
+                RenderSelectionUpdate();
+                var col = PromptDisplayWidth + _cursor;
+                Console.Write($"\r\x1b[{col + 1}G");
+                return;
+            }
 
-        if (_completionsVisible && _completions.Count > 0)
-            RenderCompletionPopup();
+            _selectionChangedOnly = false;
+            ClearCompletionArea();
+            RenderPromptLine();
 
-        PositionCursor();
+            if (_completionsVisible && _completions.Count > 0)
+                RenderCompletionPopup();
+
+            PositionCursor();
+        }
+        finally
+        {
+            Console.Write("\x1b[?25h"); // restore cursor
+        }
+    }
+
+    // Targeted update: redraws only the two rows whose selection state changed.
+    // Cursor must be at the prompt line on entry and will be there on return.
+    // Item row i sits (i + 2) lines below the prompt: +1 for the separator newline, +1 for the top border.
+    private void RenderSelectionUpdate()
+    {
+        var items =
+            _completions.Count <= MaxCompletionItems ? _completions : _completions.Take(MaxCompletionItems).ToList();
+        if (items.Count == 0)
+            return;
+
+        var maxLabelLen = items.Max(c => c.Label.Length);
+        var maxDescLen = items.Max(c => c.Description.Length);
+        const int indicatorPrefixWidth = 3;
+        const int columnSpacingWidth = 2;
+        var innerWidth = indicatorPrefixWidth + maxLabelLen + columnSpacingWidth + maxDescLen;
+
+        foreach (var idx in new[] { _previousSelectedIndex, _selectedIndex })
+        {
+            if (idx < 0 || idx >= items.Count)
+                continue;
+
+            var item = items[idx];
+            var lineOffset = idx + 2;
+            var isSelected = idx == _selectedIndex;
+            var indicator = isSelected ? "\x1b[38;5;39m▸\x1b[0m" : " ";
+            var labelPadded = item.Label.PadRight(maxLabelLen);
+            var desc = item.Description;
+
+            Console.Write($"\x1b[{lineOffset}B\r"); // move down to item row
+
+            if (isSelected)
+                Console.Write(
+                    $"  \x1b[38;5;240m│\x1b[0m {indicator} \x1b[38;5;39;1m{labelPadded}\x1b[0m  \x1b[38;5;248m{desc}\x1b[0m"
+                );
+            else
+                Console.Write(
+                    $"  \x1b[38;5;240m│\x1b[0m {indicator} \x1b[38;5;252m{labelPadded}\x1b[0m  \x1b[38;5;243m{desc}\x1b[0m"
+                );
+
+            var contentWidth = indicatorPrefixWidth + labelPadded.Length + columnSpacingWidth + desc.Length;
+            var rightPad = innerWidth - contentWidth;
+            if (rightPad > 0)
+                Console.Write(new string(' ', rightPad));
+            Console.Write("\x1b[38;5;240m│\x1b[0m");
+
+            Console.Write($"\x1b[{lineOffset}A"); // move back up to prompt line
+        }
     }
 
     private void RenderPromptLine()
@@ -448,11 +506,11 @@ public sealed class LineEditor
             _completions.Count <= MaxCompletionItems ? _completions : _completions.Take(MaxCompletionItems).ToList();
 
         // Calculate column widths
-        var maxCmdLen = items.Max(c => c.Command.Length);
+        var maxLabelLen = items.Max(c => c.Label.Length);
         var maxDescLen = items.Max(c => c.Description.Length);
         const int indicatorPrefixWidth = 3; // " {indicator} "
-        const int columnSpacingWidth = 2; // spacing between command and description
-        var innerWidth = indicatorPrefixWidth + maxCmdLen + columnSpacingWidth + maxDescLen;
+        const int columnSpacingWidth = 2; // spacing between label and description
+        var innerWidth = indicatorPrefixWidth + maxLabelLen + columnSpacingWidth + maxDescLen;
 
         Console.WriteLine();
 
@@ -468,26 +526,24 @@ public sealed class LineEditor
 
             var isSelected = index == _selectedIndex;
             var indicator = isSelected ? "\x1b[38;5;39m▸\x1b[0m" : " ";
-            var cmdPadded = item.Command.PadRight(maxCmdLen);
+            var labelPadded = item.Label.PadRight(maxLabelLen);
             var desc = item.Description;
 
             if (isSelected)
             {
-                // Selected item: highlight command in deepskyblue1
                 Console.Write(
-                    $"  \x1b[38;5;240m│\x1b[0m {indicator} \x1b[38;5;39;1m{cmdPadded}\x1b[0m  \x1b[38;5;248m{desc}\x1b[0m"
+                    $"  \x1b[38;5;240m│\x1b[0m {indicator} \x1b[38;5;39;1m{labelPadded}\x1b[0m  \x1b[38;5;248m{desc}\x1b[0m"
                 );
             }
             else
             {
-                // Normal item: command in white, description in grey
                 Console.Write(
-                    $"  \x1b[38;5;240m│\x1b[0m {indicator} \x1b[38;5;252m{cmdPadded}\x1b[0m  \x1b[38;5;243m{desc}\x1b[0m"
+                    $"  \x1b[38;5;240m│\x1b[0m {indicator} \x1b[38;5;252m{labelPadded}\x1b[0m  \x1b[38;5;243m{desc}\x1b[0m"
                 );
             }
 
             // Right border padding
-            var contentWidth = indicatorPrefixWidth + cmdPadded.Length + columnSpacingWidth + desc.Length;
+            var contentWidth = indicatorPrefixWidth + labelPadded.Length + columnSpacingWidth + desc.Length;
             var rightPad = innerWidth - contentWidth;
             if (rightPad > 0)
                 Console.Write(new string(' ', rightPad));
@@ -515,15 +571,13 @@ public sealed class LineEditor
         if (_completionLinesDrawn <= 0)
             return;
 
-        // Move up and clear each line of the completion popup
+        // Popup is below the prompt line. Move down to its bottom, then erase upward.
+        Console.Write($"\x1b[{_completionLinesDrawn}B");
         for (var i = 0; i < _completionLinesDrawn; i++)
         {
-            Console.Write("\r\x1b[K"); // Move to column 0, then clear entire line
-            if (i < _completionLinesDrawn - 1)
-                Console.Write("\x1b[A"); // Move up
+            Console.Write("\r\x1b[K");
+            Console.Write("\x1b[A");
         }
-
-        // Move back up to the prompt line
         Console.Write("\r");
         _completionLinesDrawn = 0;
     }

@@ -180,31 +180,11 @@ public sealed class InteractiveSession(IServiceProvider services)
 
     // ─── Rendering ───────────────────────────────────────────────────
 
-    private void RenderWelcome()
+    private static void RenderWelcome()
     {
         var version = typeof(InteractiveSession).Assembly.GetName().Version;
         var versionText = version is not null ? $"v{version.Major}.{version.Minor}.{version.Build}" : "dev";
-
-        AnsiConsole.WriteLine();
-
-        var content = new Rows(
-            new Markup($"[bold deepskyblue1]ado-worker[/] [grey]{Markup.Escape(versionText)}[/]"),
-            new Markup("[grey]Autonomous Azure DevOps backlog worker[/]"),
-            Text.Empty,
-            new Markup(
-                "[grey]Type[/] [deepskyblue1]/help[/] [grey]for commands[/]  [grey dim]·[/]  [grey]Tab for completion[/]  [grey dim]·[/]  [deepskyblue1]/exit[/] [grey]to quit[/]"
-            )
-        );
-
-        var panel = new Panel(content)
-        {
-            Border = BoxBorder.Rounded,
-            BorderStyle = new Style(Color.DeepSkyBlue1),
-            Padding = new Padding(2, 0, 2, 0),
-        };
-
-        AnsiConsole.Write(panel);
-        AnsiConsole.WriteLine();
+        RunPreambleDisplay.ShowInteractiveSplash(versionText);
     }
 
     private void RenderHelp()
@@ -244,8 +224,7 @@ public sealed class InteractiveSession(IServiceProvider services)
         shortcuts.AddColumn(new TableColumn("Action"));
         shortcuts.HideHeaders();
 
-        shortcuts.AddRow("[deepskyblue1]Tab[/]", "[grey]Complete command / cycle suggestions[/]");
-        shortcuts.AddRow("[deepskyblue1]Shift+Tab[/]", "[grey]Cycle suggestions in reverse[/]");
+        shortcuts.AddRow("[deepskyblue1]Tab[/]", "[grey]Accept highlighted suggestion[/]");
         shortcuts.AddRow("[deepskyblue1]↑ / ↓[/]", "[grey]Navigate history or completion list[/]");
         shortcuts.AddRow("[deepskyblue1]→[/]", "[grey]Accept ghost text suggestion[/]");
         shortcuts.AddRow("[deepskyblue1]Esc[/]", "[grey]Dismiss completions / clear input[/]");
