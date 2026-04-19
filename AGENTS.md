@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **`CliCommandCatalog.cs`** (`src/Ado.AutonomousWorker.Cli/Completion/CliCommandCatalog.cs`) — add the command to `TopLevelCommands` and/or `BranchCommands`, and its options to `CommandOptions`. This drives tab-completion.
 2. **`SlashCommandRegistry.cs`** (`src/Ado.AutonomousWorker.Cli/Interactive/SlashCommandRegistry.cs`) — add the command to the interactive-mode slash command catalog with description and category.
 3. **`README.md`** — add the command to the `## Commands` section with example invocations and a description.
-4. **`Program.cs`** — register the command class as a singleton and add it to the CLI config (via `CliAppConfiguration.cs`).
+4. **`Program.cs`** — register the command class as a singleton and register the command in the CLI startup path: usually in `CliAppConfiguration.cs`, or directly in `Program.cs` when the command is intentionally wired there (for example, `interactive`).
 5. **`AGENTS.md`** — add the command to the Commands section below.
 
 Forgetting any of these will leave tab-completion, interactive mode, the README, or agent guidance out of sync.

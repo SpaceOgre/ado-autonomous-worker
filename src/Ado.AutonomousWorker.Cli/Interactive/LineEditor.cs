@@ -450,7 +450,9 @@ public sealed class LineEditor
         // Calculate column widths
         var maxCmdLen = items.Max(c => c.Command.Length);
         var maxDescLen = items.Max(c => c.Description.Length);
-        var innerWidth = maxCmdLen + 2 + maxDescLen + 2; // padding
+        const int indicatorPrefixWidth = 3; // " {indicator} "
+        const int columnSpacingWidth = 2; // spacing between command and description
+        var innerWidth = indicatorPrefixWidth + maxCmdLen + columnSpacingWidth + maxDescLen;
 
         Console.WriteLine();
 
@@ -485,7 +487,7 @@ public sealed class LineEditor
             }
 
             // Right border padding
-            var contentWidth = 1 + 1 + cmdPadded.Length + 2 + desc.Length;
+            var contentWidth = indicatorPrefixWidth + cmdPadded.Length + columnSpacingWidth + desc.Length;
             var rightPad = innerWidth - contentWidth;
             if (rightPad > 0)
                 Console.Write(new string(' ', rightPad));
@@ -516,7 +518,7 @@ public sealed class LineEditor
         // Move up and clear each line of the completion popup
         for (var i = 0; i < _completionLinesDrawn; i++)
         {
-            Console.Write("\x1b[K"); // Clear current line
+            Console.Write("\r\x1b[K"); // Move to column 0, then clear entire line
             if (i < _completionLinesDrawn - 1)
                 Console.Write("\x1b[A"); // Move up
         }

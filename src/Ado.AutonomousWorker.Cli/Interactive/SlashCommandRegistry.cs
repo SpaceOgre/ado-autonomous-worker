@@ -41,7 +41,7 @@ public sealed class SlashCommandRegistry
     ];
 
     /// <summary>Returns all registered slash commands.</summary>
-    public IReadOnlyList<SlashCommandDescriptor> GetAll() => AllCommands;
+    public IReadOnlyList<SlashCommandDescriptor> GetAll() => AllCommands.AsReadOnly();
 
     /// <summary>
     /// Searches for commands matching a prefix (with or without leading /).
@@ -49,7 +49,7 @@ public sealed class SlashCommandRegistry
     public IReadOnlyList<SlashCommandDescriptor> Search(string prefix)
     {
         if (string.IsNullOrEmpty(prefix))
-            return AllCommands;
+            return AllCommands.AsReadOnly();
 
         var normalized = prefix.StartsWith('/') ? prefix : "/" + prefix;
         return AllCommands.Where(c => c.Command.StartsWith(normalized, StringComparison.OrdinalIgnoreCase)).ToList();

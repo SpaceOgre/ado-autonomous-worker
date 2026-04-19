@@ -111,9 +111,71 @@ public sealed class InteractiveSession(IServiceProvider services)
 
     private static string[] ParseSlashCommand(string input)
     {
-        // Remove leading / and split by whitespace
+        // Remove leading / and tokenize with shell-style quote handling
         var command = input.TrimStart('/');
-        return command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return TokenizeCommand(command);
+    }
+
+    private static string[] TokenizeCommand(string command)
+    {
+        var tokens = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inSingleQuotes = false;
+        var inDoubleQuotes = false;
+        var escaping = false;
+
+        foreach (var ch in command)
+        {
+            if (escaping)
+            {
+                current.Append(ch);
+                escaping = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                escaping = true;
+                continue;
+            }
+
+            if (ch == '"' && !inSingleQuotes)
+            {
+                inDoubleQuotes = !inDoubleQuotes;
+                continue;
+            }
+
+            if (ch == '\'' && !inDoubleQuotes)
+            {
+                inSingleQuotes = !inSingleQuotes;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch) && !inSingleQuotes && !inDoubleQuotes)
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+
+                continue;
+            }
+
+            current.Append(ch);
+        }
+
+        if (escaping)
+        {
+            current.Append('\\');
+        }
+
+        if (current.Length > 0)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens.ToArray();
     }
 
     // ─── Rendering ───────────────────────────────────────────────────
