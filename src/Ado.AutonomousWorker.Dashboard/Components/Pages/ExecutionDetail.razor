@@ -3,6 +3,7 @@
 @inject IStateStore StateStore
 @inject NavigationManager Nav
 @inject IOptions<StorageOptions> StorageOptions
+@inject IOptions<AzureDevOpsOptions> AdoOptions
 @implements IDisposable
 
 <PageTitle>Execution Detail — ADO Autonomous Worker</PageTitle>
@@ -22,15 +23,25 @@ else
     <MudGrid Class="mb-4">
         <MudItem xs="12" md="8">
             <MudText Typo="Typo.h5">@_execution.Title</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Work Item #@_execution.WorkItemId · @_execution.ExecutionId</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                <MudLink Href="@AdoOptions.Value.WorkItemUrl(_execution.WorkItemId)" Target="_blank" Color="Color.Secondary">Work Item #@_execution.WorkItemId</MudLink> · @_execution.ExecutionId
+            </MudText>
         </MudItem>
         <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2 flex-wrap">
             <MudChip T="string" Color="KindColor(_execution.Kind)">@_execution.Kind</MudChip>
             <MudChip T="string" Color="PhaseColor(_execution.Phase)">@_execution.Phase</MudChip>
             <MudChip T="string" Color="StatusColor(_execution.Status)">@_execution.Status</MudChip>
-            @foreach (var prId in _execution.PullRequestIds ?? [])
+            @foreach (var pr in _execution.PullRequests ?? [])
             {
-                <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@prId</MudChip>
+                var prUrl = AdoOptions.Value.PullRequestUrl(pr.RepositoryName, pr.PullRequestId);
+                @if (prUrl is not null)
+                {
+                    <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success" Href="@prUrl" Target="_blank">PR !@pr.PullRequestId</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@pr.PullRequestId</MudChip>
+                }
             }
         </MudItem>
     </MudGrid>
@@ -177,7 +188,7 @@ else
                                 }
                                 else
                                 {
-                                    <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto;">@string.Join(string.Empty, sessionChunks.Select(c => c.Content))</pre>
+                                    <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto;">@string.Join("\n", sessionChunks.Select(c => c.Content))</pre>
                                 }
                             </ChildContent>
                         </MudExpansionPanel>

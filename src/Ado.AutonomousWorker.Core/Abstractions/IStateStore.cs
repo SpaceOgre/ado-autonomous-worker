@@ -22,7 +22,7 @@ public interface IStateStore
 
     Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken);
 
-    Task LinkPullRequestToExecutionAsync(string executionId, int pullRequestId, CancellationToken cancellationToken);
+    Task LinkPullRequestToExecutionAsync(string executionId, int pullRequestId, string? repositoryName, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(
         string executionId,

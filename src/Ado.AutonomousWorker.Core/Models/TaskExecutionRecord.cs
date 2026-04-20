@@ -12,5 +12,5 @@ public sealed record TaskExecutionRecord(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? ProviderPlanSessionId = null,
-    IReadOnlyList<int>? PullRequestIds = null
+    IReadOnlyList<PrLink>? PullRequests = null
 );

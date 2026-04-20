@@ -66,7 +66,7 @@ internal sealed class TaskOrchestrator(
 
         await stateStore.SaveExecutionAsync(record, cancellationToken);
         if (prTarget is not null)
-            await stateStore.LinkPullRequestToExecutionAsync(executionId, prTarget.PullRequestId, cancellationToken);
+            await stateStore.LinkPullRequestToExecutionAsync(executionId, prTarget.PullRequestId, prTarget.RepositoryName, cancellationToken);
         await executionJournal.AppendEventAsync(
             executionId,
             TaskPhase.Queued,
@@ -130,17 +130,17 @@ internal sealed class TaskOrchestrator(
 
         PhaseContext context;
 
-        var linkedPrId = execution.PullRequestIds?.FirstOrDefault();
-        if (execution.Kind == QueueItemKind.AiPrFix && linkedPrId is not null)
+        var linkedPr = execution.PullRequests?.FirstOrDefault();
+        if (execution.Kind == QueueItemKind.AiPrFix && linkedPr is not null)
         {
             var location = await azureDevOpsClient.GetPullRequestLocationAsync(
-                linkedPrId.Value,
+                linkedPr.PullRequestId,
                 cancellationToken
             );
             var prTarget = location is not null
-                ? new PrTarget(linkedPrId.Value, location.Value.RepositoryName, location.Value.BranchName)
+                ? new PrTarget(linkedPr.PullRequestId, location.Value.RepositoryName, location.Value.BranchName)
                 : throw new InvalidOperationException(
-                    $"Cannot resume AiPrFix execution '{executionId}': PR !{linkedPrId} was not found."
+                    $"Cannot resume AiPrFix execution '{executionId}': PR !{linkedPr.PullRequestId} was not found."
                 );
 
             var prFixContext = new PhaseContext.PrFixContext

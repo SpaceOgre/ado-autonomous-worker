@@ -112,6 +112,7 @@ internal sealed class WorkItemPublishingHandler(
             await stateStore.LinkPullRequestToExecutionAsync(
                 context.ExecutionId,
                 pullRequest.PullRequestId,
+                repoProfile.AzureDevOpsRepository,
                 cancellationToken
             );
             context.PublishedRepositories.Add(

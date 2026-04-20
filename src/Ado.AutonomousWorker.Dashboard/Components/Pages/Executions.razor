@@ -1,6 +1,7 @@
 @page "/executions"
 @rendermode InteractiveServer
 @inject IStateStore StateStore
+@inject IOptions<AzureDevOpsOptions> AdoOptions
 
 <PageTitle>Executions — ADO Autonomous Worker</PageTitle>
 
@@ -29,13 +30,33 @@ else
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Work Item">@context.WorkItemId</MudTd>
+            <MudTd DataLabel="Work Item"><MudLink Href="@AdoOptions.Value.WorkItemUrl(context.WorkItemId)" Target="_blank">@context.WorkItemId</MudLink></MudTd>
             <MudTd DataLabel="Title">@context.Title</MudTd>
             <MudTd DataLabel="Kind"><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
             <MudTd DataLabel="Phase"><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
             <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
             <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
-            <MudTd DataLabel="PR">@(context.PullRequestIds?.Count > 0 ? string.Join(", ", context.PullRequestIds.Select(id => $"!{id}")) : "-")</MudTd>
+            <MudTd DataLabel="PR">
+                @if (context.PullRequests is { Count: > 0 })
+                {
+                    @foreach (var pr in context.PullRequests)
+                    {
+                        var prUrl = AdoOptions.Value.PullRequestUrl(pr.RepositoryName, pr.PullRequestId);
+                        @if (prUrl is not null)
+                        {
+                            <MudLink Href="@prUrl" Target="_blank" Class="mr-1">!@pr.PullRequestId</MudLink>
+                        }
+                        else
+                        {
+                            <span class="mr-1">!@pr.PullRequestId</span>
+                        }
+                    }
+                }
+                else
+                {
+                    <span>-</span>
+                }
+            </MudTd>
             <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
         </RowTemplate>
         <NoRecordsContent>

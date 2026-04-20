@@ -110,6 +110,7 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
             entity.HasKey(e => new { e.ExecutionId, e.PullRequestId });
             entity.Property(e => e.ExecutionId).HasColumnName("execution_id");
             entity.Property(e => e.PullRequestId).HasColumnName("pull_request_id");
+            entity.Property(e => e.RepositoryName).HasColumnName("repository_name");
         });
 
         modelBuilder.Entity<AgentUsageEntity>(entity =>

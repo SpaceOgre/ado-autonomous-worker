@@ -11,4 +11,12 @@ public sealed class AzureDevOpsOptions
     public string PersonalAccessToken { get; set; } = string.Empty;
 
     public string DefaultAssignee { get; set; } = string.Empty;
+
+    public string WorkItemUrl(int workItemId) =>
+        $"{OrganizationUrl.TrimEnd('/')}/{Project}/_workitems/edit/{workItemId}";
+
+    public string? PullRequestUrl(string? repositoryName, int pullRequestId) =>
+        string.IsNullOrWhiteSpace(repositoryName) || string.IsNullOrWhiteSpace(OrganizationUrl)
+            ? null
+            : $"{OrganizationUrl.TrimEnd('/')}/{Project}/_git/{repositoryName}/pullrequest/{pullRequestId}";
 }

@@ -210,6 +210,7 @@ public sealed class CliCompletionServiceTests
         public Task LinkPullRequestToExecutionAsync(
             string executionId,
             int pullRequestId,
+            string? repositoryName,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
 

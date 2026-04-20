@@ -43,6 +43,17 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
         }, cancellationToken);
+
+        // repository_name added to execution_pr_links so PR URLs can be constructed.
+        await MigrateTableAsync(connection, "execution_pr_links", async (columns, conn) =>
+        {
+            if (!columns.Contains("repository_name"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "ALTER TABLE execution_pr_links ADD COLUMN repository_name TEXT";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }, cancellationToken);
     }
 
     private static async Task MigrateTableAsync(
@@ -90,11 +101,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .FirstOrDefaultAsync(e => e.ExecutionId == executionId, cancellationToken);
         if (entity is null)
             return null;
-        var prIds = await context
+        var prs = await context
             .ExecutionPrLinks.Where(l => l.ExecutionId == executionId)
-            .Select(l => l.PullRequestId)
+            .Select(l => new PrLink(l.PullRequestId, l.RepositoryName))
             .ToListAsync(cancellationToken);
-        return ToDomain(entity, prIds);
+        return ToDomain(entity, prs);
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken)
@@ -426,6 +437,7 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
     public async Task LinkPullRequestToExecutionAsync(
         string executionId,
         int pullRequestId,
+        string? repositoryName,
         CancellationToken cancellationToken
     )
     {
@@ -437,7 +449,12 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         if (!exists)
         {
             context.ExecutionPrLinks.Add(
-                new ExecutionPrLinkEntity { ExecutionId = executionId, PullRequestId = pullRequestId }
+                new ExecutionPrLinkEntity
+                {
+                    ExecutionId = executionId,
+                    PullRequestId = pullRequestId,
+                    RepositoryName = repositoryName,
+                }
             );
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -485,7 +502,7 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             PlanProviderSessionId = record.ProviderPlanSessionId,
         };
 
-    private static TaskExecutionRecord ToDomain(ExecutionEntity entity, IReadOnlyList<int>? prIds = null) =>
+    private static TaskExecutionRecord ToDomain(ExecutionEntity entity, IReadOnlyList<PrLink>? prs = null) =>
         new(
             entity.ExecutionId,
             entity.WorkItemId,
@@ -496,10 +513,10 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             entity.CreatedAt,
             entity.UpdatedAt,
             entity.PlanProviderSessionId,
-            prIds ?? []
+            prs ?? []
         );
 
-    private static async Task<Dictionary<string, IReadOnlyList<int>>> FetchPrIdsAsync(
+    private static async Task<Dictionary<string, IReadOnlyList<PrLink>>> FetchPrIdsAsync(
         WorkerDbContext context,
         IEnumerable<string> executionIds,
         CancellationToken cancellationToken
@@ -515,7 +532,7 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .GroupBy(l => l.ExecutionId)
             .ToDictionary(
                 g => g.Key,
-                g => (IReadOnlyList<int>)g.Select(l => l.PullRequestId).ToList()
+                g => (IReadOnlyList<PrLink>)g.Select(l => new PrLink(l.PullRequestId, l.RepositoryName)).ToList()
             );
     }
 
