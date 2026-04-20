@@ -54,6 +54,26 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
         }, cancellationToken);
+
+        // execution_child_tasks table added later; create it when missing on existing databases.
+        using var childTableCheck = connection.CreateCommand();
+        childTableCheck.CommandText =
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='execution_child_tasks'";
+        var childTableCount = (long)(await childTableCheck.ExecuteScalarAsync(cancellationToken))!;
+        if (childTableCount == 0)
+        {
+            using var create = connection.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE execution_child_tasks (
+                    execution_id TEXT NOT NULL,
+                    work_item_id INTEGER NOT NULL,
+                    repo_kind TEXT NOT NULL DEFAULT '',
+                    title TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY (execution_id, work_item_id)
+                )
+                """;
+            await create.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static async Task MigrateTableAsync(
@@ -105,7 +125,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .ExecutionPrLinks.Where(l => l.ExecutionId == executionId)
             .Select(l => new PrLink(l.PullRequestId, l.RepositoryName))
             .ToListAsync(cancellationToken);
-        return ToDomain(entity, prs);
+        var childTasks = await context
+            .ExecutionChildTasks.Where(t => t.ExecutionId == executionId)
+            .Select(t => new ChildTaskLink(t.WorkItemId, t.RepoKind, t.Title))
+            .ToListAsync(cancellationToken);
+        return ToDomain(entity, prs, childTasks);
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken)
@@ -115,8 +139,10 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .Executions.AsNoTracking()
             .OrderByDescending(e => e.UpdatedAt)
             .ToListAsync(cancellationToken);
-        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        var ids = entities.Select(e => e.ExecutionId).ToList();
+        var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
+        var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken)
@@ -127,8 +153,10 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .Where(e => e.Status == (int)ExecutionStatus.Running)
             .OrderByDescending(e => e.UpdatedAt)
             .ToListAsync(cancellationToken);
-        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        var ids = entities.Select(e => e.ExecutionId).ToList();
+        var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
+        var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(
@@ -142,8 +170,10 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .Where(e => e.WorkItemId == workItemId)
             .OrderByDescending(e => e.UpdatedAt)
             .ToListAsync(cancellationToken);
-        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        var ids = entities.Select(e => e.ExecutionId).ToList();
+        var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
+        var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     public async Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken)
@@ -484,8 +514,67 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             )
             .OrderByDescending(e => e.UpdatedAt)
             .ToListAsync(cancellationToken);
-        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        var ids = entities.Select(e => e.ExecutionId).ToList();
+        var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
+        var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
+    }
+
+    public async Task LinkChildTaskToExecutionAsync(
+        string executionId,
+        int workItemId,
+        string repoKind,
+        string title,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var exists = await context.ExecutionChildTasks.AnyAsync(
+            t => t.ExecutionId == executionId && t.WorkItemId == workItemId,
+            cancellationToken
+        );
+        if (!exists)
+        {
+            context.ExecutionChildTasks.Add(
+                new ExecutionChildTaskEntity
+                {
+                    ExecutionId = executionId,
+                    WorkItemId = workItemId,
+                    RepoKind = repoKind,
+                    Title = title,
+                }
+            );
+            await context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByChildTaskAsync(
+        string executionId,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var childWorkItemIds = await context
+            .ExecutionChildTasks.Where(t => t.ExecutionId == executionId)
+            .Select(t => t.WorkItemId)
+            .ToListAsync(cancellationToken);
+
+        if (childWorkItemIds.Count == 0)
+            return [];
+
+        var entities = await context
+            .Executions.AsNoTracking()
+            .Where(e =>
+                e.ExecutionId != executionId
+                && context.ExecutionChildTasks.Any(t => t.ExecutionId == e.ExecutionId && childWorkItemIds.Contains(t.WorkItemId))
+            )
+            .OrderByDescending(e => e.UpdatedAt)
+            .ToListAsync(cancellationToken);
+        var ids = entities.Select(e => e.ExecutionId).ToList();
+        var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
+        var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     private static ExecutionEntity ToEntity(TaskExecutionRecord record) =>
@@ -502,7 +591,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             PlanProviderSessionId = record.ProviderPlanSessionId,
         };
 
-    private static TaskExecutionRecord ToDomain(ExecutionEntity entity, IReadOnlyList<PrLink>? prs = null) =>
+    private static TaskExecutionRecord ToDomain(
+        ExecutionEntity entity,
+        IReadOnlyList<PrLink>? prs = null,
+        IReadOnlyList<ChildTaskLink>? childTasks = null
+    ) =>
         new(
             entity.ExecutionId,
             entity.WorkItemId,
@@ -513,7 +606,8 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             entity.CreatedAt,
             entity.UpdatedAt,
             entity.PlanProviderSessionId,
-            prs ?? []
+            prs ?? [],
+            childTasks ?? []
         );
 
     private static async Task<Dictionary<string, IReadOnlyList<PrLink>>> FetchPrIdsAsync(
@@ -533,6 +627,26 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .ToDictionary(
                 g => g.Key,
                 g => (IReadOnlyList<PrLink>)g.Select(l => new PrLink(l.PullRequestId, l.RepositoryName)).ToList()
+            );
+    }
+
+    private static async Task<Dictionary<string, IReadOnlyList<ChildTaskLink>>> FetchChildTasksAsync(
+        WorkerDbContext context,
+        IEnumerable<string> executionIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var ids = executionIds.ToList();
+        if (ids.Count == 0)
+            return [];
+        var links = await context
+            .ExecutionChildTasks.Where(t => ids.Contains(t.ExecutionId))
+            .ToListAsync(cancellationToken);
+        return links
+            .GroupBy(t => t.ExecutionId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ChildTaskLink>)g.Select(t => new ChildTaskLink(t.WorkItemId, t.RepoKind, t.Title)).ToList()
             );
     }
 

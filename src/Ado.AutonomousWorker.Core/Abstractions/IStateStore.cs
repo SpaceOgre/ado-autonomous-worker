@@ -29,6 +29,19 @@ public interface IStateStore
         CancellationToken cancellationToken
     );
 
+    Task LinkChildTaskToExecutionAsync(
+        string executionId,
+        int workItemId,
+        string repoKind,
+        string title,
+        CancellationToken cancellationToken
+    );
+
+    Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByChildTaskAsync(
+        string executionId,
+        CancellationToken cancellationToken
+    );
+
     Task UpdateStatusAsync(string executionId, ExecutionStatus status, CancellationToken cancellationToken);
 
     Task AppendEventAsync(ExecutionEventRecord executionEvent, CancellationToken cancellationToken);

@@ -52,6 +52,18 @@ else
                     <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@pr.PullRequestId</MudChip>
                 }
             }
+            @foreach (var ct in _execution.ChildTasks ?? [])
+            {
+                var ctUrl = AdoOptions.Value.WorkItemUrl(ct.WorkItemId);
+                @if (ctUrl is not null)
+                {
+                    <MudChip T="string" Icon="@Icons.Material.Filled.Task" Color="Color.Info" Href="@ctUrl" Target="_blank">#@ct.WorkItemId (@ct.RepoKind)</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Icon="@Icons.Material.Filled.Task" Color="Color.Info">#@ct.WorkItemId (@ct.RepoKind)</MudChip>
+                }
+            }
         </MudItem>
     </MudGrid>
 
@@ -440,8 +452,10 @@ else
         var reviewTask = StateStore.GetLatestReviewResultAsync(ExecutionId, CancellationToken.None);
         var usageTask = StateStore.GetAgentUsageAsync(ExecutionId, CancellationToken.None);
         var relatedTask = StateStore.ListExecutionsByWorkItemAsync(_execution.WorkItemId, CancellationToken.None);
+        var prRelatedTask = StateStore.ListRelatedExecutionsByPrAsync(ExecutionId, CancellationToken.None);
+        var childTaskRelatedTask = StateStore.ListRelatedExecutionsByChildTaskAsync(ExecutionId, CancellationToken.None);
 
-        await Task.WhenAll(eventsTask, sessionsTask, chunksTask, planTask, reviewTask, usageTask, relatedTask);
+        await Task.WhenAll(eventsTask, sessionsTask, chunksTask, planTask, reviewTask, usageTask, relatedTask, prRelatedTask, childTaskRelatedTask);
 
         _events = (await eventsTask).ToList();
         _agentSessions = (await sessionsTask).ToList();
@@ -450,7 +464,10 @@ else
         _review = await reviewTask;
         _usageRecords = (await usageTask).ToList();
         _relatedExecutions = (await relatedTask)
+            .Concat(await prRelatedTask)
+            .Concat(await childTaskRelatedTask)
             .Where(e => e.ExecutionId != ExecutionId)
+            .DistinctBy(e => e.ExecutionId)
             .OrderByDescending(e => e.CreatedAt)
             .ToList();
 

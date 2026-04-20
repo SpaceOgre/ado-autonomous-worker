@@ -218,5 +218,18 @@ public sealed class CliCompletionServiceTests
             string executionId,
             CancellationToken cancellationToken
         ) => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>([]);
+
+        public Task LinkChildTaskToExecutionAsync(
+            string executionId,
+            int workItemId,
+            string repoKind,
+            string title,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByChildTaskAsync(
+            string executionId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>([]);
     }
 }

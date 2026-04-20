@@ -74,6 +74,18 @@ internal sealed class WorkItemCodingHandler(
                 cancellationToken
             );
             repositoryExecutions.Add(new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory));
+
+            // Link user-story child tasks (not bugs, which reuse the parent work item ID).
+            if (childTask.WorkItemId != workItem.WorkItemId)
+            {
+                await stateStore.LinkChildTaskToExecutionAsync(
+                    context.ExecutionId,
+                    childTask.WorkItemId,
+                    repoKind.ToString(),
+                    childTask.Title,
+                    cancellationToken
+                );
+            }
         }
 
         context.RepositoryExecutions = repositoryExecutions;

@@ -64,6 +64,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         summary.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         if (execution.PullRequests is { Count: > 0 })
             summary.AddRow("PRs", string.Join("  ", execution.PullRequests.Select(pr => $"!{pr.PullRequestId}")));
+        if (execution.ChildTasks is { Count: > 0 })
+            summary.AddRow("Child Tasks", string.Join("  ", execution.ChildTasks.Select(t => $"#{t.WorkItemId} ({t.RepoKind})")));
 
         AnsiConsole.Write(summary);
         AnsiConsole.WriteLine();
@@ -196,8 +198,10 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
 
         var relatedExecutions = await stateStore.ListExecutionsByWorkItemAsync(execution.WorkItemId, cancellationToken);
         var prRelated = await stateStore.ListRelatedExecutionsByPrAsync(execution.ExecutionId, cancellationToken);
+        var childTaskRelated = await stateStore.ListRelatedExecutionsByChildTaskAsync(execution.ExecutionId, cancellationToken);
         var siblings = relatedExecutions
             .Concat(prRelated)
+            .Concat(childTaskRelated)
             .Where(e => e.ExecutionId != execution.ExecutionId)
             .DistinctBy(e => e.ExecutionId)
             .OrderByDescending(e => e.UpdatedAt)
