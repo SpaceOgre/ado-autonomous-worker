@@ -410,6 +410,14 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             );
             await context.SaveChangesAsync(cancellationToken);
         }
+        // Keep the denormalized PullRequestId on the execution record in sync so the dashboard
+        // and execution detail can display the PR without joining the links table.
+        await context
+            .Executions.Where(e => e.ExecutionId == executionId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(e => e.PullRequestId, pullRequestId),
+                cancellationToken
+            );
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(

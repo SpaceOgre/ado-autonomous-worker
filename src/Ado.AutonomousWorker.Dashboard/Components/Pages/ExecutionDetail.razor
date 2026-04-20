@@ -30,7 +30,7 @@ else
             <MudChip T="string" Color="StatusColor(_execution.Status)">@_execution.Status</MudChip>
             @if (_execution.PullRequestId.HasValue)
             {
-                <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR #@_execution.PullRequestId</MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@_execution.PullRequestId</MudChip>
             }
         </MudItem>
     </MudGrid>
@@ -430,6 +430,7 @@ else
         _review = await reviewTask;
         _usageRecords = (await usageTask).ToList();
         _relatedExecutions = (await relatedTask)
+            .Where(e => e.ExecutionId != ExecutionId)
             .OrderByDescending(e => e.CreatedAt)
             .ToList();
 

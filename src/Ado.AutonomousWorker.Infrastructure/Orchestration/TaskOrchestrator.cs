@@ -36,7 +36,7 @@ internal sealed class TaskOrchestrator(
         var item =
             await azureDevOpsClient.GetPrFixItemAsync(pullRequestId, cancellationToken)
             ?? throw new InvalidOperationException(
-                $"PR #{pullRequestId} does not have the required AI-Rework label or has no linked work items."
+                $"PR !{pullRequestId} does not have the required AI-Rework label or has no linked work items."
             );
         return await RunTaskAsync(item, iterationOverride: null, cancellationToken);
     }
@@ -140,7 +140,7 @@ internal sealed class TaskOrchestrator(
             var prTarget = location is not null
                 ? new PrTarget(execution.PullRequestId.Value, location.Value.RepositoryName, location.Value.BranchName)
                 : throw new InvalidOperationException(
-                    $"Cannot resume AiPrFix execution '{executionId}': PR #{execution.PullRequestId} was not found."
+                    $"Cannot resume AiPrFix execution '{executionId}': PR !{execution.PullRequestId} was not found."
                 );
 
             var prFixContext = new PhaseContext.PrFixContext

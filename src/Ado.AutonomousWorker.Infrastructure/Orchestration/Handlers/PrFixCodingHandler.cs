@@ -71,7 +71,7 @@ internal sealed class PrFixCodingHandler(
         await context.Journal.AppendEventAsync(
             context.ExecutionId,
             TaskPhase.Coding,
-            $"Running PR fix coding agent for {repoKind} (PR #{prTarget.PullRequestId}, {context.PrThreads.Count} thread(s)).",
+            $"Running PR fix coding agent for {repoKind} (PR !{prTarget.PullRequestId}, {context.PrThreads.Count} thread(s)).",
             cancellationToken
         );
 

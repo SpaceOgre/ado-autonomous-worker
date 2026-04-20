@@ -36,7 +36,7 @@ internal sealed class PrFixEligibilityHandler(
         await context.Journal.AppendEventAsync(
             context.ExecutionId,
             TaskPhase.Queued,
-            $"PR fix: loaded {context.PrThreads.Count} active review thread(s) from PR #{prTarget.PullRequestId}.",
+            $"PR fix: loaded {context.PrThreads.Count} active review thread(s) from PR !{prTarget.PullRequestId}.",
             cancellationToken
         );
         return PhaseTransition.To(TaskPhase.Coding);

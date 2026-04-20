@@ -376,7 +376,7 @@ public sealed class AzureDevOpsClient(
         }
 
         _logger.LogDebug(
-            "PR #{PrId}: labels=[{Labels}] hasAiRework={HasAiRework}",
+            "PR !{PrId}: labels=[{Labels}] hasAiRework={HasAiRework}",
             prId,
             string.Join(", ", labelNames),
             hasAiRework
@@ -384,7 +384,7 @@ public sealed class AzureDevOpsClient(
 
         if (!hasAiRework)
         {
-            _logger.LogDebug("PR #{PrId}: skipped (missing required AI-Rework label)", prId);
+            _logger.LogDebug("PR !{PrId}: skipped (missing required AI-Rework label)", prId);
             return [];
         }
 
@@ -396,11 +396,11 @@ public sealed class AzureDevOpsClient(
         var scope = DeriveScope(repositoryName);
 
         var workItemIds = await GetPrWorkItemIdsAsync(repositoryName, prId, cancellationToken);
-        _logger.LogDebug("PR #{PrId}: work items resolved to ids=[{Ids}]", prId, string.Join(", ", workItemIds));
+        _logger.LogDebug("PR !{PrId}: work items resolved to ids=[{Ids}]", prId, string.Join(", ", workItemIds));
 
         if (workItemIds.Length == 0)
         {
-            _logger.LogDebug("PR #{PrId}: skipped (no linked work items)", prId);
+            _logger.LogDebug("PR !{PrId}: skipped (no linked work items)", prId);
             return [];
         }
 

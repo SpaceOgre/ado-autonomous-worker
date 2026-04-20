@@ -92,7 +92,7 @@ internal sealed class WorkItemPublishingHandler(
             );
 
             logger.LogInformation(
-                "Execution {ExecutionId}: created draft PR #{PullRequestId} for {RepoKind}.",
+                "Execution {ExecutionId}: created draft PR !{PullRequestId} for {RepoKind}.",
                 context.ExecutionId,
                 pullRequest.PullRequestId,
                 repoKind
