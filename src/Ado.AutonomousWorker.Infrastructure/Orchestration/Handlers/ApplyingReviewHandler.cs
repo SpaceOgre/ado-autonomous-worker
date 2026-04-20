@@ -58,7 +58,7 @@ internal sealed class ApplyingReviewHandler(
         );
 
         var config = agentOptions.Value.Code;
-        var resumeResult = await agentRunnerFactory
+        var resumeStart = await agentRunnerFactory
             .GetRunner(config.Provider)
             .ResumeSessionAsync(
                 codeSession,
@@ -69,13 +69,14 @@ internal sealed class ApplyingReviewHandler(
                 cancellationToken
             );
 
-        if (resumeResult.Usage is not null)
+        await stateStore.SaveAgentSessionAsync(context.ExecutionId, resumeStart.Session, cancellationToken);
+        if (resumeStart.Result.Usage is not null)
             await stateStore.RecordAgentUsageAsync(
                 context.ExecutionId,
                 TaskPhase.ApplyingReview,
                 AgentRole.Code,
                 config.Provider,
-                resumeResult.Usage,
+                resumeStart.Result.Usage,
                 cancellationToken
             );
 

@@ -55,7 +55,7 @@ internal sealed class ReviewingHandler(
         );
 
         var config = agentOptions.Value.Review;
-        var (review, reviewUsage) = await agentRunnerFactory
+        var (review, reviewSession, reviewUsage) = await agentRunnerFactory
             .GetRunner(config.Provider)
             .RunReviewAsync(
                 config,
@@ -71,6 +71,7 @@ internal sealed class ReviewingHandler(
                 cancellationToken
             );
 
+        await stateStore.SaveAgentSessionAsync(context.ExecutionId, reviewSession, cancellationToken);
         await stateStore.SaveReviewResultAsync(context.ExecutionId, review, cancellationToken);
         if (reviewUsage is not null)
             await stateStore.RecordAgentUsageAsync(

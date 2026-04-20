@@ -58,7 +58,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         return new AgentSessionStartResult(session, result);
     }
 
-    public async Task<AgentRunResult> ResumeSessionAsync(
+    public async Task<AgentSessionStartResult> ResumeSessionAsync(
         AgentSessionHandle session,
         AgentRoleConfig config,
         string prompt,
@@ -68,9 +68,17 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
     )
     {
         Directory.CreateDirectory(artifactDirectory);
+        var resumeSessionId = Guid.NewGuid().ToString();
         var transcriptPath = Path.Combine(
             artifactDirectory,
             $"{session.Role.ToString().ToLowerInvariant()}-claude-resume.log"
+        );
+        var resumeSession = new AgentSessionHandle(
+            resumeSessionId,
+            Provider,
+            session.Role,
+            session.WorkingDirectory,
+            transcriptPath
         );
         var args = BuildArguments(
             session.Role,
@@ -88,7 +96,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             transcriptPath,
             environmentVariables: BuildEnvironment(["ANTHROPIC_API_KEY"]),
             activityName: $"Claude {session.Role} resume",
-            outputCallback: CreateOutputObserver(session, outputCallback),
+            outputCallback: CreateOutputObserver(resumeSession, outputCallback),
             cancellationToken,
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null
         );
@@ -96,7 +104,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         var (summary, _, usage) = ParseEnvelope(commandResult.StandardOutput, hasSchema: false);
         if (usage is not null && usage.ActualModel is null)
             usage = usage with { ActualModel = config.Model };
-        return new AgentRunResult(
+        var result = new AgentRunResult(
             commandResult.Success,
             summary,
             transcriptPath,
@@ -104,9 +112,10 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
             null,
             usage
         );
+        return new AgentSessionStartResult(resumeSession, result);
     }
 
-    public async Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
+    public async Task<(ReviewResult Review, AgentSessionHandle Session, AgentUsage? Usage)> RunReviewAsync(
         AgentRoleConfig config,
         string prompt,
         string workingDirectory,
@@ -129,6 +138,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
 
         return (
             ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath),
+            startResult.Session,
             startResult.Result.Usage
         );
     }

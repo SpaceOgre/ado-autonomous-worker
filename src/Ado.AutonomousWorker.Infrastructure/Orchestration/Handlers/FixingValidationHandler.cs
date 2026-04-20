@@ -53,7 +53,7 @@ internal sealed class FixingValidationHandler(
         );
 
         var config = agentOptions.Value.Code;
-        var resumeResult = await agentRunnerFactory
+        var resumeStart = await agentRunnerFactory
             .GetRunner(config.Provider)
             .ResumeSessionAsync(
                 codeSession,
@@ -64,13 +64,14 @@ internal sealed class FixingValidationHandler(
                 cancellationToken
             );
 
-        if (resumeResult.Usage is not null)
+        await stateStore.SaveAgentSessionAsync(context.ExecutionId, resumeStart.Session, cancellationToken);
+        if (resumeStart.Result.Usage is not null)
             await stateStore.RecordAgentUsageAsync(
                 context.ExecutionId,
                 TaskPhase.FixingValidation,
                 AgentRole.Code,
                 config.Provider,
-                resumeResult.Usage,
+                resumeStart.Result.Usage,
                 cancellationToken
             );
 

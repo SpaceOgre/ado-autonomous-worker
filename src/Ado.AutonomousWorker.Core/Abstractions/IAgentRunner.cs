@@ -19,7 +19,7 @@ public interface IAgentRunner
         CancellationToken cancellationToken
     );
 
-    Task<AgentRunResult> ResumeSessionAsync(
+    Task<AgentSessionStartResult> ResumeSessionAsync(
         AgentSessionHandle session,
         AgentRoleConfig config,
         string prompt,
@@ -28,7 +28,7 @@ public interface IAgentRunner
         CancellationToken cancellationToken
     );
 
-    Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
+    Task<(ReviewResult Review, AgentSessionHandle Session, AgentUsage? Usage)> RunReviewAsync(
         AgentRoleConfig config,
         string prompt,
         string workingDirectory,

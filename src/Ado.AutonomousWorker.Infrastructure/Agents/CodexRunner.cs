@@ -99,7 +99,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         return new AgentSessionStartResult(session, result);
     }
 
-    public async Task<AgentRunResult> ResumeSessionAsync(
+    public async Task<AgentSessionStartResult> ResumeSessionAsync(
         AgentSessionHandle session,
         AgentRoleConfig config,
         string prompt,
@@ -109,6 +109,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
     )
     {
         Directory.CreateDirectory(artifactDirectory);
+        var resumeSessionId = Guid.NewGuid().ToString("N");
         var transcriptPath = Path.Combine(
             artifactDirectory,
             $"{session.Role.ToString().ToLowerInvariant()}-codex-resume.log"
@@ -116,6 +117,14 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
         var outputPath = Path.Combine(
             artifactDirectory,
             $"{session.Role.ToString().ToLowerInvariant()}-codex-resume.last.txt"
+        );
+        var resumeSession = new AgentSessionHandle(
+            resumeSessionId,
+            Provider,
+            session.Role,
+            session.WorkingDirectory,
+            transcriptPath,
+            ProviderSessionId: null
         );
         var targetSession = session.ProviderSessionId ?? session.SessionId;
 
@@ -142,7 +151,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             transcriptPath,
             environmentVariables: BuildEnvironment(["OPENAI_API_KEY", "OPENAI_ORG_ID", "OPENAI_BASE_URL"]),
             activityName: $"Codex {session.Role} resume",
-            outputCallback: CreateOutputObserver(session, outputCallback),
+            outputCallback: CreateOutputObserver(resumeSession, outputCallback),
             cancellationToken,
             timeoutSeconds: config.TimeoutSeconds > 0 ? config.TimeoutSeconds : null
         );
@@ -151,7 +160,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             ? await File.ReadAllTextAsync(outputPath, cancellationToken)
             : commandResult.StandardOutput;
         var usage = ParseCodexUsage(commandResult.StandardOutput);
-        return new AgentRunResult(
+        var result = new AgentRunResult(
             commandResult.Success,
             SummarizePayload(payload),
             transcriptPath,
@@ -159,9 +168,10 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
             payload,
             usage
         );
+        return new AgentSessionStartResult(resumeSession, result);
     }
 
-    public async Task<(ReviewResult Review, AgentUsage? Usage)> RunReviewAsync(
+    public async Task<(ReviewResult Review, AgentSessionHandle Session, AgentUsage? Usage)> RunReviewAsync(
         AgentRoleConfig config,
         string prompt,
         string workingDirectory,
@@ -184,6 +194,7 @@ public sealed class CodexRunner(ProcessCommandRunner commandRunner) : IAgentRunn
 
         return (
             ReviewResultParser.Parse(startResult.Result.StructuredPayload, startResult.Result.TranscriptPath),
+            startResult.Session,
             startResult.Result.Usage
         );
     }

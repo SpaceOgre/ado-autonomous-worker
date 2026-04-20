@@ -16,6 +16,7 @@ internal sealed class WorkItemPublishingHandler(
     IRulesEngine rulesEngine,
     IAgentRunnerFactory agentRunnerFactory,
     IStateStore stateStore,
+    ExecutionJournal executionJournal,
     ProcessCommandRunner commandRunner,
     IOptions<AgentOptions> agentOptions,
     IOptions<WorkerOptions> workerOptions,
@@ -220,10 +221,11 @@ internal sealed class WorkItemPublishingHandler(
                 workspace.WorkingDirectory,
                 Path.Combine(artifactDir, "pr-description"),
                 AgentOutputSchemas.PullRequestDescription,
-                outputCallback: null,
+                executionJournal.CreateOutputObserver(context.ExecutionId),
                 cancellationToken
             );
 
+            await stateStore.SaveAgentSessionAsync(context.ExecutionId, result.Session, cancellationToken);
             if (result.Result.Usage is not null)
                 await stateStore.RecordAgentUsageAsync(
                     context.ExecutionId,
