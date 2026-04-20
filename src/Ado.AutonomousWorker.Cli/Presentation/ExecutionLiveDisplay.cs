@@ -236,12 +236,17 @@ public sealed class ExecutionLiveDisplay(
     {
         var shortId = execution.ExecutionId.Length > 8 ? execution.ExecutionId[..8] + "…" : execution.ExecutionId;
 
+        var prSuffix = execution.PullRequests is { Count: > 0 }
+            ? "  " + string.Join(" ", execution.PullRequests.Select(pr => $"[green]!{pr.PullRequestId}[/]"))
+            : string.Empty;
+
         var rows = new List<IRenderable>
         {
-            // Title + work item identity
+            // Title + work item identity + PR(s) once published
             new Markup(
                 $"[bold]{Markup.Escape(execution.Title)}[/]  "
                     + $"[grey]#{execution.WorkItemId} · {CliStyle.QueueKind(execution.Kind)}[/]"
+                    + prSuffix
             ),
             // Execution ID + agent configuration
             new Markup(
