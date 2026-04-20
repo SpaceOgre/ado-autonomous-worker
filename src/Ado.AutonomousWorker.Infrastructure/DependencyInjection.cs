@@ -57,6 +57,7 @@ public static class DependencyInjection
         services.AddSingleton<IPhaseHandler, PrFixCodingHandler>();
         services.AddSingleton<IPhaseHandler, ReviewingHandler>();
         services.AddSingleton<IPhaseHandler, ApplyingReviewHandler>();
+        services.AddSingleton<IPhaseHandler, FixingValidationHandler>();
         services.AddSingleton<IPhaseHandler, ValidatingHandler>();
         services.AddSingleton<IPhaseHandler, WorkItemPublishingHandler>();
         services.AddSingleton<IPhaseHandler, PrFixPublishingHandler>();

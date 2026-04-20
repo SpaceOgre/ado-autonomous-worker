@@ -23,6 +23,7 @@ public sealed class ExecutionLiveDisplay(
         TaskPhase.Coding,
         TaskPhase.Reviewing,
         TaskPhase.ApplyingReview,
+        TaskPhase.FixingValidation,
         TaskPhase.Validating,
         TaskPhase.Publishing,
     ];
@@ -428,6 +429,7 @@ public sealed class ExecutionLiveDisplay(
             TaskPhase.Coding => agentOptions.Code,
             TaskPhase.Reviewing => agentOptions.Review,
             TaskPhase.ApplyingReview => agentOptions.Code,
+            TaskPhase.FixingValidation => agentOptions.Code,
             TaskPhase.Publishing => agentOptions.Pr,
             _ => null,
         };

@@ -184,7 +184,8 @@ public sealed class InteractiveSession(IServiceProvider services)
     private static void RenderWelcome()
     {
         var assembly = typeof(InteractiveSession).Assembly;
-        var versionText = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        var versionText =
+            assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? assembly.GetName().Version?.ToString()
             ?? "dev";
         RunPreambleDisplay.ShowInteractiveSplash($"v{versionText}");

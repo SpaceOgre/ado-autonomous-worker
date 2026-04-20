@@ -18,6 +18,8 @@ internal abstract record PhaseContext
     public ReviewResult? LatestReview { get; set; }
     public IReadOnlyList<ReviewFinding>? AcceptedFindings { get; set; }
     public List<RepositoryPublishResult> PublishedRepositories { get; } = [];
+    public int ValidationRetryCount { get; set; }
+    public IReadOnlyList<ValidationFailure> ValidationFailures { get; set; } = [];
 
     /// <summary>
     /// Full AI Work / AI Rework flow: Planning → Coding → Reviewing → ApplyingReview → Validating → Publishing.

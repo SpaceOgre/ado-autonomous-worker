@@ -121,13 +121,7 @@ internal sealed class WorkItemCodingHandler(
                 config,
                 await PromptTemplateLoader.ApplyAsync(
                     config,
-                    BuildCodePrompt(
-                        workItem,
-                        repositoryExecutions,
-                        plan,
-                        agentWorkingDirectory,
-                        commentsBlock
-                    ),
+                    BuildCodePrompt(workItem, repositoryExecutions, plan, agentWorkingDirectory, commentsBlock),
                     cancellationToken
                 ),
                 agentWorkingDirectory,
@@ -195,13 +189,19 @@ internal sealed class WorkItemCodingHandler(
                 ? $"Add or update tests for the following:\n{string.Join("\n", plan.TestIntent.Select(t => $"- {t}"))}"
                 : "Update or add tests where the change introduces non-trivial logic.";
 
+        var hasFrontend = repositoryExecutions.Any(r => r.RepoKind == RepoKind.Frontend);
+        if (hasFrontend)
+            testIntentBlock += "\nDo not write any tests for the frontend repository.";
+
         return $$"""
             Implement this Azure DevOps work item across the listed repositories as one coordinated change.
 
             Agent working directory: {{agentWorkingDirectory}}
             Plan summary: {{plan.Summary}}
 
-            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}}" title="{{parent.Title}}">
+            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(
+                parent.WorkItemType
+            )}}" title="{{parent.Title}}">
             <parent-feature>{{parent.ParentFeatureTitle ?? "-"}}</parent-feature>
             <description>
             {{parent.Description}}

@@ -44,10 +44,7 @@ public sealed class SlashCommandRegistry
 
     private static readonly Dictionary<string, IReadOnlyList<FlagDef>> CommandFlagMap = new()
     {
-        ["/run"] =
-        [
-            new("--iteration", "Override iteration path (e.g. 'Project\\Sprint 5')", TakesValue: true),
-        ],
+        ["/run"] = [new("--iteration", "Override iteration path (e.g. 'Project\\Sprint 5')", TakesValue: true)],
         ["/deploy"] =
         [
             new("--dry-run", "Preview without running pipelines"),
@@ -72,27 +69,15 @@ public sealed class SlashCommandRegistry
             new("--last", "Update the most recent execution"),
             new("--phase", "Phase: Reviewing, ApplyingReview, Validating, Publishing", TakesValue: true),
         ],
-        ["/agent test"] =
-        [
-            new("--role", "Role to test: plan, code, or review", TakesValue: true),
-        ],
-        ["/executions"] =
-        [
-            new("--active", "Show only in-progress executions"),
-        ],
+        ["/agent test"] = [new("--role", "Role to test: plan, code, or review", TakesValue: true)],
+        ["/executions"] = [new("--active", "Show only in-progress executions")],
         ["/execution show"] =
         [
             new("--id", "Execution ID to show", TakesValue: true),
             new("--last", "Show the most recent execution"),
         ],
-        ["/ado comment-test"] =
-        [
-            new("--work-item", "Work item ID to post comment on", TakesValue: true),
-        ],
-        ["/ui splash"] =
-        [
-            new("--status", "Optional status text under the banner", TakesValue: true),
-        ],
+        ["/ado comment-test"] = [new("--work-item", "Work item ID to post comment on", TakesValue: true)],
+        ["/ui splash"] = [new("--status", "Optional status text under the banner", TakesValue: true)],
     };
 
     /// <summary>Returns all registered slash commands.</summary>
@@ -135,7 +120,8 @@ public sealed class SlashCommandRegistry
 
         // Look for an exact command match
         var exactCmd = AllCommands.FirstOrDefault(c =>
-            c.Command.Equals(normalizedCmd, StringComparison.OrdinalIgnoreCase));
+            c.Command.Equals(normalizedCmd, StringComparison.OrdinalIgnoreCase)
+        );
 
         if (exactCmd == null)
         {

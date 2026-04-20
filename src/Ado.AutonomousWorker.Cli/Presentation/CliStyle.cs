@@ -10,6 +10,7 @@ public static class CliStyle
         var color = phase switch
         {
             TaskPhase.Validating => "aqua",
+            TaskPhase.FixingValidation => "orange1",
             TaskPhase.Reviewing => "mediumspringgreen",
             TaskPhase.ApplyingReview => "yellow",
             TaskPhase.Coding => "deepskyblue1",

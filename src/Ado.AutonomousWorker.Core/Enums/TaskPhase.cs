@@ -9,4 +9,5 @@ public enum TaskPhase
     ApplyingReview = 4,
     Validating = 5,
     Publishing = 6,
+    FixingValidation = 7,
 }

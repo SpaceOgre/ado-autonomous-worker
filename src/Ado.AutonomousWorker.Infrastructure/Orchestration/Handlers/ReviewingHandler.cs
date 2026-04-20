@@ -131,7 +131,9 @@ internal sealed class ReviewingHandler(
 
             Agent working directory: {{agentWorkingDirectory}}
 
-            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(parent.WorkItemType)}}" title="{{parent.Title}}">
+            <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(
+                parent.WorkItemType
+            )}}" title="{{parent.Title}}">
             <parent-feature>{{parent.ParentFeatureTitle ?? "-"}}</parent-feature>
             <description>
             {{parent.Description ?? "-"}}

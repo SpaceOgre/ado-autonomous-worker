@@ -23,37 +23,53 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var connection = context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken);
 
-        await MigrateTableAsync(connection, "execution_plans", async (columns, conn) =>
-        {
-            if (!columns.Contains("test_intent_json"))
+        await MigrateTableAsync(
+            connection,
+            "execution_plans",
+            async (columns, conn) =>
             {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
-            }
-        }, cancellationToken);
+                if (!columns.Contains("test_intent_json"))
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText =
+                        "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+            },
+            cancellationToken
+        );
 
         // pull_request_id was moved to the execution_pr_links junction table.
-        await MigrateTableAsync(connection, "executions", async (columns, conn) =>
-        {
-            if (columns.Contains("pull_request_id"))
+        await MigrateTableAsync(
+            connection,
+            "executions",
+            async (columns, conn) =>
             {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "ALTER TABLE executions DROP COLUMN pull_request_id";
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
-            }
-        }, cancellationToken);
+                if (columns.Contains("pull_request_id"))
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "ALTER TABLE executions DROP COLUMN pull_request_id";
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+            },
+            cancellationToken
+        );
 
         // repository_name added to execution_pr_links so PR URLs can be constructed.
-        await MigrateTableAsync(connection, "execution_pr_links", async (columns, conn) =>
-        {
-            if (!columns.Contains("repository_name"))
+        await MigrateTableAsync(
+            connection,
+            "execution_pr_links",
+            async (columns, conn) =>
             {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "ALTER TABLE execution_pr_links ADD COLUMN repository_name TEXT";
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
-            }
-        }, cancellationToken);
+                if (!columns.Contains("repository_name"))
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "ALTER TABLE execution_pr_links ADD COLUMN repository_name TEXT";
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+            },
+            cancellationToken
+        );
 
         // execution_child_tasks table added later; create it when missing on existing databases.
         using var childTableCheck = connection.CreateCommand();
@@ -142,7 +158,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var ids = entities.Select(e => e.ExecutionId).ToList();
         var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
         var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        return entities
+            .Select(e =>
+                ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))
+            )
+            .ToList();
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken)
@@ -156,7 +176,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var ids = entities.Select(e => e.ExecutionId).ToList();
         var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
         var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        return entities
+            .Select(e =>
+                ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))
+            )
+            .ToList();
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(
@@ -173,7 +197,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var ids = entities.Select(e => e.ExecutionId).ToList();
         var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
         var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        return entities
+            .Select(e =>
+                ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))
+            )
+            .ToList();
     }
 
     public async Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken)
@@ -517,7 +545,11 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var ids = entities.Select(e => e.ExecutionId).ToList();
         var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
         var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        return entities
+            .Select(e =>
+                ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))
+            )
+            .ToList();
     }
 
     public async Task LinkChildTaskToExecutionAsync(
@@ -567,14 +599,20 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .Executions.AsNoTracking()
             .Where(e =>
                 e.ExecutionId != executionId
-                && context.ExecutionChildTasks.Any(t => t.ExecutionId == e.ExecutionId && childWorkItemIds.Contains(t.WorkItemId))
+                && context.ExecutionChildTasks.Any(t =>
+                    t.ExecutionId == e.ExecutionId && childWorkItemIds.Contains(t.WorkItemId)
+                )
             )
             .OrderByDescending(e => e.UpdatedAt)
             .ToListAsync(cancellationToken);
         var ids = entities.Select(e => e.ExecutionId).ToList();
         var prMap = await FetchPrIdsAsync(context, ids, cancellationToken);
         var childTaskMap = await FetchChildTasksAsync(context, ids, cancellationToken);
-        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))).ToList();
+        return entities
+            .Select(e =>
+                ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId), childTaskMap.GetValueOrDefault(e.ExecutionId))
+            )
+            .ToList();
     }
 
     private static ExecutionEntity ToEntity(TaskExecutionRecord record) =>
@@ -646,7 +684,9 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             .GroupBy(t => t.ExecutionId)
             .ToDictionary(
                 g => g.Key,
-                g => (IReadOnlyList<ChildTaskLink>)g.Select(t => new ChildTaskLink(t.WorkItemId, t.RepoKind, t.Title)).ToList()
+                g =>
+                    (IReadOnlyList<ChildTaskLink>)
+                        g.Select(t => new ChildTaskLink(t.WorkItemId, t.RepoKind, t.Title)).ToList()
             );
     }
 

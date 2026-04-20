@@ -82,9 +82,9 @@ public static class AgentOutputNormalizer
                         if (!string.IsNullOrWhiteSpace(toolName))
                         {
                             var detail = GetToolDetail(toolName, item);
-                            messages.Add(string.IsNullOrWhiteSpace(detail)
-                                ? $"[{toolName}]"
-                                : $"[{toolName}] {detail}");
+                            messages.Add(
+                                string.IsNullOrWhiteSpace(detail) ? $"[{toolName}]" : $"[{toolName}] {detail}"
+                            );
                         }
                         break;
                 }
@@ -130,8 +130,10 @@ public static class AgentOutputNormalizer
     {
         var pattern = TryGetString(input, "pattern");
         var path = TryGetString(input, "path");
-        if (string.IsNullOrEmpty(pattern)) return path;
-        if (string.IsNullOrEmpty(path)) return $"\"{pattern}\"";
+        if (string.IsNullOrEmpty(pattern))
+            return path;
+        if (string.IsNullOrEmpty(path))
+            return $"\"{pattern}\"";
         return $"\"{pattern}\" in {Path.GetFileName(path)}";
     }
 

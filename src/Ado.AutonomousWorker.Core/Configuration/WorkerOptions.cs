@@ -6,6 +6,8 @@ public sealed class WorkerOptions
 
     public int ReviewCycleLimit { get; set; } = 1;
 
+    public int MaxValidationRetries { get; set; } = 1;
+
     public bool DryRun { get; set; }
 
     public bool CleanupWorktreesAfterSuccess { get; set; }

@@ -1,12 +1,17 @@
 using System.Text.RegularExpressions;
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Infrastructure.Execution;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
-internal sealed partial class ValidatingHandler(ProcessCommandRunner commandRunner, ILogger<ValidatingHandler> logger)
-    : IPhaseHandler
+internal sealed partial class ValidatingHandler(
+    ProcessCommandRunner commandRunner,
+    IOptions<WorkerOptions> workerOptions,
+    ILogger<ValidatingHandler> logger
+) : IPhaseHandler
 {
     public TaskPhase Phase => TaskPhase.Validating;
 
@@ -14,6 +19,8 @@ internal sealed partial class ValidatingHandler(ProcessCommandRunner commandRunn
 
     public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
+        var failures = new List<ValidationFailure>();
+
         foreach (var repositoryExecution in context.RepositoryExecutions)
         {
             var repoKind = repositoryExecution.RepoKind;
@@ -50,13 +57,24 @@ internal sealed partial class ValidatingHandler(ProcessCommandRunner commandRunn
                 );
 
                 if (!result.Success)
-                    throw new ValidationFailureException(
+                {
+                    logger.LogWarning(
+                        "Execution {ExecutionId}: validation failed for {RepoKind}: {Command}",
+                        context.ExecutionId,
                         repoKind,
-                        validationCommand,
-                        artifactPath,
-                        result.StandardOutput,
-                        result.StandardError
+                        validationCommand
                     );
+                    failures.Add(
+                        new ValidationFailure(
+                            repoKind,
+                            validationCommand,
+                            artifactPath,
+                            result.StandardOutput,
+                            result.StandardError
+                        )
+                    );
+                    break; // one failure per repo is enough to surface; move on to the next repo
+                }
 
                 logger.LogInformation(
                     "Execution {ExecutionId}: validation passed for {RepoKind}: {Command}",
@@ -67,7 +85,36 @@ internal sealed partial class ValidatingHandler(ProcessCommandRunner commandRunn
             }
         }
 
-        return PhaseTransition.To(TaskPhase.Publishing);
+        if (failures.Count == 0)
+            return PhaseTransition.To(TaskPhase.Publishing);
+
+        if (
+            context is PhaseContext.WorkItemContext
+            && context.ValidationRetryCount < workerOptions.Value.MaxValidationRetries
+        )
+        {
+            context.ValidationRetryCount++;
+            context.ValidationFailures = failures;
+
+            var failureSummary = string.Join(", ", failures.Select(f => $"{f.RepoKind}: {f.Command}"));
+            await context.Journal.AppendEventAsync(
+                context.ExecutionId,
+                TaskPhase.Validating,
+                $"Validation failed ({failureSummary}). Retrying (attempt {context.ValidationRetryCount}/{workerOptions.Value.MaxValidationRetries}).",
+                cancellationToken
+            );
+
+            return PhaseTransition.To(TaskPhase.FixingValidation);
+        }
+
+        var first = failures[0];
+        throw new ValidationFailureException(
+            first.RepoKind,
+            first.Command,
+            first.ArtifactPath,
+            first.StandardOutput,
+            first.StandardError
+        );
     }
 
     private static string NormalizeFileName(string value) =>

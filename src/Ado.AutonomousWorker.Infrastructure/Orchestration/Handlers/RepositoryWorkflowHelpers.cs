@@ -44,7 +44,7 @@ internal static class RepositoryWorkflowHelpers
                 var validation =
                     re.Profile.ValidationCommands.Count == 0
                         ? "None"
-                        : string.Join(" | ", re.Profile.ValidationCommands);
+                        : string.Join(" && ", re.Profile.ValidationCommands);
 
                 return $$"""
                 [{{re.RepoKind}}]
