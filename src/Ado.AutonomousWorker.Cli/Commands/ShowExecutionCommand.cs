@@ -62,6 +62,8 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         summary.AddRow("Status", CliStyle.Status(execution.Status));
         summary.AddRow("Created", execution.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         summary.AddRow("Updated", execution.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+        if (execution.PullRequests is { Count: > 0 })
+            summary.AddRow("PRs", string.Join("  ", execution.PullRequests.Select(pr => $"!{pr.PullRequestId}")));
 
         AnsiConsole.Write(summary);
         AnsiConsole.WriteLine();
