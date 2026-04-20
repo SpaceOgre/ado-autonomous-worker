@@ -41,6 +41,7 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
         CancellationToken cancellationToken
     )
     {
+        using var wakeLock = new WakeLock();
         string executionId;
 
         if (settings.PullRequestId is not null)
