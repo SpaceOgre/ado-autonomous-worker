@@ -35,7 +35,7 @@ else
             <MudTd DataLabel="Phase"><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
             <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
             <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
-            <MudTd DataLabel="PR">@(context.PullRequestId.HasValue ? $"!{context.PullRequestId}" : "-")</MudTd>
+            <MudTd DataLabel="PR">@(context.PullRequestIds?.Count > 0 ? string.Join(", ", context.PullRequestIds.Select(id => $"!{id}")) : "-")</MudTd>
             <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
         </RowTemplate>
         <NoRecordsContent>

@@ -23,20 +23,42 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var connection = context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken);
 
-        using var pragmaCmd = connection.CreateCommand();
-        pragmaCmd.CommandText = "PRAGMA table_info(execution_plans)";
-        using var reader = await pragmaCmd.ExecuteReaderAsync(cancellationToken);
+        await MigrateTableAsync(connection, "execution_plans", async (columns, conn) =>
+        {
+            if (!columns.Contains("test_intent_json"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }, cancellationToken);
+
+        // pull_request_id was moved to the execution_pr_links junction table.
+        await MigrateTableAsync(connection, "executions", async (columns, conn) =>
+        {
+            if (columns.Contains("pull_request_id"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "ALTER TABLE executions DROP COLUMN pull_request_id";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }, cancellationToken);
+    }
+
+    private static async Task MigrateTableAsync(
+        System.Data.Common.DbConnection connection,
+        string tableName,
+        Func<HashSet<string>, System.Data.Common.DbConnection, Task> migrate,
+        CancellationToken cancellationToken
+    )
+    {
+        using var pragma = connection.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName})";
+        using var reader = await pragma.ExecuteReaderAsync(cancellationToken);
         var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         while (await reader.ReadAsync(cancellationToken))
             columns.Add(reader.GetString(1));
-
-        if (!columns.Contains("test_intent_json"))
-        {
-            using var alterCmd = connection.CreateCommand();
-            alterCmd.CommandText =
-                "ALTER TABLE execution_plans ADD COLUMN test_intent_json TEXT NOT NULL DEFAULT '[]'";
-            await alterCmd.ExecuteNonQueryAsync(cancellationToken);
-        }
+        await migrate(columns, connection);
     }
 
     public async Task SaveExecutionAsync(TaskExecutionRecord execution, CancellationToken cancellationToken)
@@ -66,28 +88,36 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         var entity = await context
             .Executions.AsNoTracking()
             .FirstOrDefaultAsync(e => e.ExecutionId == executionId, cancellationToken);
-        return entity is null ? null : ToDomain(entity);
+        if (entity is null)
+            return null;
+        var prIds = await context
+            .ExecutionPrLinks.Where(l => l.ExecutionId == executionId)
+            .Select(l => l.PullRequestId)
+            .ToListAsync(cancellationToken);
+        return ToDomain(entity, prIds);
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsAsync(CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context
+        var entities = await context
             .Executions.AsNoTracking()
             .OrderByDescending(e => e.UpdatedAt)
-            .Select(e => ToDomain(e))
             .ToListAsync(cancellationToken);
+        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListActiveExecutionsAsync(CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context
+        var entities = await context
             .Executions.AsNoTracking()
             .Where(e => e.Status == (int)ExecutionStatus.Running)
             .OrderByDescending(e => e.UpdatedAt)
-            .Select(e => ToDomain(e))
             .ToListAsync(cancellationToken);
+        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListExecutionsByWorkItemAsync(
@@ -96,12 +126,13 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
     )
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context
+        var entities = await context
             .Executions.AsNoTracking()
             .Where(e => e.WorkItemId == workItemId)
             .OrderByDescending(e => e.UpdatedAt)
-            .Select(e => ToDomain(e))
             .ToListAsync(cancellationToken);
+        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     public async Task UpdatePhaseAsync(string executionId, TaskPhase phase, CancellationToken cancellationToken)
@@ -410,14 +441,6 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             );
             await context.SaveChangesAsync(cancellationToken);
         }
-        // Keep the denormalized PullRequestId on the execution record in sync so the dashboard
-        // and execution detail can display the PR without joining the links table.
-        await context
-            .Executions.Where(e => e.ExecutionId == executionId)
-            .ExecuteUpdateAsync(
-                s => s.SetProperty(e => e.PullRequestId, pullRequestId),
-                cancellationToken
-            );
     }
 
     public async Task<IReadOnlyList<TaskExecutionRecord>> ListRelatedExecutionsByPrAsync(
@@ -436,15 +459,16 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         if (prIds.Count == 0)
             return [];
 
-        return await context
+        var entities = await context
             .Executions.AsNoTracking()
             .Where(e =>
                 e.ExecutionId != executionId
                 && context.ExecutionPrLinks.Any(l => l.ExecutionId == e.ExecutionId && prIds.Contains(l.PullRequestId))
             )
             .OrderByDescending(e => e.UpdatedAt)
-            .Select(e => ToDomain(e))
             .ToListAsync(cancellationToken);
+        var prMap = await FetchPrIdsAsync(context, entities.Select(e => e.ExecutionId), cancellationToken);
+        return entities.Select(e => ToDomain(e, prMap.GetValueOrDefault(e.ExecutionId))).ToList();
     }
 
     private static ExecutionEntity ToEntity(TaskExecutionRecord record) =>
@@ -459,10 +483,9 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             CreatedAt = record.CreatedAt,
             UpdatedAt = record.UpdatedAt,
             PlanProviderSessionId = record.ProviderPlanSessionId,
-            PullRequestId = record.PullRequestId,
         };
 
-    private static TaskExecutionRecord ToDomain(ExecutionEntity entity) =>
+    private static TaskExecutionRecord ToDomain(ExecutionEntity entity, IReadOnlyList<int>? prIds = null) =>
         new(
             entity.ExecutionId,
             entity.WorkItemId,
@@ -473,8 +496,28 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             entity.CreatedAt,
             entity.UpdatedAt,
             entity.PlanProviderSessionId,
-            entity.PullRequestId
+            prIds ?? []
         );
+
+    private static async Task<Dictionary<string, IReadOnlyList<int>>> FetchPrIdsAsync(
+        WorkerDbContext context,
+        IEnumerable<string> executionIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var ids = executionIds.ToList();
+        if (ids.Count == 0)
+            return [];
+        var links = await context
+            .ExecutionPrLinks.Where(l => ids.Contains(l.ExecutionId))
+            .ToListAsync(cancellationToken);
+        return links
+            .GroupBy(l => l.ExecutionId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<int>)g.Select(l => l.PullRequestId).ToList()
+            );
+    }
 
     private static string Serialize(IReadOnlyList<string> values) => JsonSerializer.Serialize(values);
 

@@ -28,9 +28,9 @@ else
             <MudChip T="string" Color="KindColor(_execution.Kind)">@_execution.Kind</MudChip>
             <MudChip T="string" Color="PhaseColor(_execution.Phase)">@_execution.Phase</MudChip>
             <MudChip T="string" Color="StatusColor(_execution.Status)">@_execution.Status</MudChip>
-            @if (_execution.PullRequestId.HasValue)
+            @foreach (var prId in _execution.PullRequestIds ?? [])
             {
-                <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@_execution.PullRequestId</MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@prId</MudChip>
             }
         </MudItem>
     </MudGrid>

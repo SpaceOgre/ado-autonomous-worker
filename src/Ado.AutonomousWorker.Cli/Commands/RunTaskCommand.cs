@@ -46,7 +46,7 @@ public sealed class RunTaskCommand(ITaskOrchestrator taskOrchestrator, Execution
         if (settings.PullRequestId is not null)
         {
             executionId = await liveDisplay.RunForWorkItemAsync(
-                $"PR fix #{settings.PullRequestId}",
+                $"PR fix !{settings.PullRequestId}",
                 workItemId: 0,
                 token => taskOrchestrator.RunPrFixAsync(settings.PullRequestId.Value, token),
                 cancellationToken

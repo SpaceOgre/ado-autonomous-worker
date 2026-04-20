@@ -61,8 +61,7 @@ internal sealed class TaskOrchestrator(
             TaskPhase.Queued,
             ExecutionStatus.Running,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow,
-            PullRequestId: prTarget?.PullRequestId
+            DateTimeOffset.UtcNow
         );
 
         await stateStore.SaveExecutionAsync(record, cancellationToken);
@@ -131,16 +130,17 @@ internal sealed class TaskOrchestrator(
 
         PhaseContext context;
 
-        if (execution.Kind == QueueItemKind.AiPrFix && execution.PullRequestId is not null)
+        var linkedPrId = execution.PullRequestIds?.FirstOrDefault();
+        if (execution.Kind == QueueItemKind.AiPrFix && linkedPrId is not null)
         {
             var location = await azureDevOpsClient.GetPullRequestLocationAsync(
-                execution.PullRequestId.Value,
+                linkedPrId.Value,
                 cancellationToken
             );
             var prTarget = location is not null
-                ? new PrTarget(execution.PullRequestId.Value, location.Value.RepositoryName, location.Value.BranchName)
+                ? new PrTarget(linkedPrId.Value, location.Value.RepositoryName, location.Value.BranchName)
                 : throw new InvalidOperationException(
-                    $"Cannot resume AiPrFix execution '{executionId}': PR !{execution.PullRequestId} was not found."
+                    $"Cannot resume AiPrFix execution '{executionId}': PR !{linkedPrId} was not found."
                 );
 
             var prFixContext = new PhaseContext.PrFixContext
