@@ -372,7 +372,7 @@ public sealed class ExecutionLiveDisplay(
             ),
         };
 
-        foreach (var chunk in activeSession.TakeLast(5))
+        foreach (var chunk in activeSession.TakeLast(10))
         {
             lines.Add(new Markup($"[grey]{Markup.Escape(chunk.Content)}[/]"));
         }
