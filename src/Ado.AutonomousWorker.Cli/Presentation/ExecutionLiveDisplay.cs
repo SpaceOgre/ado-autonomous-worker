@@ -16,17 +16,6 @@ public sealed class ExecutionLiveDisplay(
 {
     private static readonly string[] UnicodeSpinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     private static readonly string[] AsciiSpinnerFrames = ["-", "\\", "|", "/"];
-    private static readonly TaskPhase[] OrderedPhases =
-    [
-        TaskPhase.Queued,
-        TaskPhase.Planning,
-        TaskPhase.Coding,
-        TaskPhase.Reviewing,
-        TaskPhase.ApplyingReview,
-        TaskPhase.FixingValidation,
-        TaskPhase.Validating,
-        TaskPhase.Publishing,
-    ];
 
     public Task<string> RunForWorkItemAsync(
         int workItemId,
@@ -110,12 +99,17 @@ public sealed class ExecutionLiveDisplay(
         const int DataRefreshMs = 750;
         const int RefreshEvery = DataRefreshMs / SpinnerMs;
 
+        // Pre-fetch before Live() starts so the initial frame height matches subsequent frames.
+        // A null→data transition mid-display confuses Spectre's cursor-up line count.
         var loopIteration = 0;
-        ViewData? cached = null;
+        var cached = await FetchViewDataAsync(executionResolver, cancellationToken);
         ViewData? finalData = null;
 
+        if (cached is not null)
+            loopIteration = 1; // skip immediate re-fetch since we just loaded data
+
         await AnsiConsole
-            .Live(BuildView(title, null, tick, startedAt, useUnicode))
+            .Live(BuildView(title, cached, tick, startedAt, useUnicode))
             .AutoClear(false)
             .Overflow(VerticalOverflow.Visible)
             .StartAsync(async liveCtx =>
@@ -123,22 +117,7 @@ public sealed class ExecutionLiveDisplay(
                 while (!operationTask.IsCompleted)
                 {
                     if (loopIteration % RefreshEvery == 0)
-                    {
-                        var execution = await executionResolver(cancellationToken);
-                        if (execution is not null)
-                        {
-                            var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
-                            var agentOutput = await stateStore.GetAgentOutputChunksAsync(
-                                execution.ExecutionId,
-                                cancellationToken
-                            );
-                            var usageRecords = await stateStore.GetAgentUsageAsync(
-                                execution.ExecutionId,
-                                cancellationToken
-                            );
-                            cached = new ViewData(execution, events, agentOutput, usageRecords);
-                        }
-                    }
+                        cached = await FetchViewDataAsync(executionResolver, cancellationToken) ?? cached;
 
                     terminalTitleService.UpdateTitle(
                         TerminalTitleFormatter.BuildExecutionTitle(title, cached?.Execution, tick, useUnicode)
@@ -150,20 +129,7 @@ public sealed class ExecutionLiveDisplay(
                     await Task.Delay(SpinnerMs, cancellationToken);
                 }
 
-                var finalExecution = await executionResolver(cancellationToken);
-                if (finalExecution is not null)
-                {
-                    var events = await stateStore.GetEventsAsync(finalExecution.ExecutionId, cancellationToken);
-                    var agentOutput = await stateStore.GetAgentOutputChunksAsync(
-                        finalExecution.ExecutionId,
-                        cancellationToken
-                    );
-                    var usageRecords = await stateStore.GetAgentUsageAsync(
-                        finalExecution.ExecutionId,
-                        cancellationToken
-                    );
-                    finalData = new ViewData(finalExecution, events, agentOutput, usageRecords);
-                }
+                finalData = await FetchViewDataAsync(executionResolver, cancellationToken);
 
                 terminalTitleService.UpdateTitle(
                     TerminalTitleFormatter.BuildExecutionTitle(title, finalData?.Execution, tick, useUnicode)
@@ -172,6 +138,21 @@ public sealed class ExecutionLiveDisplay(
             });
 
         return await operationTask;
+    }
+
+    private async Task<ViewData?> FetchViewDataAsync(
+        Func<CancellationToken, Task<TaskExecutionRecord?>> executionResolver,
+        CancellationToken cancellationToken
+    )
+    {
+        var execution = await executionResolver(cancellationToken);
+        if (execution is null)
+            return null;
+
+        var events = await stateStore.GetEventsAsync(execution.ExecutionId, cancellationToken);
+        var agentOutput = await stateStore.GetAgentOutputChunksAsync(execution.ExecutionId, cancellationToken);
+        var usageRecords = await stateStore.GetAgentUsageAsync(execution.ExecutionId, cancellationToken);
+        return new ViewData(execution, events, agentOutput, usageRecords);
     }
 
     private IRenderable BuildView(string title, ViewData? data, int tick, DateTimeOffset startedAt, bool useUnicode)
@@ -189,7 +170,8 @@ public sealed class ExecutionLiveDisplay(
                 startedAt,
                 useUnicode,
                 agentOptions.Value,
-                data.UsageRecords
+                data.UsageRecords,
+                data.Events
             );
             events = data.Events;
             agentOutput = data.AgentOutput;
@@ -226,7 +208,8 @@ public sealed class ExecutionLiveDisplay(
         DateTimeOffset startedAt,
         bool useUnicode,
         AgentOptions agentOptions,
-        IReadOnlyList<AgentUsageRecord> usageRecords
+        IReadOnlyList<AgentUsageRecord> usageRecords,
+        IReadOnlyList<ExecutionEventRecord> events
     )
     {
         var shortId = execution.ExecutionId.Length > 8 ? execution.ExecutionId[..8] + "…" : execution.ExecutionId;
@@ -254,10 +237,11 @@ public sealed class ExecutionLiveDisplay(
             // Activity status line with spinner / outcome icon
             CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions),
             // Phase pipeline
-            CreatePhaseMarkup(execution.Phase, execution.Status),
+            CreatePhaseMarkup(execution.Phase, execution.Status, events),
         };
 
-        // Running token / cost totals — shown as soon as the first phase completes.
+        // Token / cost totals — always rendered to keep header height stable across updates.
+        string usageLine;
         if (usageRecords.Count > 0)
         {
             var totalIn = usageRecords.Sum(u => u.InputTokens);
@@ -265,21 +249,56 @@ public sealed class ExecutionLiveDisplay(
             var totalCached = usageRecords.Sum(u => u.CachedInputTokens);
             var totalCost = usageRecords.Sum(u => u.CostUsd ?? 0m);
 
-            var usageLine = $"[grey]Tokens: {totalIn:N0} in / {totalOut:N0} out";
+            usageLine = $"[grey]Tokens: {totalIn:N0} in / {totalOut:N0} out";
             if (totalCached > 0)
                 usageLine += $" ({totalCached:N0} cached)";
             if (totalCost > 0m)
                 usageLine += $"  ·  ${totalCost:F4}";
             usageLine += "[/]";
-            rows.Add(new Markup(usageLine));
         }
+        else
+        {
+            usageLine = "[grey]Tokens: -[/]";
+        }
+        rows.Add(new Markup(usageLine));
 
         return new Rows(rows);
     }
 
-    private static IRenderable CreatePhaseMarkup(TaskPhase currentPhase, ExecutionStatus status)
+    private static IRenderable CreatePhaseMarkup(
+        TaskPhase currentPhase,
+        ExecutionStatus status,
+        IReadOnlyList<ExecutionEventRecord> events
+    )
     {
-        var entries = OrderedPhases.Select(phase => FormatPipelinePhase(phase, currentPhase, status)).ToArray();
+        // Build phase sequence from events, deduplicating consecutive same-phase entries
+        // so retry loops render correctly: Validating -> FixingValidation -> Validating
+        var sequence = new List<TaskPhase>();
+        foreach (var e in events)
+        {
+            if (sequence.Count == 0 || sequence[^1] != e.Phase)
+                sequence.Add(e.Phase);
+        }
+        if (sequence.Count == 0 || sequence[^1] != currentPhase)
+            sequence.Add(currentPhase);
+
+        var currentIndex = status == ExecutionStatus.Completed
+            ? sequence.Count
+            : sequence.LastIndexOf(currentPhase);
+
+        var entries = sequence
+            .Select((phase, index) =>
+            {
+                var color = (status, index < currentIndex, index == currentIndex, status == ExecutionStatus.Failed) switch
+                {
+                    (ExecutionStatus.Completed, _, _, _) => "green",
+                    (_, true, _, _) => "green",
+                    (_, _, true, true) => "red",
+                    _ => "deepskyblue1",
+                };
+                return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
+            })
+            .ToArray();
 
         return new Markup(string.Join(" [grey]->[/] ", entries));
     }
@@ -386,28 +405,6 @@ public sealed class ExecutionLiveDisplay(
 
         var parent = Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         return string.IsNullOrWhiteSpace(parent) ? tail : Path.Combine(parent, tail);
-    }
-
-    private static string FormatPipelinePhase(TaskPhase phase, TaskPhase currentPhase, ExecutionStatus status)
-    {
-        string color;
-        if (status == ExecutionStatus.Completed)
-            color = "green";
-        else if (status == ExecutionStatus.Failed && phase == currentPhase)
-            color = "red";
-        else if (phase == currentPhase)
-            color = "deepskyblue1";
-        else if (IsPastPhase(phase, currentPhase))
-            color = "green";
-        else
-            color = "grey";
-
-        return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
-    }
-
-    private static bool IsPastPhase(TaskPhase phase, TaskPhase currentPhase)
-    {
-        return Array.IndexOf(OrderedPhases, phase) < Array.IndexOf(OrderedPhases, currentPhase);
     }
 
     private static string FormatAgent(AgentRoleConfig config)
