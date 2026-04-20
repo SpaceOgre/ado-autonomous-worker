@@ -112,7 +112,6 @@ public sealed class PromptTemplateLoaderTests : IDisposable
                     new PlanResult(
                         WorkItemScope.Backend,
                         ["Backend"],
-                        ["Backend validation"],
                         ["Run backend tests"],
                         [],
                         "Implement backend flow."
@@ -178,7 +177,6 @@ public sealed class PromptTemplateLoaderTests : IDisposable
                     new PlanResult(
                         WorkItemScope.Backend,
                         ["Backend"],
-                        ["Backend validation"],
                         ["Run backend tests"],
                         [],
                         "Implement backend flow."
@@ -241,7 +239,6 @@ public sealed class PromptTemplateLoaderTests : IDisposable
                     new PlanResult(
                         WorkItemScope.Backend,
                         ["Backend"],
-                        ["dotnet build"],
                         [
                             "UserService.CreateAsync — validates duplicate email",
                             "OrderRepository.SaveAsync — rolls back on DB error",

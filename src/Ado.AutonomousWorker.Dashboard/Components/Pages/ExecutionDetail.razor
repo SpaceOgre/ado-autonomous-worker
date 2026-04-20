@@ -130,16 +130,7 @@ else
                             }
                         </MudList>
                     </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudText Typo="Typo.subtitle2">Validation Targets</MudText>
-                        <MudList T="string" Dense="true">
-                            @foreach (var target in _plan.ValidationTargets)
-                            {
-                                <MudListItem Icon="@Icons.Material.Filled.CheckCircle">@target</MudListItem>
-                            }
-                        </MudList>
-                    </MudItem>
-                    <MudItem xs="12" md="6">
+<MudItem xs="12" md="6">
                         <MudText Typo="Typo.subtitle2">Test Intent</MudText>
                         <MudList T="string" Dense="true">
                             @foreach (var intent in _plan.TestIntent)

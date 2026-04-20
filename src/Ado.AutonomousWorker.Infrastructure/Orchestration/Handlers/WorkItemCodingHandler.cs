@@ -193,11 +193,16 @@ internal sealed class WorkItemCodingHandler(
         if (hasFrontend)
             testIntentBlock += "\nDo not write any tests for the frontend repository.";
 
+        var risksBlock =
+            plan.Risks.Count > 0
+                ? $"\nRisks to watch for:\n{string.Join("\n", plan.Risks.Select(r => $"- {r}"))}"
+                : string.Empty;
+
         return $$"""
             Implement this Azure DevOps work item across the listed repositories as one coordinated change.
 
             Agent working directory: {{agentWorkingDirectory}}
-            Plan summary: {{plan.Summary}}
+            Plan summary: {{plan.Summary}}{{risksBlock}}
 
             <work-item id="{{parent.WorkItemId}}" type="{{RepositoryWorkflowHelpers.FormatWorkItemLabel(
                 parent.WorkItemType

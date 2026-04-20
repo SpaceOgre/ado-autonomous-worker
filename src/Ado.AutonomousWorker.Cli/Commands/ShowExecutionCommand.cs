@@ -96,7 +96,6 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
             planTable.AddRow("Scope", plan.Scope.ToString());
             planTable.AddRow("Summary", Markup.Escape(plan.Summary));
             planTable.AddRow("Repositories", FormatList(plan.Repositories));
-            planTable.AddRow("Validation", FormatList(plan.ValidationTargets));
             planTable.AddRow("Test Intent", FormatList(plan.TestIntent));
             planTable.AddRow("Risks", FormatList(plan.Risks));
 

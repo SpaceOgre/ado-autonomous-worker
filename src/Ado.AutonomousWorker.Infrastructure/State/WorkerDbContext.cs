@@ -83,7 +83,6 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
             entity.Property(e => e.ExecutionId).HasColumnName("execution_id");
             entity.Property(e => e.Scope).HasColumnName("scope");
             entity.Property(e => e.RepositoriesJson).HasColumnName("repositories_json");
-            entity.Property(e => e.ValidationTargetsJson).HasColumnName("validation_targets_json");
             entity.Property(e => e.TestIntentJson).HasColumnName("test_intent_json");
             entity.Property(e => e.RisksJson).HasColumnName("risks_json");
             entity.Property(e => e.Summary).HasColumnName("summary");

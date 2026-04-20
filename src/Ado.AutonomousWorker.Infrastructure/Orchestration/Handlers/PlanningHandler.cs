@@ -187,7 +187,6 @@ internal sealed class PlanningHandler(
             return new PlanResult(
                 scope,
                 plan.Repositories?.ToArray() ?? [],
-                plan.ValidationTargets?.ToArray() ?? [],
                 plan.TestIntent?.Select(t => t.ReplaceLineEndings(" ").Trim()).Where(t => t.Length > 0).ToArray() ?? [],
                 plan.Risks?.ToArray() ?? [],
                 plan.Summary ?? "Planning completed."
@@ -219,7 +218,6 @@ internal sealed class PlanningHandler(
     private sealed record PlanPayload(
         [property: JsonPropertyName("scope")] string? Scope,
         [property: JsonPropertyName("repositories")] IReadOnlyList<string>? Repositories,
-        [property: JsonPropertyName("validationTargets")] IReadOnlyList<string>? ValidationTargets,
         [property: JsonPropertyName("testIntent")] IReadOnlyList<string>? TestIntent,
         [property: JsonPropertyName("risks")] IReadOnlyList<string>? Risks,
         [property: JsonPropertyName("summary")] string? Summary

@@ -369,7 +369,6 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
                     ExecutionId = executionId,
                     Scope = (int)planResult.Scope,
                     RepositoriesJson = Serialize(planResult.Repositories),
-                    ValidationTargetsJson = Serialize(planResult.ValidationTargets),
                     TestIntentJson = Serialize(planResult.TestIntent),
                     RisksJson = Serialize(planResult.Risks),
                     Summary = planResult.Summary,
@@ -380,7 +379,6 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
         {
             existing.Scope = (int)planResult.Scope;
             existing.RepositoriesJson = Serialize(planResult.Repositories);
-            existing.ValidationTargetsJson = Serialize(planResult.ValidationTargets);
             existing.TestIntentJson = Serialize(planResult.TestIntent);
             existing.RisksJson = Serialize(planResult.Risks);
             existing.Summary = planResult.Summary;
@@ -400,7 +398,6 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             : new PlanResult(
                 (WorkItemScope)entity.Scope,
                 Deserialize(entity.RepositoriesJson),
-                Deserialize(entity.ValidationTargetsJson),
                 Deserialize(entity.TestIntentJson),
                 Deserialize(entity.RisksJson),
                 entity.Summary

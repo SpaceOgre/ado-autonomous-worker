@@ -282,22 +282,27 @@ public sealed class ExecutionLiveDisplay(
         if (sequence.Count == 0 || sequence[^1] != currentPhase)
             sequence.Add(currentPhase);
 
-        var currentIndex = status == ExecutionStatus.Completed
-            ? sequence.Count
-            : sequence.LastIndexOf(currentPhase);
+        var currentIndex = status == ExecutionStatus.Completed ? sequence.Count : sequence.LastIndexOf(currentPhase);
 
         var entries = sequence
-            .Select((phase, index) =>
-            {
-                var color = (status, index < currentIndex, index == currentIndex, status == ExecutionStatus.Failed) switch
+            .Select(
+                (phase, index) =>
                 {
-                    (ExecutionStatus.Completed, _, _, _) => "green",
-                    (_, true, _, _) => "green",
-                    (_, _, true, true) => "red",
-                    _ => "deepskyblue1",
-                };
-                return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
-            })
+                    var color = (
+                        status,
+                        index < currentIndex,
+                        index == currentIndex,
+                        status == ExecutionStatus.Failed
+                    ) switch
+                    {
+                        (ExecutionStatus.Completed, _, _, _) => "green",
+                        (_, true, _, _) => "green",
+                        (_, _, true, true) => "red",
+                        _ => "deepskyblue1",
+                    };
+                    return $"[{color}]{Markup.Escape(phase.ToString())}[/]";
+                }
+            )
             .ToArray();
 
         return new Markup(string.Join(" [grey]->[/] ", entries));
