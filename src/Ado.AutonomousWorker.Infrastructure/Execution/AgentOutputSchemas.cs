@@ -61,7 +61,7 @@ public static class AgentOutputSchemas
                   "suggestedFix": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
                   "filePath": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
                 },
-                "required": ["id", "severity", "title", "rationale", "filePath"]
+                "required": ["id", "severity", "category", "title", "rationale", "suggestedFix", "filePath"]
               }
             }
           },

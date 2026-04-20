@@ -171,6 +171,7 @@ public sealed class ClaudeRunner(ProcessCommandRunner commandRunner) : IAgentRun
         // When a structured schema is required, also pass --json-schema for typed output.
         args.Add("--output-format");
         args.Add("stream-json");
+        args.Add("--verbose");
         if (outputSchema is not null)
         {
             args.Add("--json-schema");

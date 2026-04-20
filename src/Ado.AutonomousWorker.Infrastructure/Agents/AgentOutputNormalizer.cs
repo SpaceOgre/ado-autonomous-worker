@@ -40,9 +40,10 @@ public static class AgentOutputNormalizer
             {
                 // The assistant event carries text the model is writing and tool calls it is making.
                 "assistant" => NormalizeAssistantMessage(root),
-                // system (init), result (final envelope), and user (tool results sent back to
-                // the model) are bookkeeping lines that carry no human-readable progress.
-                "system" or "result" or "user" => [],
+                // system events include bookkeeping (init) and subagent task_progress updates.
+                "system" => NormalizeSystemEvent(root),
+                // result (final envelope) and user (tool results) carry no human-readable progress.
+                "result" or "user" => [],
                 // Unknown event shape — fall through to the generic key extractor.
                 _ => NormalizeClaudeStructuredJson(content),
             };
@@ -79,7 +80,12 @@ public static class AgentOutputNormalizer
                     case "tool_use":
                         var toolName = TryGetString(item, "name");
                         if (!string.IsNullOrWhiteSpace(toolName))
-                            messages.Add($"Using tool: {toolName}");
+                        {
+                            var detail = GetToolDetail(toolName, item);
+                            messages.Add(string.IsNullOrWhiteSpace(detail)
+                                ? $"[{toolName}]"
+                                : $"[{toolName}] {detail}");
+                        }
                         break;
                 }
             }
@@ -87,6 +93,50 @@ public static class AgentOutputNormalizer
 
         return messages.Select(m => m.Trim()).Where(m => !string.IsNullOrWhiteSpace(m)).ToArray();
     }
+
+    // Emit the description from task_progress events (subagent progress updates).
+    // All other system subtypes (init, task_started, etc.) are bookkeeping — skip them.
+    private static IReadOnlyList<string> NormalizeSystemEvent(JsonElement root)
+    {
+        var subtype = TryGetString(root, "subtype");
+        if (subtype != "task_progress")
+            return [];
+
+        var description = TryGetString(root, "description");
+        return string.IsNullOrWhiteSpace(description) ? [] : [$"  {description}"];
+    }
+
+    // Extract a concise display string from a tool_use input object.
+    private static string? GetToolDetail(string toolName, JsonElement item)
+    {
+        if (!item.TryGetProperty("input", out var input) || input.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return toolName switch
+        {
+            "Glob" => TryGetString(input, "pattern"),
+            "Grep" => FormatGrepDetail(input),
+            "Read" => TryGetString(input, "file_path"),
+            "Write" or "Edit" => TryGetString(input, "file_path"),
+            "Bash" => Truncate(TryGetString(input, "command"), 120),
+            "Agent" => TryGetString(input, "description"),
+            "WebFetch" => TryGetString(input, "url"),
+            "WebSearch" => TryGetString(input, "query"),
+            _ => null,
+        };
+    }
+
+    private static string? FormatGrepDetail(JsonElement input)
+    {
+        var pattern = TryGetString(input, "pattern");
+        var path = TryGetString(input, "path");
+        if (string.IsNullOrEmpty(pattern)) return path;
+        if (string.IsNullOrEmpty(path)) return $"\"{pattern}\"";
+        return $"\"{pattern}\" in {Path.GetFileName(path)}";
+    }
+
+    private static string? Truncate(string? value, int maxLength) =>
+        value is null || value.Length <= maxLength ? value : value[..maxLength] + "…";
 
     public static IReadOnlyList<string> NormalizeCodexLine(ProcessOutputLine line)
     {
