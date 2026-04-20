@@ -30,7 +30,17 @@ else
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Work Item"><MudLink Href="@AdoOptions.Value.WorkItemUrl(context.WorkItemId)" Target="_blank">@context.WorkItemId</MudLink></MudTd>
+            <MudTd DataLabel="Work Item">
+                @{ var wiUrl = AdoOptions.Value.WorkItemUrl(context.WorkItemId); }
+                @if (wiUrl is not null)
+                {
+                    <MudLink Href="@wiUrl" Target="_blank">@context.WorkItemId</MudLink>
+                }
+                else
+                {
+                    <span>@context.WorkItemId</span>
+                }
+            </MudTd>
             <MudTd DataLabel="Title">@context.Title</MudTd>
             <MudTd DataLabel="Kind"><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
             <MudTd DataLabel="Phase"><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>

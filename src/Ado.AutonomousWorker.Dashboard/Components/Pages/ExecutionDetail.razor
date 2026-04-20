@@ -24,7 +24,16 @@ else
         <MudItem xs="12" md="8">
             <MudText Typo="Typo.h5">@_execution.Title</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                <MudLink Href="@AdoOptions.Value.WorkItemUrl(_execution.WorkItemId)" Target="_blank" Color="Color.Secondary">Work Item #@_execution.WorkItemId</MudLink> · @_execution.ExecutionId
+                @{ var wiUrl = AdoOptions.Value.WorkItemUrl(_execution.WorkItemId); }
+                @if (wiUrl is not null)
+                {
+                    <MudLink Href="@wiUrl" Target="_blank" Color="Color.Secondary">Work Item #@_execution.WorkItemId</MudLink>
+                }
+                else
+                {
+                    <span>Work Item #@_execution.WorkItemId</span>
+                }
+                <span> · @_execution.ExecutionId</span>
             </MudText>
         </MudItem>
         <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2 flex-wrap">

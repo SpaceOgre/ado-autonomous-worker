@@ -12,8 +12,10 @@ public sealed class AzureDevOpsOptions
 
     public string DefaultAssignee { get; set; } = string.Empty;
 
-    public string WorkItemUrl(int workItemId) =>
-        $"{OrganizationUrl.TrimEnd('/')}/{Project}/_workitems/edit/{workItemId}";
+    public string? WorkItemUrl(int workItemId) =>
+        string.IsNullOrWhiteSpace(OrganizationUrl)
+            ? null
+            : $"{OrganizationUrl.TrimEnd('/')}/{Project}/_workitems/edit/{workItemId}";
 
     public string? PullRequestUrl(string? repositoryName, int pullRequestId) =>
         string.IsNullOrWhiteSpace(repositoryName) || string.IsNullOrWhiteSpace(OrganizationUrl)
