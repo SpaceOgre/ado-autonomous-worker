@@ -105,11 +105,11 @@ public static class DashboardColors
         };
 
     public static string ForWorkItemStateStyle(string? state) =>
-        state switch
+        state?.ToUpperInvariant() switch
         {
-            "Active" => "background-color:#1976D2;color:#fff;",
-            "Ready For Test" => "background-color:#FFF176;color:#212121;",
-            "Resolved" => "background-color:#F9A825;color:#212121;",
+            "ACTIVE" => "background-color:#1976D2;color:#fff;",
+            "READY FOR TEST" => "background-color:#FFF176;color:#212121;",
+            "RESOLVED" => "background-color:#F9A825;color:#212121;",
             _ => string.Empty,
         };
 }
