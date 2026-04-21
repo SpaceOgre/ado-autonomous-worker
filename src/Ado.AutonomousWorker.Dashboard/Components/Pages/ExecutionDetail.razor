@@ -202,7 +202,7 @@ else
                     var sessionChunks = _chunksBySession.GetValueOrDefault(session.SessionId, []);
                     var isLast = session.SessionId == _lastSessionId;
                     <MudExpansionPanels Class="mb-2">
-                        <MudExpansionPanel IsExpanded="@isLast">
+                        <MudExpansionPanel Expanded="@isLast">
                             <TitleContent>
                                 <MudText Typo="Typo.subtitle2">
                                     <MudIcon Icon="@RoleIcon(session.Role)" Size="Size.Small" Class="mr-1" />

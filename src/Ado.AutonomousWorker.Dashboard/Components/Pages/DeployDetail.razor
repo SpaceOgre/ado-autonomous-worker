@@ -88,8 +88,8 @@ else
         }
     </MudGrid>
 
-    <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" PanelClass="pt-4">
-        <MudTabPanel Text="Events" Icon="@Icons.Material.Filled.Timeline" BadgeData="@(_events.Count > 0 ? (object)_events.Count : null)">
+    <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true">
+        <MudTabPanel Text="Events" Icon="@Icons.Material.Filled.Timeline" BadgeData="@(_events.Count > 0 ? (object)_events.Count : null)" Class="pt-4">
             @if (_events.Count == 0)
             {
                 <MudText Color="Color.Secondary">No events yet.</MudText>
@@ -117,7 +117,7 @@ else
                 </MudTable>
             }
         </MudTabPanel>
-        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.SwapHoriz" BadgeData="@(_changes.Count > 0 ? (object)_changes.Count : null)">
+        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.SwapHoriz" BadgeData="@(_changes.Count > 0 ? (object)_changes.Count : null)" Class="pt-4">
             @if (_changes.Count == 0)
             {
                 <MudText Color="Color.Secondary">No work item changes recorded.</MudText>
