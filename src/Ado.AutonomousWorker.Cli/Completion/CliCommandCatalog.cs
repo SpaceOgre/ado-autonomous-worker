@@ -68,7 +68,7 @@ public static class CliCommandCatalog
         },
         ["run"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
-            [string.Empty] = ["--iteration"],
+            [string.Empty] = ["--iteration", "--pr-fix-only"],
         },
         ["task"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {

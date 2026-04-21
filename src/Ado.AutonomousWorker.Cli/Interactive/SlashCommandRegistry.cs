@@ -44,7 +44,11 @@ public sealed class SlashCommandRegistry
 
     private static readonly Dictionary<string, IReadOnlyList<FlagDef>> CommandFlagMap = new()
     {
-        ["/run"] = [new("--iteration", "Override iteration path (e.g. 'Project\\Sprint 5')", TakesValue: true)],
+        ["/run"] =
+        [
+            new("--iteration", "Override iteration path (e.g. 'Project\\Sprint 5')", TakesValue: true),
+            new("--pr-fix-only", "Only process PR-fix items, skipping backlog items"),
+        ],
         ["/deploy"] =
         [
             new("--dry-run", "Preview without running pipelines"),

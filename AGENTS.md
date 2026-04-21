@@ -16,6 +16,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **`Program.cs`** — register the command class as a singleton and register the command in the CLI startup path: usually in `CliAppConfiguration.cs`, or directly in `Program.cs` when the command is intentionally wired there (for example, `interactive`).
 5. **`AGENTS.md`** — add the command to the Commands section below.
 
+**When you add, rename, or remove a flag on an existing command**, you must update all four of these in the same change:
+
+1. **`CliCommandCatalog.cs`** — add/update the flag in `CommandOptions` under the relevant command key.
+2. **`SlashCommandRegistry.cs`** — add/update the flag in `CommandFlagMap` under the matching slash-command key. Use `TakesValue: true` for flags that consume a next token (e.g. `--iteration <VALUE>`); omit it for boolean switches.
+3. **`README.md`** — add the flag to the command's example invocations in `## Commands` and update its description in the Command Details table.
+4. **`AGENTS.md`** — document the flag in the Commands section below.
+
+**When you add, rename, or remove a subcommand** (e.g. `task resume`, `ui splash`), apply both the command rules above *and* the flag rules for any options it takes. Additionally update `BranchCommands` in `CliCommandCatalog.cs` so the subcommand appears in tab-completion after its parent.
+
 Forgetting any of these will leave tab-completion, interactive mode, the README, or agent guidance out of sync.
 
 ## Commands
@@ -41,6 +50,7 @@ dotnet tool run ado-worker                                                   # l
 dotnet tool run ado-worker -- interactive                                    # launches interactive mode explicitly
 dotnet tool run ado-worker -- queue
 dotnet tool run ado-worker -- run
+dotnet tool run ado-worker -- run --pr-fix-only
 dotnet tool run ado-worker -- deploy
 dotnet tool run ado-worker -- deploy --dry-run
 dotnet tool run ado-worker -- dashboard

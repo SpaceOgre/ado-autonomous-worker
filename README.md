@@ -204,6 +204,7 @@ ado-worker doctor                                             # Verify configura
 ado-worker queue                                              # List eligible AI-Work and AI-Rework items
 ado-worker run                                                # Preview queue, then process all items (fail-fast)
 ado-worker run --iteration "MyProject\Sprint 5"               # Override iteration path for the run
+ado-worker run --pr-fix-only                                  # Only process PR-fix items, skipping backlog items
 ado-worker deploy                                             # Trigger pipelines and promote work items
 ado-worker deploy --dry-run                                   # Preview changes without triggering pipelines
 ado-worker deploy --tag v1.2.3                                # Trigger from a git tag instead of branch
@@ -240,7 +241,7 @@ ado-worker ui run-preview                                     # Preview queue sl
 | `bootstrap` | Creates the storage directory, SQLite database, and a starter `config.jsonc` with commented-out examples. Run this once after first install. |
 | `doctor` | Runs diagnostics: checks storage, agent CLI availability, repository paths, remote branches, ADO connectivity, and pipeline IDs. Exit code 1 if any check fails. |
 | `queue` | Queries Azure DevOps for eligible `AI-Work` and `AI-Rework` items and displays them in queue order. |
-| `run` | Previews the queue slice (capped at `MaxItemsPerRun`), asks for confirmation, then processes each item. **Fail-fast:** stops immediately on the first failure. Pass `--iteration` to override the iteration path for all items in the run. |
+| `run` | Previews the queue slice (capped at `MaxItemsPerRun`), asks for confirmation, then processes each item. **Fail-fast:** stops immediately on the first failure. Pass `--iteration` to override the iteration path for all items in the run. Pass `--pr-fix-only` to restrict the run to PR-fix items only, skipping AI-Work and AI-Rework backlog items. |
 | `deploy` | Triggers backend and/or frontend Azure Pipelines, polls until they succeed (or timeout), then promotes resolved sprint items to **Ready for test** and assigns them to the configured tester. User stories whose every child is now **Ready for test** or **Closed** are also promoted. |
 | `task run` | Runs a single work item (`--id`) or PR fix (`--pr`) immediately. `--id` and `--pr` are mutually exclusive. Pass `--iteration` to override the iteration path. |
 | `task resume` | Resumes a prior execution from its last phase. When a plan already exists it is reused. Existing worktrees are preserved so you can fix issues manually and retry. |

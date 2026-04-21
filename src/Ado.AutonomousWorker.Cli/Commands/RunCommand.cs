@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Ado.AutonomousWorker.Cli.Presentation;
 using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
+using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Infrastructure.Queue;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
@@ -23,6 +24,10 @@ public sealed class RunCommand(
         )]
         [CommandOption("--iteration <ITERATION_PATH>")]
         public string? Iteration { get; init; }
+
+        [Description("Only process PR-fix items (AI-Rework PRs), skipping regular AI-Work and AI-Rework backlog items.")]
+        [CommandOption("--pr-fix-only")]
+        public bool PrFixOnly { get; init; }
     }
 
     protected override async Task<int> ExecuteAsync(
@@ -32,11 +37,14 @@ public sealed class RunCommand(
     )
     {
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
-        var queue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
+        var filtered = settings.PrFixOnly
+            ? eligibleQueue.Where(i => i.Kind == QueueItemKind.AiPrFix).ToList()
+            : eligibleQueue;
+        var queue = filtered.Take(workerOptions.Value.MaxItemsPerRun).ToArray();
 
         RunPreambleDisplay.ShowQueuePreview(
             queue,
-            eligibleQueue.Count,
+            filtered.Count,
             workerOptions.Value.MaxItemsPerRun,
             previewOnly: false
         );
