@@ -21,26 +21,26 @@ else
         </MudText>
         <MudTable Items="_activeExecutions" Hover="true" Dense="true" Class="mb-6" RowClassFunc="@ActiveRowClass">
             <HeaderContent>
+                <MudTh Style="width:1%"></MudTh>
                 <MudTh>Work Item</MudTh>
                 <MudTh>Title</MudTh>
                 <MudTh>Kind</MudTh>
                 <MudTh>Phase</MudTh>
                 <MudTh>Elapsed</MudTh>
-                <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
                 <MudTd>@context.WorkItemId</MudTd>
                 <MudTd>@context.Title</MudTd>
                 <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForKind(context.Kind)">@DashboardColors.FormatKind(context.Kind)</MudChip></MudTd>
                 <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
                 <MudTd>@DashboardColors.FormatDuration(DateTimeOffset.UtcNow - context.CreatedAt)</MudTd>
-                <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
             </RowTemplate>
         </MudTable>
     }
-    else
+    else if (_activeDeploys.Count == 0)
     {
-        <MudAlert Severity="Severity.Info" Class="mb-6">No tasks are currently running.</MudAlert>
+        <MudAlert Severity="Severity.Info" Class="mb-6">No tasks or deploys are currently running.</MudAlert>
     }
 
     @if (_activeDeploys.Count > 0)
@@ -51,12 +51,13 @@ else
         </MudText>
         <MudTable Items="_activeDeploys" Hover="true" Dense="true" Class="mb-6">
             <HeaderContent>
+                <MudTh Style="width:1%"></MudTh>
                 <MudTh>Ref</MudTh>
                 <MudTh>Phase</MudTh>
                 <MudTh>Elapsed</MudTh>
-                <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"deploys/{context.DeployId}")" /></MudTd>
                 <MudTd>
                     <MudIcon Icon="@(context.IsTag ? Icons.Material.Filled.LocalOffer : Icons.Material.Filled.AccountTree)"
                              Size="Size.Small" Class="mr-1 mb-n1" />
@@ -64,7 +65,6 @@ else
                 </MudTd>
                 <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForDeployPhase(context.Phase)">@context.Phase</MudChip></MudTd>
                 <MudTd>@DashboardColors.FormatDuration(DateTimeOffset.UtcNow - context.CreatedAt)</MudTd>
-                <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"deploys/{context.DeployId}")" /></MudTd>
             </RowTemplate>
         </MudTable>
     }
@@ -74,22 +74,22 @@ else
     </MudText>
     <MudTable Items="_recentExecutions" Hover="true" Dense="true" Class="mb-6" RowClassFunc="@RecentRowClass">
         <HeaderContent>
+            <MudTh Style="width:1%"></MudTh>
             <MudTh>Work Item</MudTh>
             <MudTh>Title</MudTh>
             <MudTh>Kind</MudTh>
             <MudTh>Phase</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Updated</MudTh>
-            <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
             <MudTd>@context.WorkItemId</MudTd>
             <MudTd>@context.Title</MudTd>
             <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForKind(context.Kind)">@DashboardColors.FormatKind(context.Kind)</MudChip></MudTd>
             <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
             <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForStatus(context.Status)">@context.Status</MudChip></MudTd>
             <MudTd>@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
-            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
         </RowTemplate>
         <NoRecordsContent>
             <MudText>No executions found.</MudText>
@@ -101,13 +101,14 @@ else
     </MudText>
     <MudTable Items="_recentDeploys" Hover="true" Dense="true" RowClassFunc="@DeployRowClass">
         <HeaderContent>
+            <MudTh Style="width:1%"></MudTh>
             <MudTh>Ref</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Started</MudTh>
             <MudTh>Duration</MudTh>
-            <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"deploys/{context.DeployId}")" /></MudTd>
             <MudTd>
                 <MudIcon Icon="@(context.IsTag ? Icons.Material.Filled.LocalOffer : Icons.Material.Filled.AccountTree)"
                          Size="Size.Small" Class="mr-1 mb-n1" />
@@ -116,7 +117,6 @@ else
             <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForDeployStatus(context.Status)">@context.Status</MudChip></MudTd>
             <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
             <MudTd>@DashboardColors.FormatDuration(context.UpdatedAt - context.CreatedAt)</MudTd>
-            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"deploys/{context.DeployId}")" /></MudTd>
         </RowTemplate>
         <NoRecordsContent>
             <MudText>No deploys found.</MudText>

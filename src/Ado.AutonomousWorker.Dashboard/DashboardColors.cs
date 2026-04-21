@@ -100,7 +100,16 @@ public static class DashboardColors
         {
             "TASK" => Color.Warning,
             "BUG" => Color.Error,
-            "USER STORY" => Color.Info,
+            "USER STORY" or "USERSTORY" => Color.Info,
             _ => Color.Default,
+        };
+
+    public static string ForWorkItemStateStyle(string? state) =>
+        state switch
+        {
+            "Active" => "background-color:#1976D2;color:#fff;",
+            "Ready For Test" => "background-color:#FFF176;color:#212121;",
+            "Resolved" => "background-color:#F9A825;color:#212121;",
+            _ => string.Empty,
         };
 }

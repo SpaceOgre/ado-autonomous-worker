@@ -140,10 +140,12 @@ else
                         </MudTd>
                         <MudTd DataLabel="ID">#@context.WorkItemId</MudTd>
                         <MudTd DataLabel="Title">@context.Title</MudTd>
-                        <MudTd DataLabel="From State">@context.CurrentState</MudTd>
+                        <MudTd DataLabel="From State">
+                            <MudChip T="string" Size="Size.Small" Style="@DashboardColors.ForWorkItemStateStyle(context.CurrentState)">@context.CurrentState</MudChip>
+                        </MudTd>
                         <MudTd><MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" /></MudTd>
                         <MudTd DataLabel="To State">
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.NewState</MudChip>
+                            <MudChip T="string" Size="Size.Small" Style="@DashboardColors.ForWorkItemStateStyle(context.NewState)">@context.NewState</MudChip>
                         </MudTd>
                         <MudTd DataLabel="Assignee">
                             @if (context.CurrentAssignee != context.NewAssignee)
