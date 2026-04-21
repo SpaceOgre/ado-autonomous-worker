@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using Ado.AutonomousWorker.Cli.Presentation;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
+using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 using Ado.AutonomousWorker.Infrastructure.Deploy;
 using Microsoft.Extensions.Options;
@@ -9,11 +11,17 @@ using Spectre.Console.Cli;
 
 namespace Ado.AutonomousWorker.Cli.Commands;
 
-public sealed class DeployCommand(DeployService deployService, IOptions<DeployOptions> deployOptions)
-    : AsyncCommand<DeployCommand.Settings>
+public sealed class DeployCommand(
+    DeployService deployService,
+    IOptions<DeployOptions> deployOptions,
+    IStateStore stateStore,
+    DeployLiveDisplay deployLiveDisplay
+) : AsyncCommand<DeployCommand.Settings>
 {
     private readonly DeployService _deployService = deployService;
     private readonly DeployOptions _options = deployOptions.Value;
+    private readonly IStateStore _stateStore = stateStore;
+    private readonly DeployLiveDisplay _deployLiveDisplay = deployLiveDisplay;
 
     public sealed class Settings : CommandSettings
     {
@@ -103,7 +111,7 @@ public sealed class DeployCommand(DeployService deployService, IOptions<DeployOp
         if (!ValidateConfig(triggerBackend, triggerFrontend))
             return 1;
 
-        var refLabel = tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}";
+        var refValue = tag ?? _options.Branch;
         var pipelineLabel = (triggerBackend, triggerFrontend) switch
         {
             (true, true) => "both pipelines",
@@ -118,7 +126,7 @@ public sealed class DeployCommand(DeployService deployService, IOptions<DeployOp
             configTable.AddRow("Backend Pipeline ID", _options.BackendPipelineId.ToString());
         if (triggerFrontend)
             configTable.AddRow("Frontend Pipeline ID", _options.FrontendPipelineId.ToString());
-        configTable.AddRow("Trigger Ref", Markup.Escape(refLabel));
+        configTable.AddRow("Trigger Ref", Markup.Escape(tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}"));
         configTable.AddRow("Ready-for-Test Assignee", Markup.Escape(_options.ReadyForTestAssignee));
         configTable.AddRow("Poll Interval", $"{_options.PollIntervalSeconds}s");
         configTable.AddRow("Timeout", $"{_options.TimeoutMinutes}m");
@@ -133,127 +141,83 @@ public sealed class DeployCommand(DeployService deployService, IOptions<DeployOp
             return 0;
         }
 
-        // ── Step 1: Trigger pipelines ─────────────────────────────────────
-        AnsiConsole.Write(CliStyle.SectionRule("Triggering Pipelines", "deepskyblue1"));
-
-        int? backendRunId;
-        int? frontendRunId;
-
-        try
-        {
-            var progress = new Progress<string>(msg => AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
-
-            (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(
-                progress,
-                cancellationToken,
-                tag,
-                triggerBackend,
-                triggerFrontend
-            );
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AnsiConsole.MarkupLine($"[red]Failed to trigger pipelines: {Markup.Escape(ex.Message)}[/]");
-            return 1;
-        }
-
-        AnsiConsole.WriteLine();
-
-        // ── Step 2: Wait for pipelines ────────────────────────────────────
-        AnsiConsole.Write(CliStyle.SectionRule("Waiting for Pipelines", "deepskyblue1"));
-        AnsiConsole.MarkupLine(
-            $"[grey]Polling every {_options.PollIntervalSeconds}s (timeout {_options.TimeoutMinutes}m)…[/]"
+        var deployId = Guid.NewGuid().ToString("N");
+        var deploy = new DeployRecord(
+            DeployId: deployId,
+            Status: DeployStatus.Running,
+            Phase: DeployPhase.TriggeringPipelines,
+            Ref: refValue,
+            IsTag: tag is not null,
+            BackendPipelineId: triggerBackend ? (int?)_options.BackendPipelineId : null,
+            FrontendPipelineId: triggerFrontend ? (int?)_options.FrontendPipelineId : null,
+            BackendRunId: null,
+            FrontendRunId: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            FailureReason: null
         );
-        AnsiConsole.WriteLine();
+        await _stateStore.SaveDeployAsync(deploy, cancellationToken);
+
+        (IReadOnlyList<DeployWorkItemChange> TaskChanges, IReadOnlyList<DeployWorkItemChange> StoryChanges) changes;
 
         try
         {
-            await AnsiConsole
-                .Status()
-                .Spinner(Spinner.Known.Dots)
-                .StartAsync(
-                    "Pipelines running…",
-                    async ctx =>
-                    {
-                        var progress = new Progress<string>(msg =>
-                        {
-                            ctx.Status(Markup.Escape(msg));
-                            AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}");
-                        });
-                        await _deployService.WaitForPipelinesAsync(
-                            backendRunId,
-                            frontendRunId,
-                            progress,
-                            cancellationToken
-                        );
-                    }
-                );
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AnsiConsole.MarkupLine($"[red]Pipeline failed: {Markup.Escape(ex.Message)}[/]");
-            return 1;
-        }
+            changes = await _deployLiveDisplay.RunAsync(
+                deployId,
+                async (progress, ct) =>
+                {
+                    // Step 1: Trigger pipelines
+                    var (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(
+                        progress, ct, tag, triggerBackend, triggerFrontend
+                    );
+                    await _stateStore.UpdateDeployRunIdsAsync(deployId, backendRunId, frontendRunId, ct);
+                    await _stateStore.UpdateDeployPhaseAsync(deployId, DeployPhase.WaitingForPipelines, ct);
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
-            $"[green]✓ {Markup.Escape(char.ToUpper(pipelineLabel[0]) + pipelineLabel[1..])} completed successfully.[/]"
-        );
-        AnsiConsole.WriteLine();
+                    // Step 2: Wait for pipelines
+                    await _deployService.WaitForPipelinesAsync(backendRunId, frontendRunId, progress, ct);
+                    await _stateStore.UpdateDeployPhaseAsync(deployId, DeployPhase.ComputingChanges, ct);
 
-        // ── Step 3: Compute work item changes ─────────────────────────────
-        AnsiConsole.Write(CliStyle.SectionRule("Computing Work Item Changes", "deepskyblue1"));
+                    // Step 3: Compute work item changes
+                    var (taskChanges, storyChanges) = await _deployService.ComputeChangesAsync(ct);
+                    progress.Report(
+                        $"Found {taskChanges.Count} task/bug(s) and {storyChanges.Count} user story/stories to update."
+                    );
+                    await _stateStore.UpdateDeployPhaseAsync(deployId, DeployPhase.ApplyingChanges, ct);
 
-        (IReadOnlyList<DeployWorkItemChange> taskChanges, IReadOnlyList<DeployWorkItemChange> storyChanges) changes;
-        try
-        {
-            changes = await AnsiConsole
-                .Status()
-                .Spinner(Spinner.Known.Dots)
-                .StartAsync("Querying Azure DevOps…", _ => _deployService.ComputeChangesAsync(cancellationToken));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AnsiConsole.MarkupLine($"[red]Failed to compute work item changes: {Markup.Escape(ex.Message)}[/]");
-            return 1;
-        }
+                    // Step 4: Apply changes
+                    if (taskChanges.Count > 0 || storyChanges.Count > 0)
+                        await _deployService.ApplyChangesAsync(taskChanges, storyChanges, progress, ct);
 
-        RenderChangesTable("Tasks / Bugs → Ready for test", changes.taskChanges);
-        RenderChangesTable("User Stories → Ready for test", changes.storyChanges);
-
-        if (changes.taskChanges.Count == 0 && changes.storyChanges.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[grey]No work items need updating.[/]");
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[green]Deploy complete.[/]");
-            return 0;
-        }
-
-        AnsiConsole.WriteLine();
-
-        // ── Step 4: Apply changes ─────────────────────────────────────────
-        AnsiConsole.Write(CliStyle.SectionRule("Updating Work Items", "deepskyblue1"));
-
-        try
-        {
-            var progress = new Progress<string>(msg => AnsiConsole.MarkupLine($"  [grey]>[/] {Markup.Escape(msg)}"));
-
-            await _deployService.ApplyChangesAsync(
-                changes.taskChanges,
-                changes.storyChanges,
-                progress,
+                    return (taskChanges, storyChanges);
+                },
                 cancellationToken
             );
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            AnsiConsole.MarkupLine($"[red]Failed to update work items: {Markup.Escape(ex.Message)}[/]");
+            await _stateStore.UpdateDeployStatusAsync(deployId, DeployStatus.Failed, "Cancelled.", CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await _stateStore.UpdateDeployStatusAsync(deployId, DeployStatus.Failed, ex.Message, CancellationToken.None);
+            AnsiConsole.MarkupLine($"[red]Deploy failed: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
 
+        var allChanges = changes.TaskChanges.Concat(changes.StoryChanges).ToArray();
+        await _stateStore.SaveDeployWorkItemChangesAsync(deployId, allChanges, CancellationToken.None);
+        await _stateStore.UpdateDeployStatusAsync(deployId, DeployStatus.Completed, null, CancellationToken.None);
+
+        RenderChangesTable("Tasks / Bugs → Ready for test", changes.TaskChanges);
+        RenderChangesTable("User Stories → Ready for test", changes.StoryChanges);
+
+        if (changes.TaskChanges.Count == 0 && changes.StoryChanges.Count == 0)
+            AnsiConsole.MarkupLine("[grey]No work items needed updating.[/]");
+
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine(
-            $"[green]✓ Deploy complete.[/] Updated {changes.taskChanges.Count} task/bug(s) and {changes.storyChanges.Count} user story/stories to [deepskyblue1]Ready for test[/]."
+            $"[green]✓ Deploy complete.[/] Updated {changes.TaskChanges.Count} task/bug(s) and {changes.StoryChanges.Count} user story/stories to [deepskyblue1]Ready for test[/]."
         );
         return 0;
     }

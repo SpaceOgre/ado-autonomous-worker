@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject IOptions<StorageOptions> StorageOptions
 @inject IOptions<AzureDevOpsOptions> AdoOptions
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>Execution Detail — ADO Autonomous Worker</PageTitle>
@@ -33,23 +34,28 @@ else
                 {
                     <span>Work Item #@_execution.WorkItemId</span>
                 }
-                <span> · @_execution.ExecutionId</span>
+                <span> · @_execution.ExecutionId[..8]…</span>
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy execution ID" OnClick="@CopyExecutionId" />
             </MudText>
         </MudItem>
         <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2 flex-wrap">
-            <MudChip T="string" Color="KindColor(_execution.Kind)">@_execution.Kind</MudChip>
-            <MudChip T="string" Color="PhaseColor(_execution.Phase)">@_execution.Phase</MudChip>
-            <MudChip T="string" Color="StatusColor(_execution.Status)">@_execution.Status</MudChip>
+            <MudChip T="string" Color="DashboardColors.ForKind(_execution.Kind)">@DashboardColors.FormatKind(_execution.Kind)</MudChip>
+            <MudChip T="string" Color="DashboardColors.ForPhase(_execution.Phase)">@_execution.Phase</MudChip>
+            <MudChip T="string" Color="DashboardColors.ForStatus(_execution.Status)">@_execution.Status</MudChip>
+            @if (_execution.Status == ExecutionStatus.Running)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Circle">Live</MudChip>
+            }
             @foreach (var pr in _execution.PullRequests ?? [])
             {
                 var prUrl = AdoOptions.Value.PullRequestUrl(pr.RepositoryName, pr.PullRequestId);
                 @if (prUrl is not null)
                 {
-                    <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success" Href="@prUrl" Target="_blank">PR !@pr.PullRequestId</MudChip>
+                    <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Dark" Href="@prUrl" Target="_blank">PR !@pr.PullRequestId</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Success">PR !@pr.PullRequestId</MudChip>
+                    <MudChip T="string" Icon="@Icons.Material.Filled.MergeType" Color="Color.Dark">PR !@pr.PullRequestId</MudChip>
                 }
             }
             @foreach (var ct in _execution.ChildTasks ?? [])
@@ -57,11 +63,11 @@ else
                 var ctUrl = AdoOptions.Value.WorkItemUrl(ct.WorkItemId);
                 @if (ctUrl is not null)
                 {
-                    <MudChip T="string" Icon="@Icons.Material.Filled.Task" Color="Color.Info" Href="@ctUrl" Target="_blank">#@ct.WorkItemId (@ct.RepoKind)</MudChip>
+                    <MudChip T="string" Icon="@Icons.Material.Filled.Task" Color="Color.Warning" Href="@ctUrl" Target="_blank">#@ct.WorkItemId (@ct.RepoKind)</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Icon="@Icons.Material.Filled.Task" Color="Color.Info">#@ct.WorkItemId (@ct.RepoKind)</MudChip>
+                    <MudChip T="string" Icon="@Icons.Material.Filled.Task" Color="Color.Warning">#@ct.WorkItemId (@ct.RepoKind)</MudChip>
                 }
             }
         </MudItem>
@@ -75,6 +81,10 @@ else
         <MudItem xs="12" md="3">
             <MudText Typo="Typo.caption">Updated</MudText>
             <MudText>@_execution.UpdatedAt.ToLocalTime().ToString("g")</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption">Duration</MudText>
+            <MudText>@FormatDuration()</MudText>
         </MudItem>
     </MudGrid>
 
@@ -90,13 +100,19 @@ else
             else
             {
                 <MudTimeline TimelinePosition="TimelinePosition.Start">
-                    @foreach (var ev in _events)
+                    @for (var i = 0; i < _events.Count; i++)
                     {
-                        <MudTimelineItem Color="PhaseColor(ev.Phase)" Size="Size.Small">
+                        var ev = _events[i];
+                        var delta = i > 0 ? ev.Timestamp - _events[i - 1].Timestamp : (TimeSpan?)null;
+                        <MudTimelineItem Color="DashboardColors.ForPhase(ev.Phase)" Size="Size.Small">
                             <ItemContent>
                                 <MudText Typo="Typo.body2">@ev.Message</MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                     @ev.Phase · @ev.Timestamp.ToLocalTime().ToString("HH:mm:ss")
+                                    @if (delta.HasValue)
+                                    {
+                                        <span> · <em>+@DashboardColors.FormatDuration(delta.Value)</em></span>
+                                    }
                                 </MudText>
                             </ItemContent>
                         </MudTimelineItem>
@@ -112,7 +128,7 @@ else
                 <div class="mb-4">@((MarkupString)RenderMarkdown(_plan.Summary))</div>
 
                 <MudGrid>
-                    <MudItem xs="12" md="6">
+                    <MudItem xs="12" md="4">
                         <MudText Typo="Typo.subtitle2">Repositories</MudText>
                         <MudList T="string" Dense="true">
                             @foreach (var repo in _plan.Repositories)
@@ -121,7 +137,7 @@ else
                             }
                         </MudList>
                     </MudItem>
-                    <MudItem xs="12" md="6">
+                    <MudItem xs="12" md="4">
                         <MudText Typo="Typo.subtitle2">Risks</MudText>
                         <MudList T="string" Dense="true">
                             @foreach (var risk in _plan.Risks)
@@ -130,7 +146,7 @@ else
                             }
                         </MudList>
                     </MudItem>
-<MudItem xs="12" md="6">
+                    <MudItem xs="12" md="4">
                         <MudText Typo="Typo.subtitle2">Test Intent</MudText>
                         <MudList T="string" Dense="true">
                             @foreach (var intent in _plan.TestIntent)
@@ -147,15 +163,15 @@ else
         {
             <MudTabPanel Text="Review" Icon="@Icons.Material.Filled.RateReview">
                 <MudText Typo="Typo.body1" Class="mb-3">@_review.Summary</MudText>
-                @if (_review.Findings.Count > 0)
+                @if (_sortedFindings.Count > 0)
                 {
                     <MudText Typo="Typo.subtitle2" Class="mb-2">Findings</MudText>
-                    @foreach (var finding in _review.Findings)
+                    @foreach (var finding in _sortedFindings)
                     {
                         <MudCard Class="mb-2">
                             <MudCardContent>
                                 <MudText Typo="Typo.subtitle2">
-                                    <MudChip T="string" Size="Size.Small" Color="SeverityColor(finding.Severity)" Class="mr-1">@finding.Severity</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="DashboardColors.ForSeverity(finding.Severity)" Class="mr-1">@finding.Severity</MudChip>
                                     @finding.Title
                                 </MudText>
                                 <MudText Typo="Typo.body2" Class="mt-1">@finding.Rationale</MudText>
@@ -184,8 +200,9 @@ else
                 @foreach (var session in _agentSessions)
                 {
                     var sessionChunks = _chunksBySession.GetValueOrDefault(session.SessionId, []);
+                    var isLast = session.SessionId == _lastSessionId;
                     <MudExpansionPanels Class="mb-2">
-                        <MudExpansionPanel>
+                        <MudExpansionPanel IsExpanded="@isLast">
                             <TitleContent>
                                 <MudText Typo="Typo.subtitle2">
                                     <MudIcon Icon="@RoleIcon(session.Role)" Size="Size.Small" Class="mr-1" />
@@ -305,10 +322,11 @@ else
                         <MudTh>Input Tokens</MudTh>
                         <MudTh>Output Tokens</MudTh>
                         <MudTh>Cached</MudTh>
+                        <MudTh>Cache Hit %</MudTh>
                         <MudTh>Cost (USD)</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
                         <MudTd>
                             <MudChip T="string" Size="Size.Small" Icon="@RoleIcon(context.Role)" Color="Color.Dark">@context.Role</MudChip>
                         </MudTd>
@@ -317,13 +335,19 @@ else
                         <MudTd>@context.InputTokens.ToString("N0")</MudTd>
                         <MudTd>@context.OutputTokens.ToString("N0")</MudTd>
                         <MudTd>@context.CachedInputTokens.ToString("N0")</MudTd>
+                        <MudTd>@DashboardColors.CacheHitPercent(context.InputTokens, context.CachedInputTokens)</MudTd>
                         <MudTd>@(context.CostUsd.HasValue ? context.CostUsd.Value.ToString("F4") : "-")</MudTd>
                     </RowTemplate>
                     <FooterContent>
+                        @{
+                            var totalIn = _usageRecords.Sum(r => r.InputTokens);
+                            var totalCached = _usageRecords.Sum(r => r.CachedInputTokens);
+                        }
                         <MudTd colspan="4"><strong>Total</strong></MudTd>
-                        <MudTd><strong>@_usageRecords.Sum(r => r.InputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@totalIn.ToString("N0")</strong></MudTd>
                         <MudTd><strong>@_usageRecords.Sum(r => r.OutputTokens).ToString("N0")</strong></MudTd>
-                        <MudTd><strong>@_usageRecords.Sum(r => r.CachedInputTokens).ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@totalCached.ToString("N0")</strong></MudTd>
+                        <MudTd><strong>@DashboardColors.CacheHitPercent(totalIn, totalCached)</strong></MudTd>
                         <MudTd><strong>@(_usageRecords.Any(r => r.CostUsd.HasValue) ? _usageRecords.Sum(r => r.CostUsd ?? 0).ToString("F4") : "-")</strong></MudTd>
                     </FooterContent>
                 </MudTable>
@@ -357,9 +381,9 @@ else
                                 <MudLink Href="@($"/executions/{context.ExecutionId}")">@context.ExecutionId[..8]…</MudLink>
                             }
                         </MudTd>
-                        <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
-                        <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
-                        <MudTd><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForKind(context.Kind)">@DashboardColors.FormatKind(context.Kind)</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForStatus(context.Status)">@context.Status</MudChip></MudTd>
                         <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
                         <MudTd>@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
                     </RowTemplate>
@@ -380,21 +404,21 @@ else
     private List<AgentOutputChunk> _agentChunks = [];
     private PlanResult? _plan;
     private ReviewResult? _review;
+    private List<ReviewFinding> _sortedFindings = [];
     private List<AgentUsageRecord> _usageRecords = [];
     private List<TaskExecutionRecord> _relatedExecutions = [];
     private System.Threading.Timer? _refreshTimer;
     private List<BreadcrumbItem> _breadcrumbs = [];
     private Dictionary<string, string?> _logContents = [];
     private Dictionary<string, List<AgentOutputChunk>> _chunksBySession = [];
+    private string? _lastSessionId;
     private CancellationTokenSource _cts = new();
-    // Extra (non-transcript) log files discovered in the artifact directory.
     private List<(string Path, string Key)> _extraLogFiles = [];
     private Dictionary<string, string?> _extraLogContents = [];
     private string _artifactRoot = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        // Cancel any in-flight reads and dispose the previous timer before loading new data.
         await _cts.CancelAsync();
         _cts.Dispose();
         _cts = new CancellationTokenSource();
@@ -420,7 +444,6 @@ else
                 await LoadDataAsync();
                 StateHasChanged();
 
-                // Stop polling once the execution is no longer running.
                 if (_execution?.Status != ExecutionStatus.Running)
                 {
                     _refreshTimer?.Dispose();
@@ -453,6 +476,9 @@ else
         _agentChunks = (await chunksTask).ToList();
         _plan = await planTask;
         _review = await reviewTask;
+        _sortedFindings = _review?.Findings
+            .OrderBy(f => DashboardColors.SeverityRank(f.Severity))
+            .ToList() ?? [];
         _usageRecords = (await usageTask).ToList();
         _relatedExecutions = (await relatedTask)
             .Concat(await prRelatedTask)
@@ -466,7 +492,10 @@ else
             .GroupBy(c => c.SessionId)
             .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Sequence).ToList());
 
-        // Compute the execution artifact root to find additional log files.
+        _lastSessionId = _agentChunks.Count > 0
+            ? _agentChunks.OrderByDescending(c => c.Timestamp).First().SessionId
+            : null;
+
         _artifactRoot = StorageOptions.Value.GetExecutionArtifactRoot(_execution.WorkItemId, ExecutionId);
         var agentTranscriptPaths = _agentSessions
             .Select(s => Path.GetFullPath(s.TranscriptPath))
@@ -484,35 +513,20 @@ else
         _loading = false;
     }
 
-    private static Color KindColor(QueueItemKind kind) => kind switch
+    private string FormatDuration()
     {
-        QueueItemKind.AiWork => Color.Primary,
-        QueueItemKind.AiRework => Color.Warning,
-        QueueItemKind.AiPrFix => Color.Secondary,
-        _ => Color.Default,
-    };
+        if (_execution is null) return "-";
+        var end = _execution.Status == ExecutionStatus.Running
+            ? DateTimeOffset.UtcNow
+            : _execution.UpdatedAt;
+        return DashboardColors.FormatDuration(end - _execution.CreatedAt);
+    }
 
-    private static Color PhaseColor(TaskPhase phase) => phase switch
+    private async Task CopyExecutionId()
     {
-        TaskPhase.Queued => Color.Default,
-        TaskPhase.Planning => Color.Info,
-        TaskPhase.Coding => Color.Primary,
-        TaskPhase.Reviewing => Color.Warning,
-        TaskPhase.ApplyingReview => Color.Warning,
-        TaskPhase.FixingValidation => Color.Warning,
-        TaskPhase.Validating => Color.Info,
-        TaskPhase.Publishing => Color.Success,
-        _ => Color.Default,
-    };
-
-    private static Color StatusColor(ExecutionStatus status) => status switch
-    {
-        ExecutionStatus.Running => Color.Primary,
-        ExecutionStatus.Completed => Color.Success,
-        ExecutionStatus.Failed => Color.Error,
-        ExecutionStatus.Skipped => Color.Default,
-        _ => Color.Default,
-    };
+        if (_execution is not null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _execution.ExecutionId);
+    }
 
     private static string RoleIcon(AgentRole role) => role switch
     {
@@ -522,16 +536,7 @@ else
         _ => Icons.Material.Filled.SmartToy,
     };
 
-    private static Color SeverityColor(string severity) =>
-        severity?.ToUpperInvariant() switch
-        {
-            "CRITICAL" or "HIGH" => Color.Error,
-            "MEDIUM" => Color.Warning,
-            "LOW" or "INFO" => Color.Info,
-            _ => Color.Default,
-        };
-
-    private const int LogTailBytes = 512 * 1024; // 512 KB
+    private const int LogTailBytes = 512 * 1024;
 
     private async Task LoadLogFilesAsync(CancellationToken cancellationToken)
     {
@@ -551,7 +556,6 @@ else
                 }
                 else
                 {
-                    // File exceeds limit — read the last LogTailBytes only.
                     var buffer = new byte[LogTailBytes];
                     await using var fs = new FileStream(session.TranscriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     fs.Seek(-LogTailBytes, SeekOrigin.End);

@@ -1,0 +1,161 @@
+@page "/deploys"
+@rendermode InteractiveServer
+@inject IStateStore StateStore
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Deploys — ADO Autonomous Worker</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Deploys</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Row="true" Spacing="1" Class="mb-3 flex-wrap">
+        @foreach (var filter in _statusFilters)
+        {
+            var isActive = _activeFilter == filter;
+            <MudChip T="string"
+                     Color="@(isActive ? (filter == "All" ? Color.Primary : DashboardColors.ForDeployStatus(Enum.Parse<DeployStatus>(filter))) : Color.Default)"
+                     Variant="@(isActive ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => SetFilter(filter))"
+                     Size="Size.Small">
+                @filter (@CountForFilter(filter))
+            </MudChip>
+        }
+    </MudStack>
+
+    <MudTable Items="_filtered" Hover="true" Dense="true" OnRowClick="NavigateToDetail" T="DeployRecord" Style="cursor:pointer">
+        <HeaderContent>
+            <MudTh>ID</MudTh>
+            <MudTh>Ref</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Backend</MudTh>
+            <MudTh>Frontend</MudTh>
+            <MudTh>Started</MudTh>
+            <MudTh>Duration</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="ID">
+                @(context.DeployId.Length > 8 ? context.DeployId[..8] + "…" : context.DeployId)
+            </MudTd>
+            <MudTd DataLabel="Ref">
+                <MudIcon Icon="@(context.IsTag ? Icons.Material.Filled.LocalOffer : Icons.Material.Filled.AccountTree)"
+                         Size="Size.Small" Class="mr-1 mb-n1" />
+                @context.Ref
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="DashboardColors.ForDeployStatus(context.Status)">@context.Status</MudChip>
+                @if (context.Status == DeployStatus.Running)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="DashboardColors.ForDeployPhase(context.Phase)">@context.Phase</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Backend">
+                @if (context.BackendRunId.HasValue)
+                {
+                    <span>Pipeline @context.BackendPipelineId run #@context.BackendRunId</span>
+                }
+                else if (context.BackendPipelineId.HasValue)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Pipeline @context.BackendPipelineId</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Frontend">
+                @if (context.FrontendRunId.HasValue)
+                {
+                    <span>Pipeline @context.FrontendPipelineId run #@context.FrontendRunId</span>
+                }
+                else if (context.FrontendPipelineId.HasValue)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Pipeline @context.FrontendPipelineId</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Started">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd DataLabel="Duration">
+                @{
+                    var end = context.Status == DeployStatus.Running ? DateTimeOffset.UtcNow : context.UpdatedAt;
+                    @DashboardColors.FormatDuration(end - context.CreatedAt)
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No deploys found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private List<DeployRecord> _deploys = [];
+    private List<DeployRecord> _filtered = [];
+    private string _activeFilter = "All";
+    private static readonly string[] _statusFilters = ["All", "Running", "Completed", "Failed"];
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+        _loading = false;
+        StartRefreshTimerIfNeeded();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _deploys = (await StateStore.ListDeploysAsync(CancellationToken.None)).ToList();
+        ApplyFilter();
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadDataAsync();
+        await InvokeAsync(StateHasChanged);
+
+        if (!_deploys.Any(d => d.Status == DeployStatus.Running))
+            StopRefreshTimer();
+    }
+
+    private void StartRefreshTimerIfNeeded()
+    {
+        if (_deploys.Any(d => d.Status == DeployStatus.Running))
+            _refreshTimer = new Timer(async _ => await RefreshAsync(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10));
+    }
+
+    private void StopRefreshTimer()
+    {
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+    }
+
+    private void ApplyFilter()
+    {
+        _filtered = _activeFilter == "All"
+            ? _deploys
+            : _deploys.Where(d => d.Status.ToString() == _activeFilter).ToList();
+    }
+
+    private void SetFilter(string filter)
+    {
+        _activeFilter = filter;
+        ApplyFilter();
+    }
+
+    private int CountForFilter(string filter) =>
+        filter == "All" ? _deploys.Count : _deploys.Count(d => d.Status.ToString() == filter);
+
+    private void NavigateToDetail(TableRowClickEventArgs<DeployRecord> args) =>
+        Nav.NavigateTo($"/deploys/{args.Item!.DeployId}");
+
+    public void Dispose() => _refreshTimer?.Dispose();
+}

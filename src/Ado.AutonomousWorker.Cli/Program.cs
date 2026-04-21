@@ -50,6 +50,7 @@ builder.Services.AddSingleton<DeployCommand>();
 builder.Services.AddSingleton<InteractiveCommand>();
 builder.Services.AddSingleton<CliCompletionService>();
 builder.Services.AddSingleton<ExecutionLiveDisplay>();
+builder.Services.AddSingleton<DeployLiveDisplay>();
 builder.Services.AddSingleton<TerminalTitleService>();
 
 using var host = builder.Build();

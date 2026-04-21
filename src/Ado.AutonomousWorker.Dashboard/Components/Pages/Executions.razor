@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject IStateStore StateStore
 @inject IOptions<AzureDevOpsOptions> AdoOptions
+@implements IDisposable
 
 <PageTitle>Executions — ADO Autonomous Worker</PageTitle>
 
@@ -13,7 +14,21 @@
 }
 else
 {
-    <MudTable Items="_executions" Hover="true" Dense="true" Filter="FilterFunc">
+    <MudStack Row="true" Spacing="1" Class="mb-3 flex-wrap">
+        @foreach (var status in _statusFilters)
+        {
+            var isActive = _activeStatusFilter == status;
+            <MudChip T="string"
+                     Color="@(isActive ? DashboardColors.ForStatus(status == "All" ? ExecutionStatus.Running : Enum.Parse<ExecutionStatus>(status)) : Color.Default)"
+                     Variant="@(isActive ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => SetStatusFilter(status))"
+                     Size="Size.Small">
+                @status (@CountForFilter(status))
+            </MudChip>
+        }
+    </MudStack>
+
+    <MudTable Items="_filtered" Hover="true" Dense="true" Filter="TextFilterFunc">
         <ToolBarContent>
             <MudSpacer />
             <MudTextField @bind-Value="_searchText" Placeholder="Search..." Adornment="Adornment.Start"
@@ -42,9 +57,9 @@ else
                 }
             </MudTd>
             <MudTd DataLabel="Title">@context.Title</MudTd>
-            <MudTd DataLabel="Kind"><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
-            <MudTd DataLabel="Phase"><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
-            <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+            <MudTd DataLabel="Kind"><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForKind(context.Kind)">@DashboardColors.FormatKind(context.Kind)</MudChip></MudTd>
+            <MudTd DataLabel="Phase"><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
+            <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForStatus(context.Status)">@context.Status</MudChip></MudTd>
             <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
             <MudTd DataLabel="PR">
                 @if (context.PullRequests is { Count: > 0 })
@@ -76,19 +91,48 @@ else
 }
 
 @code {
+    private static readonly string[] _statusFilters = ["All", "Running", "Completed", "Failed", "Skipped"];
+
     private bool _loading = true;
     private List<TaskExecutionRecord> _executions = [];
+    private List<TaskExecutionRecord> _filtered = [];
     private string _searchText = string.Empty;
+    private string _activeStatusFilter = "All";
+    private System.Threading.Timer? _refreshTimer;
 
     protected override async Task OnInitializedAsync()
     {
         await StateStore.InitializeAsync(CancellationToken.None);
+        await LoadDataAsync();
+        _refreshTimer = new System.Threading.Timer(_ => InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task LoadDataAsync()
+    {
         var all = await StateStore.ListExecutionsAsync(CancellationToken.None);
         _executions = all.OrderByDescending(e => e.UpdatedAt).ToList();
+        ApplyStatusFilter();
         _loading = false;
     }
 
-    private bool FilterFunc(TaskExecutionRecord record)
+    private void SetStatusFilter(string filter)
+    {
+        _activeStatusFilter = filter;
+        ApplyStatusFilter();
+    }
+
+    private void ApplyStatusFilter()
+    {
+        _filtered = _activeStatusFilter == "All"
+            ? _executions
+            : _executions.Where(e => e.Status.ToString() == _activeStatusFilter).ToList();
+    }
+
+    private bool TextFilterFunc(TaskExecutionRecord record)
     {
         if (string.IsNullOrWhiteSpace(_searchText)) return true;
         return record.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
@@ -97,33 +141,10 @@ else
             || record.Phase.ToString().Contains(_searchText, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static Color KindColor(QueueItemKind kind) => kind switch
-    {
-        QueueItemKind.AiWork => Color.Primary,
-        QueueItemKind.AiRework => Color.Warning,
-        QueueItemKind.AiPrFix => Color.Secondary,
-        _ => Color.Default,
-    };
+    private int CountForFilter(string filter) =>
+        filter == "All"
+            ? _executions.Count
+            : _executions.Count(e => e.Status.ToString() == filter);
 
-    private static Color PhaseColor(TaskPhase phase) => phase switch
-    {
-        TaskPhase.Queued => Color.Default,
-        TaskPhase.Planning => Color.Info,
-        TaskPhase.Coding => Color.Primary,
-        TaskPhase.Reviewing => Color.Warning,
-        TaskPhase.ApplyingReview => Color.Warning,
-        TaskPhase.FixingValidation => Color.Warning,
-        TaskPhase.Validating => Color.Info,
-        TaskPhase.Publishing => Color.Success,
-        _ => Color.Default,
-    };
-
-    private static Color StatusColor(ExecutionStatus status) => status switch
-    {
-        ExecutionStatus.Running => Color.Primary,
-        ExecutionStatus.Completed => Color.Success,
-        ExecutionStatus.Failed => Color.Error,
-        ExecutionStatus.Skipped => Color.Default,
-        _ => Color.Default,
-    };
+    public void Dispose() => _refreshTimer?.Dispose();
 }

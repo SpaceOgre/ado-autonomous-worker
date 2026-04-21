@@ -237,7 +237,7 @@ public sealed class ExecutionLiveDisplay(
             // Activity status line with spinner / outcome icon
             CreateActivityMarkup(execution.Phase, execution.Status, tick, startedAt, useUnicode, agentOptions),
             // Phase pipeline
-            CreatePhaseMarkup(execution.Phase, execution.Status, events),
+            CreatePhaseMarkup(execution.Phase, execution.Status, events, useUnicode),
         };
 
         // Token / cost totals — always rendered to keep header height stable across updates.
@@ -268,7 +268,8 @@ public sealed class ExecutionLiveDisplay(
     private static IRenderable CreatePhaseMarkup(
         TaskPhase currentPhase,
         ExecutionStatus status,
-        IReadOnlyList<ExecutionEventRecord> events
+        IReadOnlyList<ExecutionEventRecord> events,
+        bool useUnicode
     )
     {
         // Build phase sequence from events, deduplicating consecutive same-phase entries
@@ -305,7 +306,8 @@ public sealed class ExecutionLiveDisplay(
             )
             .ToArray();
 
-        return new Markup(string.Join(" [grey]->[/] ", entries));
+        var arrow = useUnicode ? " [grey]→[/] " : " [grey]->[/] ";
+        return new Markup(string.Join(arrow, entries));
     }
 
     private static IRenderable CreateActivityMarkup(
@@ -325,7 +327,7 @@ public sealed class ExecutionLiveDisplay(
             ExecutionStatus.Completed => (useUnicode ? "✓" : "*", "green", "Execution completed."),
             ExecutionStatus.Failed => (useUnicode ? "✗" : "!", "red", $"Failed during {phase}."),
             ExecutionStatus.Skipped => (useUnicode ? "↷" : "~", "yellow", "Execution skipped."),
-            _ => (GetSpinnerFrame(tick, useUnicode), "deepskyblue1", $"{phase} in progress..."),
+            _ => (GetSpinnerFrame(tick, useUnicode), "deepskyblue1", PhaseDescription(phase)),
         };
 
         var agentText = GetAgentForPhase(phase, agentOptions);
@@ -436,6 +438,18 @@ public sealed class ExecutionLiveDisplay(
             _ => null,
         };
     }
+
+    private static string PhaseDescription(TaskPhase phase) => phase switch
+    {
+        TaskPhase.Planning => "Planning your changes…",
+        TaskPhase.Coding => "Writing the code…",
+        TaskPhase.Reviewing => "Reviewing changes…",
+        TaskPhase.ApplyingReview => "Applying review feedback…",
+        TaskPhase.Validating => "Running validation…",
+        TaskPhase.FixingValidation => "Fixing validation errors…",
+        TaskPhase.Publishing => "Publishing pull request…",
+        _ => $"{phase} in progress…",
+    };
 
     private static string GetSpinnerFrame(int tick, bool useUnicode)
     {

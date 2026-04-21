@@ -90,6 +90,64 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
                 """;
             await create.ExecuteNonQueryAsync(cancellationToken);
         }
+
+        await EnsureTableAsync(connection, "deploy_records", """
+            CREATE TABLE deploy_records (
+                deploy_id TEXT NOT NULL PRIMARY KEY,
+                status INTEGER NOT NULL DEFAULT 0,
+                phase INTEGER NOT NULL DEFAULT 0,
+                ref TEXT NOT NULL DEFAULT '',
+                is_tag INTEGER NOT NULL DEFAULT 0,
+                backend_pipeline_id INTEGER,
+                backend_run_id INTEGER,
+                frontend_pipeline_id INTEGER,
+                frontend_run_id INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                failure_reason TEXT
+            )
+            """, cancellationToken);
+
+        await EnsureTableAsync(connection, "deploy_events", """
+            CREATE TABLE deploy_events (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                deploy_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                message TEXT NOT NULL
+            )
+            """, cancellationToken);
+
+        await EnsureTableAsync(connection, "deploy_work_item_changes", """
+            CREATE TABLE deploy_work_item_changes (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                deploy_id TEXT NOT NULL,
+                work_item_id INTEGER NOT NULL,
+                work_item_type TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                from_state TEXT NOT NULL DEFAULT '',
+                to_state TEXT NOT NULL DEFAULT '',
+                from_assignee TEXT,
+                to_assignee TEXT NOT NULL DEFAULT ''
+            )
+            """, cancellationToken);
+    }
+
+    private static async Task EnsureTableAsync(
+        System.Data.Common.DbConnection connection,
+        string tableName,
+        string createSql,
+        CancellationToken cancellationToken
+    )
+    {
+        using var check = connection.CreateCommand();
+        check.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{tableName}'";
+        var count = (long)(await check.ExecuteScalarAsync(cancellationToken))!;
+        if (count == 0)
+        {
+            using var create = connection.CreateCommand();
+            create.CommandText = createSql;
+            await create.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static async Task MigrateTableAsync(
@@ -611,6 +669,167 @@ internal sealed class SqliteStateStore(IDbContextFactory<WorkerDbContext> contex
             )
             .ToList();
     }
+
+    public async Task SaveDeployAsync(DeployRecord deploy, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await context.Deploys.FindAsync([deploy.DeployId], cancellationToken);
+        if (existing is null)
+        {
+            context.Deploys.Add(DeployToEntity(deploy));
+        }
+        else
+        {
+            existing.Status = (int)deploy.Status;
+            existing.Phase = (int)deploy.Phase;
+            existing.BackendRunId = deploy.BackendRunId;
+            existing.FrontendRunId = deploy.FrontendRunId;
+            existing.FailureReason = deploy.FailureReason;
+            existing.UpdatedAt = deploy.UpdatedAt;
+        }
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<DeployRecord?> GetDeployAsync(string deployId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Deploys.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.DeployId == deployId, cancellationToken);
+        return entity is null ? null : DeployToDomain(entity);
+    }
+
+    public async Task<IReadOnlyList<DeployRecord>> ListDeploysAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Deploys.AsNoTracking()
+            .OrderByDescending(d => d.UpdatedAt)
+            .ToListAsync(cancellationToken);
+        return entities.Select(DeployToDomain).ToList();
+    }
+
+    public async Task<IReadOnlyList<DeployRecord>> ListActiveDeploysAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Deploys.AsNoTracking()
+            .Where(d => d.Status == (int)DeployStatus.Running)
+            .OrderByDescending(d => d.UpdatedAt)
+            .ToListAsync(cancellationToken);
+        return entities.Select(DeployToDomain).ToList();
+    }
+
+    public async Task UpdateDeployPhaseAsync(string deployId, DeployPhase phase, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.Deploys.Where(d => d.DeployId == deployId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(d => d.Phase, (int)phase).SetProperty(d => d.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
+    }
+
+    public async Task UpdateDeployRunIdsAsync(string deployId, int? backendRunId, int? frontendRunId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.Deploys.Where(d => d.DeployId == deployId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(d => d.BackendRunId, backendRunId)
+                       .SetProperty(d => d.FrontendRunId, frontendRunId)
+                       .SetProperty(d => d.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
+    }
+
+    public async Task UpdateDeployStatusAsync(string deployId, DeployStatus status, string? failureReason, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.Deploys.Where(d => d.DeployId == deployId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(d => d.Status, (int)status)
+                       .SetProperty(d => d.FailureReason, failureReason)
+                       .SetProperty(d => d.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
+    }
+
+    public async Task AppendDeployEventAsync(string deployId, string message, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        context.DeployEvents.Add(new DeployEventEntity
+        {
+            DeployId = deployId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Message = Truncate(message, 500),
+        });
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DeployEventRecord>> GetDeployEventsAsync(string deployId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.DeployEvents.AsNoTracking()
+            .Where(e => e.DeployId == deployId)
+            .OrderBy(e => e.Timestamp)
+            .ToListAsync(cancellationToken);
+        return entities.Select(e => new DeployEventRecord(e.Id, e.DeployId, e.Timestamp, e.Message)).ToList();
+    }
+
+    public async Task SaveDeployWorkItemChangesAsync(string deployId, IReadOnlyList<DeployWorkItemChange> changes, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        // Replace any previously saved changes for this deploy
+        await context.DeployWorkItemChanges.Where(c => c.DeployId == deployId).ExecuteDeleteAsync(cancellationToken);
+        context.DeployWorkItemChanges.AddRange(changes.Select(c => new DeployWorkItemChangeEntity
+        {
+            DeployId = deployId,
+            WorkItemId = c.WorkItemId,
+            WorkItemType = c.WorkItemType,
+            Title = c.Title,
+            FromState = c.CurrentState,
+            ToState = c.NewState,
+            FromAssignee = c.CurrentAssignee,
+            ToAssignee = c.NewAssignee,
+        }));
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DeployWorkItemChange>> GetDeployWorkItemChangesAsync(string deployId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.DeployWorkItemChanges.AsNoTracking()
+            .Where(c => c.DeployId == deployId)
+            .OrderBy(c => c.WorkItemType).ThenBy(c => c.WorkItemId)
+            .ToListAsync(cancellationToken);
+        return entities.Select(e => new DeployWorkItemChange(
+            e.WorkItemId, e.WorkItemType, e.Title, e.FromState, e.ToState, e.FromAssignee, e.ToAssignee)).ToList();
+    }
+
+    private static DeployEntity DeployToEntity(DeployRecord r) => new()
+    {
+        DeployId = r.DeployId,
+        Status = (int)r.Status,
+        Phase = (int)r.Phase,
+        Ref = r.Ref,
+        IsTag = r.IsTag,
+        BackendPipelineId = r.BackendPipelineId,
+        BackendRunId = r.BackendRunId,
+        FrontendPipelineId = r.FrontendPipelineId,
+        FrontendRunId = r.FrontendRunId,
+        CreatedAt = r.CreatedAt,
+        UpdatedAt = r.UpdatedAt,
+        FailureReason = r.FailureReason,
+    };
+
+    private static DeployRecord DeployToDomain(DeployEntity e) => new(
+        e.DeployId,
+        (DeployStatus)e.Status,
+        (DeployPhase)e.Phase,
+        e.Ref,
+        e.IsTag,
+        e.BackendPipelineId,
+        e.BackendRunId,
+        e.FrontendPipelineId,
+        e.FrontendRunId,
+        e.CreatedAt,
+        e.UpdatedAt,
+        e.FailureReason
+    );
 
     private static ExecutionEntity ToEntity(TaskExecutionRecord record) =>
         new()

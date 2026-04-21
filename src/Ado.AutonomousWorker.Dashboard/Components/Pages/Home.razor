@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 @inject IStateStore StateStore
 @implements IDisposable
@@ -17,22 +17,23 @@ else
     {
         <MudText Typo="Typo.h6" Class="mb-2">
             <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="mr-1" />Active (@_activeExecutions.Count)
+            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Circle" Class="ml-2">Live</MudChip>
         </MudText>
-        <MudTable Items="_activeExecutions" Hover="true" Dense="true" Class="mb-6" RowClassFunc="@RowClass">
+        <MudTable Items="_activeExecutions" Hover="true" Dense="true" Class="mb-6" RowClassFunc="@ActiveRowClass">
             <HeaderContent>
                 <MudTh>Work Item</MudTh>
                 <MudTh>Title</MudTh>
                 <MudTh>Kind</MudTh>
                 <MudTh>Phase</MudTh>
-                <MudTh>Started</MudTh>
+                <MudTh>Elapsed</MudTh>
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.WorkItemId</MudTd>
                 <MudTd>@context.Title</MudTd>
-                <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
-                <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
-                <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForKind(context.Kind)">@DashboardColors.FormatKind(context.Kind)</MudChip></MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
+                <MudTd>@DashboardColors.FormatDuration(DateTimeOffset.UtcNow - context.CreatedAt)</MudTd>
                 <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
             </RowTemplate>
         </MudTable>
@@ -42,10 +43,36 @@ else
         <MudAlert Severity="Severity.Info" Class="mb-6">No tasks are currently running.</MudAlert>
     }
 
+    @if (_activeDeploys.Count > 0)
+    {
+        <MudText Typo="Typo.h6" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.RocketLaunch" Class="mr-1" />Active Deploys (@_activeDeploys.Count)
+            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Circle" Class="ml-2">Live</MudChip>
+        </MudText>
+        <MudTable Items="_activeDeploys" Hover="true" Dense="true" Class="mb-6">
+            <HeaderContent>
+                <MudTh>Ref</MudTh>
+                <MudTh>Phase</MudTh>
+                <MudTh>Elapsed</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudIcon Icon="@(context.IsTag ? Icons.Material.Filled.LocalOffer : Icons.Material.Filled.AccountTree)"
+                             Size="Size.Small" Class="mr-1 mb-n1" />
+                    @context.Ref
+                </MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForDeployPhase(context.Phase)">@context.Phase</MudChip></MudTd>
+                <MudTd>@DashboardColors.FormatDuration(DateTimeOffset.UtcNow - context.CreatedAt)</MudTd>
+                <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"deploys/{context.DeployId}")" /></MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
     <MudText Typo="Typo.h6" Class="mb-2">
         <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-1" />Recent Executions
     </MudText>
-    <MudTable Items="_recentExecutions" Hover="true" Dense="true" RowClassFunc="@RowClass">
+    <MudTable Items="_recentExecutions" Hover="true" Dense="true" Class="mb-6" RowClassFunc="@RecentRowClass">
         <HeaderContent>
             <MudTh>Work Item</MudTh>
             <MudTh>Title</MudTh>
@@ -58,14 +85,41 @@ else
         <RowTemplate>
             <MudTd>@context.WorkItemId</MudTd>
             <MudTd>@context.Title</MudTd>
-            <MudTd><MudChip T="string" Size="Size.Small" Color="KindColor(context.Kind)">@context.Kind</MudChip></MudTd>
-            <MudTd><MudChip T="string" Size="Size.Small" Color="PhaseColor(context.Phase)">@context.Phase</MudChip></MudTd>
-            <MudTd><MudChip T="string" Size="Size.Small" Color="StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForKind(context.Kind)">@DashboardColors.FormatKind(context.Kind)</MudChip></MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForPhase(context.Phase)">@context.Phase</MudChip></MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForStatus(context.Status)">@context.Status</MudChip></MudTd>
             <MudTd>@context.UpdatedAt.ToLocalTime().ToString("g")</MudTd>
             <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"executions/{context.ExecutionId}")" /></MudTd>
         </RowTemplate>
         <NoRecordsContent>
             <MudText>No executions found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    <MudText Typo="Typo.h6" Class="mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.RocketLaunch" Class="mr-1" />Recent Deploys
+    </MudText>
+    <MudTable Items="_recentDeploys" Hover="true" Dense="true" RowClassFunc="@DeployRowClass">
+        <HeaderContent>
+            <MudTh>Ref</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Started</MudTh>
+            <MudTh>Duration</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudIcon Icon="@(context.IsTag ? Icons.Material.Filled.LocalOffer : Icons.Material.Filled.AccountTree)"
+                         Size="Size.Small" Class="mr-1 mb-n1" />
+                @context.Ref
+            </MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="DashboardColors.ForDeployStatus(context.Status)">@context.Status</MudChip></MudTd>
+            <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>@DashboardColors.FormatDuration(context.UpdatedAt - context.CreatedAt)</MudTd>
+            <MudTd><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@($"deploys/{context.DeployId}")" /></MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No deploys found.</MudText>
         </NoRecordsContent>
     </MudTable>
 }
@@ -74,6 +128,8 @@ else
     private bool _loading = true;
     private List<TaskExecutionRecord> _activeExecutions = [];
     private List<TaskExecutionRecord> _recentExecutions = [];
+    private List<DeployRecord> _activeDeploys = [];
+    private List<DeployRecord> _recentDeploys = [];
     private System.Threading.Timer? _refreshTimer;
 
     protected override async Task OnInitializedAsync()
@@ -99,41 +155,26 @@ else
             .Take(20)
             .ToList();
 
+        _activeDeploys = (await StateStore.ListActiveDeploysAsync(CancellationToken.None))
+            .OrderByDescending(d => d.CreatedAt).ToList();
+
+        var allDeploys = await StateStore.ListDeploysAsync(CancellationToken.None);
+        _recentDeploys = allDeploys
+            .Where(d => d.Status != DeployStatus.Running)
+            .OrderByDescending(d => d.CreatedAt)
+            .Take(10)
+            .ToList();
+
         _loading = false;
     }
 
-    private static Color KindColor(QueueItemKind kind) => kind switch
-    {
-        QueueItemKind.AiWork => Color.Primary,
-        QueueItemKind.AiRework => Color.Warning,
-        QueueItemKind.AiPrFix => Color.Secondary,
-        _ => Color.Default,
-    };
+    private static string ActiveRowClass(TaskExecutionRecord record, int _) => "mud-theme-primary";
 
-    private static Color PhaseColor(TaskPhase phase) => phase switch
-    {
-        TaskPhase.Queued => Color.Default,
-        TaskPhase.Planning => Color.Info,
-        TaskPhase.Coding => Color.Primary,
-        TaskPhase.Reviewing => Color.Warning,
-        TaskPhase.ApplyingReview => Color.Warning,
-        TaskPhase.FixingValidation => Color.Warning,
-        TaskPhase.Validating => Color.Info,
-        TaskPhase.Publishing => Color.Success,
-        _ => Color.Default,
-    };
-
-    private static Color StatusColor(ExecutionStatus status) => status switch
-    {
-        ExecutionStatus.Running => Color.Primary,
-        ExecutionStatus.Completed => Color.Success,
-        ExecutionStatus.Failed => Color.Error,
-        ExecutionStatus.Skipped => Color.Default,
-        _ => Color.Default,
-    };
-
-    private static string RowClass(TaskExecutionRecord record, int _) =>
+    private static string RecentRowClass(TaskExecutionRecord record, int _) =>
         record.Status == ExecutionStatus.Failed ? "mud-theme-error" : string.Empty;
+
+    private static string DeployRowClass(DeployRecord record, int _) =>
+        record.Status == DeployStatus.Failed ? "mud-theme-error" : string.Empty;
 
     public void Dispose() => _refreshTimer?.Dispose();
 }

@@ -15,6 +15,9 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
     public DbSet<AgentUsageEntity> AgentUsages => Set<AgentUsageEntity>();
     public DbSet<ExecutionPrLinkEntity> ExecutionPrLinks => Set<ExecutionPrLinkEntity>();
     public DbSet<ExecutionChildTaskEntity> ExecutionChildTasks => Set<ExecutionChildTaskEntity>();
+    public DbSet<DeployEntity> Deploys => Set<DeployEntity>();
+    public DbSet<DeployEventEntity> DeployEvents => Set<DeployEventEntity>();
+    public DbSet<DeployWorkItemChangeEntity> DeployWorkItemChanges => Set<DeployWorkItemChangeEntity>();
 
     // SQLite does not support DateTimeOffset natively in ORDER BY; store as ISO 8601 text instead.
     // ISO 8601 strings sort lexicographically in the same order as DateTimeOffset chronologically.
@@ -138,6 +141,49 @@ internal sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options)
             entity.Property(e => e.CachedInputTokens).HasColumnName("cached_input_tokens");
             entity.Property(e => e.CostUsd).HasColumnName("cost_usd");
             entity.Property(e => e.Timestamp).HasColumnName("timestamp").HasConversion(DateTimeOffsetConverter);
+        });
+
+        modelBuilder.Entity<DeployEntity>(entity =>
+        {
+            entity.ToTable("deploy_records");
+            entity.HasKey(e => e.DeployId);
+            entity.Property(e => e.DeployId).HasColumnName("deploy_id");
+            entity.Property(e => e.Status).HasColumnName("status");
+            entity.Property(e => e.Phase).HasColumnName("phase");
+            entity.Property(e => e.Ref).HasColumnName("ref");
+            entity.Property(e => e.IsTag).HasColumnName("is_tag");
+            entity.Property(e => e.BackendPipelineId).HasColumnName("backend_pipeline_id");
+            entity.Property(e => e.BackendRunId).HasColumnName("backend_run_id");
+            entity.Property(e => e.FrontendPipelineId).HasColumnName("frontend_pipeline_id");
+            entity.Property(e => e.FrontendRunId).HasColumnName("frontend_run_id");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasConversion(DateTimeOffsetConverter);
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasConversion(DateTimeOffsetConverter);
+            entity.Property(e => e.FailureReason).HasColumnName("failure_reason");
+        });
+
+        modelBuilder.Entity<DeployEventEntity>(entity =>
+        {
+            entity.ToTable("deploy_events");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.DeployId).HasColumnName("deploy_id");
+            entity.Property(e => e.Timestamp).HasColumnName("timestamp").HasConversion(DateTimeOffsetConverter);
+            entity.Property(e => e.Message).HasColumnName("message");
+        });
+
+        modelBuilder.Entity<DeployWorkItemChangeEntity>(entity =>
+        {
+            entity.ToTable("deploy_work_item_changes");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.DeployId).HasColumnName("deploy_id");
+            entity.Property(e => e.WorkItemId).HasColumnName("work_item_id");
+            entity.Property(e => e.WorkItemType).HasColumnName("work_item_type");
+            entity.Property(e => e.Title).HasColumnName("title");
+            entity.Property(e => e.FromState).HasColumnName("from_state");
+            entity.Property(e => e.ToState).HasColumnName("to_state");
+            entity.Property(e => e.FromAssignee).HasColumnName("from_assignee");
+            entity.Property(e => e.ToAssignee).HasColumnName("to_assignee");
         });
     }
 }

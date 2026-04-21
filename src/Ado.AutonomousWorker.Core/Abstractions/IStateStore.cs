@@ -85,4 +85,17 @@ public interface IStateStore
     );
 
     Task<IReadOnlyList<AgentUsageRecord>> GetAgentUsageAsync(string executionId, CancellationToken cancellationToken);
+
+    // Deploy records
+    Task SaveDeployAsync(DeployRecord deploy, CancellationToken cancellationToken);
+    Task<DeployRecord?> GetDeployAsync(string deployId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DeployRecord>> ListDeploysAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<DeployRecord>> ListActiveDeploysAsync(CancellationToken cancellationToken);
+    Task UpdateDeployPhaseAsync(string deployId, DeployPhase phase, CancellationToken cancellationToken);
+    Task UpdateDeployRunIdsAsync(string deployId, int? backendRunId, int? frontendRunId, CancellationToken cancellationToken);
+    Task UpdateDeployStatusAsync(string deployId, DeployStatus status, string? failureReason, CancellationToken cancellationToken);
+    Task AppendDeployEventAsync(string deployId, string message, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DeployEventRecord>> GetDeployEventsAsync(string deployId, CancellationToken cancellationToken);
+    Task SaveDeployWorkItemChangesAsync(string deployId, IReadOnlyList<DeployWorkItemChange> changes, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DeployWorkItemChange>> GetDeployWorkItemChangesAsync(string deployId, CancellationToken cancellationToken);
 }

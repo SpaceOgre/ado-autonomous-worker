@@ -231,5 +231,52 @@ public sealed class CliCompletionServiceTests
             string executionId,
             CancellationToken cancellationToken
         ) => Task.FromResult<IReadOnlyList<TaskExecutionRecord>>([]);
+
+        public Task SaveDeployAsync(DeployRecord deploy, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<DeployRecord?> GetDeployAsync(string deployId, CancellationToken cancellationToken) =>
+            Task.FromResult<DeployRecord?>(null);
+
+        public Task<IReadOnlyList<DeployRecord>> ListDeploysAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DeployRecord>>([]);
+
+        public Task<IReadOnlyList<DeployRecord>> ListActiveDeploysAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DeployRecord>>([]);
+
+        public Task UpdateDeployPhaseAsync(string deployId, DeployPhase phase, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task UpdateDeployRunIdsAsync(
+            string deployId,
+            int? backendRunId,
+            int? frontendRunId,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+
+        public Task UpdateDeployStatusAsync(
+            string deployId,
+            DeployStatus status,
+            string? failureReason,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+
+        public Task AppendDeployEventAsync(string deployId, string message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<DeployEventRecord>> GetDeployEventsAsync(
+            string deployId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<DeployEventRecord>>([]);
+
+        public Task SaveDeployWorkItemChangesAsync(
+            string deployId,
+            IReadOnlyList<DeployWorkItemChange> changes,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<DeployWorkItemChange>> GetDeployWorkItemChangesAsync(
+            string deployId,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<DeployWorkItemChange>>([]);
     }
 }
