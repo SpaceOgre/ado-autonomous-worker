@@ -96,25 +96,77 @@ else
             }
             else
             {
-                <MudTable Items="_events" Hover="true" Dense="true">
-                    <HeaderContent>
-                        <MudTh>Time</MudTh>
-                        <MudTh>Delta</MudTh>
-                        <MudTh>Message</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        @{ var idx = _events.IndexOf(context); }
-                        <MudTd DataLabel="Time">@context.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudTd>
-                        <MudTd DataLabel="Delta">
-                            @if (idx > 0)
+                <MudSimpleTable Dense="true" Hover="true" Style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Delta / Duration</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var gi = 0; gi < _groups.Count; gi++)
+                        {
+                            var group = _groups[gi];
+                            var groupIdx = gi;
+                            var isExpanded = _expandedGroups.Contains(groupIdx);
+
+                            <tr>
+                                <td>@group.First.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                                <td>
+                                    @if (group.IsGroup)
+                                    {
+                                        var duration = group.All[^1].Timestamp - group.First.Timestamp;
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" title="Duration in this state">@DashboardColors.FormatDuration(duration)</MudText>
+                                    }
+                                    else if (group.PrecedingEvent is not null)
+                                    {
+                                        var delta = group.First.Timestamp - group.PrecedingEvent.Timestamp;
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">+@DashboardColors.FormatDuration(delta)</MudText>
+                                    }
+                                </td>
+                                <td>
+                                    @group.First.Message
+                                    @if (group.IsGroup)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">×@group.All.Count</MudChip>
+                                        <MudIconButton Icon="@(isExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                                       Size="Size.Small" Class="ml-n1"
+                                                       OnClick="@(() => ToggleGroup(groupIdx))" />
+                                    }
+                                </td>
+                            </tr>
+
+                            @if (group.IsGroup && isExpanded)
                             {
-                                var delta = context.Timestamp - _events[idx - 1].Timestamp;
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">+@DashboardColors.FormatDuration(delta)</MudText>
+                                <tr>
+                                    <td colspan="3" style="padding:0 0 4px 2rem; background:transparent">
+                                        <MudSimpleTable Dense="true" Style="width:100%">
+                                            <tbody>
+                                                @for (var ei = 0; ei < group.All.Count; ei++)
+                                                {
+                                                    var ev = group.All[ei];
+                                                    var prev = ei > 0 ? group.All[ei - 1] : null;
+                                                    <tr>
+                                                        <td style="width:90px">@ev.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                                                        <td style="width:80px">
+                                                            @if (prev is not null)
+                                                            {
+                                                                var d = ev.Timestamp - prev.Timestamp;
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">+@DashboardColors.FormatDuration(d)</MudText>
+                                                            }
+                                                        </td>
+                                                        <td>@ev.Message</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    </td>
+                                </tr>
                             }
-                        </MudTd>
-                        <MudTd DataLabel="Message">@context.Message</MudTd>
-                    </RowTemplate>
-                </MudTable>
+                        }
+                    </tbody>
+                </MudSimpleTable>
             }
         </MudTabPanel>
         <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.SwapHoriz" BadgeData="@(_changes.Count > 0 ? (object)_changes.Count : null)" Class="pt-4">
@@ -165,10 +217,17 @@ else
 @code {
     [Parameter] public string DeployId { get; set; } = "";
 
+    private sealed record EventGroup(DeployEventRecord First, List<DeployEventRecord> All, DeployEventRecord? PrecedingEvent)
+    {
+        public bool IsGroup => All.Count > 1;
+    }
+
     private bool _loading = true;
     private DeployRecord? _deploy;
     private List<DeployEventRecord> _events = [];
     private List<DeployWorkItemChange> _changes = [];
+    private List<EventGroup> _groups = [];
+    private HashSet<int> _expandedGroups = [];
     private List<BreadcrumbItem> _breadcrumbs = [];
     private Timer? _refreshTimer;
 
@@ -196,6 +255,33 @@ else
         _deploy = await StateStore.GetDeployAsync(DeployId, CancellationToken.None);
         _events = (await StateStore.GetDeployEventsAsync(DeployId, CancellationToken.None)).ToList();
         _changes = (await StateStore.GetDeployWorkItemChangesAsync(DeployId, CancellationToken.None)).ToList();
+        BuildGroups();
+    }
+
+    private void BuildGroups()
+    {
+        _groups = [];
+        var messageToGroupIndex = new Dictionary<string, int>();
+
+        for (var i = 0; i < _events.Count; i++)
+        {
+            var ev = _events[i];
+            if (messageToGroupIndex.TryGetValue(ev.Message, out var idx))
+            {
+                _groups[idx].All.Add(ev);
+            }
+            else
+            {
+                messageToGroupIndex[ev.Message] = _groups.Count;
+                _groups.Add(new EventGroup(ev, [ev], i > 0 ? _events[i - 1] : null));
+            }
+        }
+    }
+
+    private void ToggleGroup(int index)
+    {
+        if (!_expandedGroups.Add(index))
+            _expandedGroups.Remove(index);
     }
 
     private async Task RefreshAsync()
