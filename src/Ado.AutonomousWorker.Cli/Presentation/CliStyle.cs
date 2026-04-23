@@ -122,6 +122,7 @@ public static class CliStyle
             AgentRole.Plan => "cornflowerblue",
             AgentRole.Code => "deepskyblue1",
             AgentRole.Review => "mediumspringgreen",
+            AgentRole.Pr => "mediumpurple1",
             _ => "white",
         };
 

@@ -216,7 +216,7 @@ internal sealed class WorkItemPublishingHandler(
 
             var runner = agentRunnerFactory.GetRunner(config.Provider);
             var result = await runner.StartSessionAsync(
-                AgentRole.Plan,
+                AgentRole.Pr,
                 config,
                 prompt,
                 workspace.WorkingDirectory,
@@ -231,7 +231,7 @@ internal sealed class WorkItemPublishingHandler(
                 await stateStore.RecordAgentUsageAsync(
                     context.ExecutionId,
                     TaskPhase.Publishing,
-                    AgentRole.Plan,
+                    AgentRole.Pr,
                     config.Provider,
                     result.Result.Usage,
                     cancellationToken
