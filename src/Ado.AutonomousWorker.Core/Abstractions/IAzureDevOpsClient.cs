@@ -96,6 +96,11 @@ public interface IAzureDevOpsClient
         IReadOnlyList<(WorkItemSummary Story, IReadOnlyList<int> ChildIds)>
     > QueryActiveSprintUserStoriesWithChildrenAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Returns all User Story work items in the current sprint whose state is "Resolved".
+    /// </summary>
+    Task<IReadOnlyList<WorkItemSummary>> QueryResolvedSprintUserStoriesAsync(CancellationToken cancellationToken);
+
     /// <summary>Returns the state of the given work items keyed by ID.</summary>
     Task<IReadOnlyDictionary<int, string>> GetWorkItemStatesAsync(
         IReadOnlyList<int> workItemIds,

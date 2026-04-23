@@ -167,14 +167,13 @@ public sealed class DeployService(
     /// Computes the work item changes that would be applied (for dry-run or actual execution).
     /// Returns:
     ///   - <c>taskChanges</c>: Resolved tasks/bugs to move to Ready for test
-    ///   - <c>storyChanges</c>: User stories whose children are all Ready for test or Closed
+    ///   - <c>storyChanges</c>: Resolved user stories to move to Ready for test
     /// </summary>
     public async Task<(
         IReadOnlyList<DeployWorkItemChange> TaskChanges,
         IReadOnlyList<DeployWorkItemChange> StoryChanges
     )> ComputeChangesAsync(CancellationToken cancellationToken)
     {
-        // 1. Resolved tasks/bugs in current sprint
         var resolvedItems = await _adoClient.QueryResolvedSprintItemsAsync(cancellationToken);
         var taskChanges = resolvedItems
             .Select(item => new DeployWorkItemChange(
@@ -188,56 +187,18 @@ public sealed class DeployService(
             ))
             .ToArray();
 
-        // 2. Active user stories where all children will be Ready for test or Closed after the changes above
-        var resolvedIds = new HashSet<int>(resolvedItems.Select(i => i.WorkItemId));
-        var stories = await _adoClient.QueryActiveSprintUserStoriesWithChildrenAsync(cancellationToken);
-
-        var storyChanges = new List<DeployWorkItemChange>();
-
-        // Precompute the union of all unknown child IDs across every story so we can
-        // fetch their states in a single batched API call instead of one call per story.
-        var allUnknownIds = stories
-            .SelectMany(s => s.ChildIds)
-            .Where(id => !resolvedIds.Contains(id))
-            .Distinct()
+        var resolvedStories = await _adoClient.QueryResolvedSprintUserStoriesAsync(cancellationToken);
+        var storyChanges = resolvedStories
+            .Select(story => new DeployWorkItemChange(
+                story.WorkItemId,
+                story.WorkItemType.ToString(),
+                story.Title,
+                story.State,
+                ReadyForTestState,
+                story.AssignedTo,
+                _options.ReadyForTestAssignee
+            ))
             .ToArray();
-
-        var childStateMap =
-            allUnknownIds.Length > 0
-                ? await _adoClient.GetWorkItemStatesAsync(allUnknownIds, cancellationToken)
-                : (IReadOnlyDictionary<int, string>)new Dictionary<int, string>();
-
-        foreach (var (story, childIds) in stories)
-        {
-            if (childIds.Count == 0)
-                continue;
-
-            var allDone = childIds.All(id =>
-            {
-                // This ID is being moved to Ready for test
-                if (resolvedIds.Contains(id))
-                    return true;
-                // Already in an acceptable end state
-                if (childStateMap.TryGetValue(id, out var state))
-                    return IsAcceptableChildState(state);
-                return false;
-            });
-
-            if (allDone)
-            {
-                storyChanges.Add(
-                    new DeployWorkItemChange(
-                        story.WorkItemId,
-                        story.WorkItemType.ToString(),
-                        story.Title,
-                        story.State,
-                        ReadyForTestState,
-                        story.AssignedTo,
-                        _options.ReadyForTestAssignee
-                    )
-                );
-            }
-        }
 
         return (taskChanges, storyChanges);
     }
@@ -282,8 +243,4 @@ public sealed class DeployService(
 
     private static bool IsSuccessful(string? result) =>
         string.Equals(result, "succeeded", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsAcceptableChildState(string state) =>
-        string.Equals(state, ReadyForTestState, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(state, "Closed", StringComparison.OrdinalIgnoreCase);
 }

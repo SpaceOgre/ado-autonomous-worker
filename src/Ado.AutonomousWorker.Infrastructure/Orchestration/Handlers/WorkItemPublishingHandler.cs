@@ -110,6 +110,7 @@ internal sealed class WorkItemPublishingHandler(
             }
 
             await azureDevOpsClient.LinkPullRequestAsync(childTask.WorkItemId, pullRequest, cancellationToken);
+            await azureDevOpsClient.UpdateWorkItemStateAsync(childTask.WorkItemId, "Pull Request", cancellationToken);
             await stateStore.LinkPullRequestToExecutionAsync(
                 context.ExecutionId,
                 pullRequest.PullRequestId,
