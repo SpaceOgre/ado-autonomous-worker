@@ -78,7 +78,7 @@ internal sealed class FixingValidationHandler(
         return PhaseTransition.To(TaskPhase.Validating);
     }
 
-    private static string BuildFixPrompt(IReadOnlyList<ValidationFailure> failures)
+    internal static string BuildFixPrompt(IReadOnlyList<ValidationFailure> failures)
     {
         var sections = failures.Select(f =>
         {

@@ -181,10 +181,18 @@ public sealed class ExecutionLiveDisplay(
         {
             var elapsed = DateTimeOffset.UtcNow - startedAt;
             var elapsedText = elapsed.TotalHours >= 1 ? elapsed.ToString(@"hh\:mm\:ss") : elapsed.ToString(@"mm\:ss");
-            header = new Markup(
-                $"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] "
-                    + $"[grey]Waiting for execution data... (elapsed {elapsedText})[/]"
-            );
+            // Pad to CompactHeaderRows so the frame height matches the data state and
+            // avoids a height jump when execution data first arrives.
+            var waitingRows = new List<IRenderable>
+            {
+                new Markup(
+                    $"[deepskyblue1]{Markup.Escape(GetSpinnerFrame(tick, useUnicode))}[/] "
+                        + $"[grey]Waiting for execution data... (elapsed {elapsedText})[/]"
+                ),
+            };
+            while (waitingRows.Count < CompactHeaderRows)
+                waitingRows.Add(new Markup(string.Empty));
+            header = new Rows(waitingRows);
         }
 
         // Always render the full panel structure so the height stays consistent across
@@ -340,15 +348,13 @@ public sealed class ExecutionLiveDisplay(
         );
     }
 
+    private const int CompactHeaderRows = 5; // title, agent config, activity, phase pipeline, usage
+    private const int EventsTableMaxRows = 8;
+
     private static Table CreateEventsTable(IReadOnlyList<ExecutionEventRecord> events)
     {
         var table = new Table().Border(TableBorder.Rounded).AddColumns("Time", "Phase", "Message");
-        var recentEvents = events.TakeLast(8).ToArray();
-        if (recentEvents.Length == 0)
-        {
-            table.AddRow("-", "-", "[grey]No events recorded yet.[/]");
-            return table;
-        }
+        var recentEvents = events.TakeLast(EventsTableMaxRows).ToArray();
 
         foreach (var executionEvent in recentEvents)
         {
@@ -359,11 +365,18 @@ public sealed class ExecutionLiveDisplay(
             );
         }
 
+        // Pad to EventsTableMaxRows so the Live display height stays constant as events accumulate.
+        for (var i = recentEvents.Length; i < EventsTableMaxRows; i++)
+            table.AddRow(string.Empty, string.Empty, string.Empty);
+
         return table;
     }
 
-    // Plain markup lines — no table overhead. One header line (role/provider/workdir/time)
-    // followed by the most recent output chunks.
+    private const int AgentOutputContentRows = 10;
+
+    // Plain markup lines — one header line (role/provider/workdir/time) followed by the
+    // most recent output chunks. Always renders 1 + AgentOutputContentRows lines so the
+    // Live display height stays constant and avoids stale-frame rendering artifacts.
     private static IRenderable CreateAgentOutputMarkup(
         IReadOnlyList<AgentOutputChunk> chunks,
         TaskPhase phase,
@@ -371,32 +384,37 @@ public sealed class ExecutionLiveDisplay(
         bool useUnicode
     )
     {
+        var lines = new List<IRenderable>();
+
         if (chunks.Count == 0)
         {
             var spinner = GetSpinnerFrame(tick, useUnicode);
             var waitingText =
                 phase is TaskPhase.Publishing ? "No agent output captured." : $"{spinner} Waiting for agent output...";
-            return new Markup($"[grey]{Markup.Escape(waitingText)}[/]");
+            lines.Add(new Markup($"[grey]{Markup.Escape(waitingText)}[/]"));
+        }
+        else
+        {
+            var activeSession = chunks
+                .GroupBy(chunk => chunk.SessionId)
+                .OrderByDescending(group => group.Max(item => item.Timestamp))
+                .First();
+
+            var latestChunk = activeSession.Last();
+            lines.Add(
+                new Markup(
+                    $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}  "
+                        + $"[grey]{Markup.Escape(ShortenPath(latestChunk.WorkingDirectory))} · {latestChunk.Timestamp.ToLocalTime():HH:mm:ss}[/]"
+                )
+            );
+
+            foreach (var chunk in activeSession.TakeLast(AgentOutputContentRows))
+                lines.Add(new Markup($"[grey]{Markup.Escape(chunk.Content)}[/]"));
         }
 
-        var activeSession = chunks
-            .GroupBy(chunk => chunk.SessionId)
-            .OrderByDescending(group => group.Max(item => item.Timestamp))
-            .First();
-
-        var latestChunk = activeSession.Last();
-        var lines = new List<IRenderable>
-        {
-            new Markup(
-                $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}  "
-                    + $"[grey]{Markup.Escape(ShortenPath(latestChunk.WorkingDirectory))} · {latestChunk.Timestamp.ToLocalTime():HH:mm:ss}[/]"
-            ),
-        };
-
-        foreach (var chunk in activeSession.TakeLast(10))
-        {
-            lines.Add(new Markup($"[grey]{Markup.Escape(chunk.Content)}[/]"));
-        }
+        // Pad to 1 + AgentOutputContentRows rows so height stays constant.
+        while (lines.Count < 1 + AgentOutputContentRows)
+            lines.Add(new Markup(string.Empty));
 
         return new Rows(lines);
     }

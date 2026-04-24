@@ -88,10 +88,7 @@ internal sealed partial class ValidatingHandler(
         if (failures.Count == 0)
             return PhaseTransition.To(TaskPhase.Publishing);
 
-        if (
-            context is PhaseContext.WorkItemContext
-            && context.ValidationRetryCount < workerOptions.Value.MaxValidationRetries
-        )
+        if (context.ValidationRetryCount < workerOptions.Value.MaxValidationRetries)
         {
             context.ValidationRetryCount++;
             context.ValidationFailures = failures;
