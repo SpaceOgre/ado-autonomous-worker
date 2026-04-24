@@ -191,7 +191,7 @@ else
         }
 
         <MudTabPanel Text="Agent Output" Icon="@Icons.Material.Filled.Terminal">
-            @if (_agentSessions.Count == 0)
+            @if (_agentSessions.Count == 0 && _orphanChunkSessions.Count == 0)
             {
                 <MudText Color="Color.Secondary">No agent sessions recorded.</MudText>
             }
@@ -218,6 +218,32 @@ else
                                 else
                                 {
                                     <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto;">@string.Join("\n", sessionChunks.Select(c => c.Content))</pre>
+                                }
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+                @foreach (var kvp in _orphanChunkSessions)
+                {
+                    var role = kvp.Value.First().Role;
+                    var isLast = kvp.Key == _lastSessionId;
+                    <MudExpansionPanels Class="mb-2">
+                        <MudExpansionPanel Expanded="@isLast">
+                            <TitleContent>
+                                <MudText Typo="Typo.subtitle2">
+                                    <MudIcon Icon="@RoleIcon(role)" Size="Size.Small" Class="mr-1" />
+                                    @role
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true"> — @kvp.Key</MudText>
+                                </MudText>
+                            </TitleContent>
+                            <ChildContent>
+                                @if (kvp.Value.Count == 0)
+                                {
+                                    <MudText Color="Color.Secondary" Typo="Typo.caption">No output captured.</MudText>
+                                }
+                                else
+                                {
+                                    <pre style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto;">@string.Join("\n", kvp.Value.Select(c => c.Content))</pre>
                                 }
                             </ChildContent>
                         </MudExpansionPanel>
@@ -411,6 +437,7 @@ else
     private List<BreadcrumbItem> _breadcrumbs = [];
     private Dictionary<string, string?> _logContents = [];
     private Dictionary<string, List<AgentOutputChunk>> _chunksBySession = [];
+    private List<KeyValuePair<string, List<AgentOutputChunk>>> _orphanChunkSessions = [];
     private string? _lastSessionId;
     private CancellationTokenSource _cts = new();
     private List<(string Path, string Key)> _extraLogFiles = [];
@@ -492,6 +519,12 @@ else
             .GroupBy(c => c.SessionId)
             .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Sequence).ToList());
 
+        var knownSessionIds = _agentSessions.Select(s => s.SessionId).ToHashSet();
+        _orphanChunkSessions = _chunksBySession
+            .Where(kvp => !knownSessionIds.Contains(kvp.Key))
+            .OrderBy(kvp => kvp.Value.Min(c => c.Timestamp))
+            .ToList();
+
         _lastSessionId = _agentChunks.Count > 0
             ? _agentChunks.OrderByDescending(c => c.Timestamp).First().SessionId
             : null;
@@ -533,6 +566,8 @@ else
         AgentRole.Plan => Icons.Material.Filled.Assignment,
         AgentRole.Code => Icons.Material.Filled.Code,
         AgentRole.Review => Icons.Material.Filled.RateReview,
+        AgentRole.Pr => Icons.Material.Filled.MergeType,
+        AgentRole.Validation => Icons.Material.Filled.CheckCircle,
         _ => Icons.Material.Filled.SmartToy,
     };
 
