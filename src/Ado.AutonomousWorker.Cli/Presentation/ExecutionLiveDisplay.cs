@@ -191,7 +191,7 @@ public sealed class ExecutionLiveDisplay(
                 ),
             };
             while (waitingRows.Count < CompactHeaderRows)
-                waitingRows.Add(new Markup(string.Empty));
+                waitingRows.Add(new Markup(" "));
             header = new Rows(waitingRows);
         }
 
@@ -355,15 +355,22 @@ public sealed class ExecutionLiveDisplay(
 
     private static Table CreateEventsTable(IReadOnlyList<ExecutionEventRecord> events)
     {
+        // Reserve ~40 columns for Time, Phase, table borders, and panel borders.
+        var maxMessageWidth = Math.Max(20, AnsiConsole.Profile.Width - 40);
+
         var table = new Table().Border(TableBorder.Rounded).AddColumns("Time", "Phase", "Message");
         var recentEvents = events.TakeLast(EventsTableMaxRows).ToArray();
 
         foreach (var executionEvent in recentEvents)
         {
+            var message = executionEvent.Message;
+            if (message.Length > maxMessageWidth)
+                message = message[..maxMessageWidth] + "…";
+
             table.AddRow(
                 executionEvent.Timestamp.ToLocalTime().ToString("HH:mm:ss"),
                 CliStyle.Phase(executionEvent.Phase),
-                Markup.Escape(executionEvent.Message)
+                Markup.Escape(message)
             );
         }
 
@@ -403,6 +410,9 @@ public sealed class ExecutionLiveDisplay(
         bool useUnicode
     )
     {
+        // Reserve ~6 columns for panel borders and inner padding.
+        var maxContentWidth = Math.Max(20, AnsiConsole.Profile.Width - 6);
+
         var lines = new List<IRenderable>();
 
         if (chunks.Count == 0)
@@ -431,12 +441,19 @@ public sealed class ExecutionLiveDisplay(
             );
 
             foreach (var chunk in activeSession.TakeLast(AgentOutputContentRows))
-                lines.Add(new Markup($"[grey]{Markup.Escape(chunk.Content)}[/]"));
+            {
+                var content = chunk.Content;
+                if (content.Length > maxContentWidth)
+                    content = content[..maxContentWidth] + "…";
+                lines.Add(new Markup($"[grey]{Markup.Escape(content)}[/]"));
+            }
         }
 
         // Pad to 1 + AgentOutputContentRows rows so height stays constant.
+        // Use a space rather than an empty string — Spectre renders empty Markup as zero
+        // height, which defeats the padding and leaves stale lines from prior frames visible.
         while (lines.Count < 1 + AgentOutputContentRows)
-            lines.Add(new Markup(string.Empty));
+            lines.Add(new Markup(" "));
 
         return new Rows(lines);
     }
