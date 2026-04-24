@@ -49,7 +49,7 @@ internal sealed class WorkItemCodingHandler(
         foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
         {
             var childTask =
-                workItem.WorkItemType == WorkItemType.Bug
+                workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
                     ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
                     : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
                         ?? await CreateChildTaskAsync(workItem, context.CurrentSprintPath, repoKind, cancellationToken);

@@ -54,7 +54,7 @@ public sealed class AzureDevOpsClient(
         var query = $"""
             SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
             FROM WorkItems
-            WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
+            WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug' OR [System.WorkItemType] = 'Task')
               AND [System.Tags] CONTAINS 'AI-Work'
               AND NOT [System.Tags] CONTAINS 'AI-Failed'
               AND [System.State] = 'New'
@@ -71,7 +71,7 @@ public sealed class AzureDevOpsClient(
         var query = $"""
             SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [Microsoft.VSTS.Common.StackRank], [Microsoft.VSTS.Common.Priority], [System.WorkItemType]
             FROM WorkItems
-            WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug')
+            WHERE ([System.WorkItemType] = 'User Story' OR [System.WorkItemType] = 'Bug' OR [System.WorkItemType] = 'Task')
               AND [System.Tags] CONTAINS 'AI-Rework'
               AND NOT [System.Tags] CONTAINS 'AI-Failed'
               AND [System.State] <> 'Closed'

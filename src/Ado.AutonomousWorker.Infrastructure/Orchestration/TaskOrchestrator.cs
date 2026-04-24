@@ -287,7 +287,7 @@ internal sealed class TaskOrchestrator(
         foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
         {
             var childTask =
-                workItem.WorkItemType == WorkItemType.Bug
+                workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
                     ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
                     : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
                         ?? throw new InvalidOperationException(
@@ -340,7 +340,7 @@ internal sealed class TaskOrchestrator(
         var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
 
         var childTask =
-            workItem.WorkItemType == WorkItemType.Bug
+            workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
                 ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
                 : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
                     ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
