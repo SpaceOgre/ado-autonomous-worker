@@ -123,6 +123,7 @@ public static class CliStyle
             AgentRole.Code => "deepskyblue1",
             AgentRole.Review => "mediumspringgreen",
             AgentRole.Pr => "mediumpurple1",
+            AgentRole.Validation => "aqua",
             _ => "white",
         };
 

@@ -195,6 +195,8 @@ public sealed class ExecutionLiveDisplay(
             header = new Rows(waitingRows);
         }
 
+        var (outputTitle, outputColor) = GetOutputSectionLabel(agentOutput);
+
         // Always render the full panel structure so the height stays consistent across
         // all states. A height jump (small→large) causes Spectre's cursor tracking to
         // land short, leaving the previous frame's top line visible as a duplicate.
@@ -202,7 +204,7 @@ public sealed class ExecutionLiveDisplay(
             header,
             CliStyle.SectionRule("Recent Events", "deepskyblue1"),
             CreateEventsTable(events),
-            CliStyle.SectionRule("Agent Output", "mediumspringgreen"),
+            CliStyle.SectionRule(outputTitle, outputColor),
             CreateAgentOutputMarkup(agentOutput, phase, tick, useUnicode),
         ]);
 
@@ -374,6 +376,23 @@ public sealed class ExecutionLiveDisplay(
 
     private const int AgentOutputContentRows = 10;
 
+    private static (string title, string color) GetOutputSectionLabel(IReadOnlyList<AgentOutputChunk> chunks)
+    {
+        if (chunks.Count == 0)
+            return ("Agent Output", "mediumspringgreen");
+
+        var latestRole = chunks
+            .GroupBy(c => c.SessionId)
+            .OrderByDescending(g => g.Max(c => c.Timestamp))
+            .First()
+            .Last()
+            .Role;
+
+        return latestRole == AgentRole.Validation
+            ? ("Validation", "aqua")
+            : ("Agent Output", "mediumspringgreen");
+    }
+
     // Plain markup lines — one header line (role/provider/workdir/time) followed by the
     // most recent output chunks. Always renders 1 + AgentOutputContentRows lines so the
     // Live display height stays constant and avoids stale-frame rendering artifacts.
@@ -401,9 +420,12 @@ public sealed class ExecutionLiveDisplay(
                 .First();
 
             var latestChunk = activeSession.Last();
+            var roleLabel = latestChunk.Role == AgentRole.Validation
+                ? $"{CliStyle.Role(latestChunk.Role)}"
+                : $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}";
             lines.Add(
                 new Markup(
-                    $"{CliStyle.Role(latestChunk.Role)} {CliStyle.Provider(latestChunk.Provider)}  "
+                    $"{roleLabel}  "
                         + $"[grey]{Markup.Escape(ShortenPath(latestChunk.WorkingDirectory))} · {latestChunk.Timestamp.ToLocalTime():HH:mm:ss}[/]"
                 )
             );

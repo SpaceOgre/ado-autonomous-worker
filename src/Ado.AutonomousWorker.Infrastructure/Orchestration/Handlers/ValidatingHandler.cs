@@ -20,6 +20,8 @@ internal sealed partial class ValidatingHandler(
     public async Task<PhaseTransition> ExecuteAsync(PhaseContext context, CancellationToken cancellationToken)
     {
         var failures = new List<ValidationFailure>();
+        var validationSessionId = $"validation-{context.ExecutionId}";
+        var sequence = 0L;
 
         foreach (var repositoryExecution in context.RepositoryExecutions)
         {
@@ -49,6 +51,16 @@ internal sealed partial class ValidatingHandler(
                 )
                     ? workspace.WorkingDirectory
                     : Path.Combine(workspace.WorkingDirectory, repositoryExecution.Profile.ValidationWorkingDirectory);
+
+                await context.Journal.AppendValidationOutputAsync(
+                    context.ExecutionId,
+                    validationSessionId,
+                    validationWorkingDirectory,
+                    sequence++,
+                    $"  {repoKind}: {validationCommand}",
+                    cancellationToken
+                );
+
                 var result = await commandRunner.RunPowerShellAsync(
                     validationCommand,
                     validationWorkingDirectory,
@@ -64,6 +76,16 @@ internal sealed partial class ValidatingHandler(
                         repoKind,
                         validationCommand
                     );
+
+                    await context.Journal.AppendValidationOutputAsync(
+                        context.ExecutionId,
+                        validationSessionId,
+                        validationWorkingDirectory,
+                        sequence++,
+                        $"✗ {repoKind}: {validationCommand}",
+                        cancellationToken
+                    );
+
                     failures.Add(
                         new ValidationFailure(
                             repoKind,
@@ -81,6 +103,15 @@ internal sealed partial class ValidatingHandler(
                     context.ExecutionId,
                     repoKind,
                     validationCommand
+                );
+
+                await context.Journal.AppendValidationOutputAsync(
+                    context.ExecutionId,
+                    validationSessionId,
+                    validationWorkingDirectory,
+                    sequence++,
+                    $"✓ {repoKind}: {validationCommand}",
+                    cancellationToken
                 );
             }
         }

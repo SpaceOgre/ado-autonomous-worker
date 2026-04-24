@@ -68,6 +68,29 @@ internal sealed class ExecutionJournal(
             stateStore.AppendAgentOutputChunkAsync(executionId, chunk, cancellationToken);
     }
 
+    public Task AppendValidationOutputAsync(
+        string executionId,
+        string sessionId,
+        string workingDirectory,
+        long sequence,
+        string content,
+        CancellationToken cancellationToken
+    ) =>
+        stateStore.AppendAgentOutputChunkAsync(
+            executionId,
+            new AgentOutputChunk(
+                sessionId,
+                AgentProvider.Codex,
+                AgentRole.Validation,
+                workingDirectory,
+                AgentOutputStream.Stdout,
+                sequence,
+                DateTimeOffset.UtcNow,
+                content
+            ),
+            cancellationToken
+        );
+
     private async Task AppendRunLogAsync(
         string executionId,
         TaskPhase phase,

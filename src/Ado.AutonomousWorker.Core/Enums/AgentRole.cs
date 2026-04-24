@@ -6,4 +6,5 @@ public enum AgentRole
     Code = 1,
     Review = 2,
     Pr = 3,
+    Validation = 4,
 }
