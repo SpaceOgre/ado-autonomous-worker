@@ -502,6 +502,9 @@ public sealed class AzureDevOpsClient(
             $"{_options.Project}/_apis/git/repositories/{repositoryName}/pullrequests/{pullRequestId}/labels/{encodedLabel}?api-version={ApiVersion}",
             cancellationToken
         );
+        // 404 = label already absent; 409 = PR completed/abandoned and no longer modifiable — both are acceptable outcomes.
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Conflict)
+            return;
         response.EnsureSuccessStatusCode();
     }
 
