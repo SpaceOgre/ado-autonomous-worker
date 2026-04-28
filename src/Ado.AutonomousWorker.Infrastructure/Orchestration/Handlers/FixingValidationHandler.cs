@@ -78,19 +78,23 @@ internal sealed class FixingValidationHandler(
         return PhaseTransition.To(TaskPhase.Validating);
     }
 
+    // Cap each failure's embedded stdout/stderr so the assembled prompt cannot blow past
+    // Windows' ~32K CreateProcess command-line limit. Errors live at the tail of build/test
+    // output, so we keep the last N characters and point at the artifact log for the full text.
+    private const int MaxOutputCharsPerStream = 6000;
+
     internal static string BuildFixPrompt(IReadOnlyList<ValidationFailure> failures)
     {
         var sections = failures.Select(f =>
         {
             var output = new System.Text.StringBuilder();
-            if (!string.IsNullOrWhiteSpace(f.StandardOutput))
-                output.AppendLine(f.StandardOutput.Trim());
-            if (!string.IsNullOrWhiteSpace(f.StandardError))
-                output.AppendLine(f.StandardError.Trim());
+            AppendTruncated(output, "STDOUT", f.StandardOutput);
+            AppendTruncated(output, "STDERR", f.StandardError);
 
             return $$"""
             [{{f.RepoKind}}] Command: {{f.Command}}
-            Output:
+            Full log: {{f.ArtifactPath}}
+            Output (tail):
             {{output.ToString().Trim()}}
             """;
         });
@@ -106,5 +110,22 @@ internal sealed class FixingValidationHandler(
             - Run the validation commands yourself to confirm they pass before completing.
             - Do not create commits, push branches, open pull requests, link work items, or publish changes to Azure DevOps or Git hosting systems.
             """;
+    }
+
+    private static void AppendTruncated(System.Text.StringBuilder output, string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        var trimmed = value.Trim();
+        if (trimmed.Length > MaxOutputCharsPerStream)
+        {
+            var omitted = trimmed.Length - MaxOutputCharsPerStream;
+            trimmed = $"… [truncated {omitted} earlier characters; see full log]\n"
+                + trimmed[^MaxOutputCharsPerStream..];
+        }
+
+        output.AppendLine($"--- {label} ---");
+        output.AppendLine(trimmed);
     }
 }

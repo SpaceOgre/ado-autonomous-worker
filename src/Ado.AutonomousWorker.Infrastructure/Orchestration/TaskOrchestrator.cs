@@ -373,6 +373,12 @@ internal sealed class TaskOrchestrator(
         if (execution.Status is ExecutionStatus.Completed or ExecutionStatus.Skipped)
             throw new InvalidOperationException($"Cannot resume a {execution.Status} execution.");
 
+        // ValidationFailures live in-memory and aren't restored on resume. Re-running Validating
+        // regenerates them from the worktree state — same failures if nothing changed, none if
+        // the prior fix succeeded — so resume from Validating instead of FixingValidation.
+        if (execution.Phase is TaskPhase.FixingValidation)
+            return TaskPhase.Validating;
+
         // Phase always holds the last active workflow phase — correct for both Running and Failed.
         return execution.Phase;
     }
