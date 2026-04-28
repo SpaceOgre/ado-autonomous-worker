@@ -57,7 +57,7 @@ internal sealed partial class ValidatingHandler(
                     validationSessionId,
                     validationWorkingDirectory,
                     sequence++,
-                    $"  {repoKind}: {validationCommand}",
+                    $"▶ {repoKind}: {validationCommand}",
                     cancellationToken
                 );
 
