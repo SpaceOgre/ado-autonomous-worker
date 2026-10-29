@@ -57,7 +57,7 @@ public sealed class AgentOutputNormalizerTests
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        await Assert.That(result).IsEquivalentTo(new[] { "Using tool: Bash" });
+        await Assert.That(result).IsEquivalentTo(new[] { "[Bash] dotnet test" });
     }
 
     [Test]
@@ -69,7 +69,7 @@ public sealed class AgentOutputNormalizerTests
 
         var result = AgentOutputNormalizer.NormalizeClaudeLine(new ProcessOutputLine(AgentOutputStream.Stdout, line));
 
-        await Assert.That(result).IsEquivalentTo(new[] { "Running tests.", "Using tool: Bash" });
+        await Assert.That(result).IsEquivalentTo(new[] { "Running tests.", "[Bash]" });
     }
 
     [Test]
