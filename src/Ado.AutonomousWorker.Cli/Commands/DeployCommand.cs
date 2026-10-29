@@ -48,7 +48,7 @@ public sealed class DeployCommand(
         public bool FrontendOnly { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(
+    public override async Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken

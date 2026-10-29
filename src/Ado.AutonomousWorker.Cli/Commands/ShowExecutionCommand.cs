@@ -19,7 +19,7 @@ public sealed class ShowExecutionCommand(IStateStore stateStore) : AsyncCommand<
         public bool Last { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(
+    public override async Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken

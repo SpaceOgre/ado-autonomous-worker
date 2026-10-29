@@ -13,7 +13,7 @@ public sealed class UiSplashCommand : Command<UiSplashCommand.Settings>
         public string? Status { get; init; }
     }
 
-    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
         RunPreambleDisplay.ShowSplash(settings.Status);
         return 0;

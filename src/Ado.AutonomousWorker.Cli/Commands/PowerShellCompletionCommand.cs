@@ -15,7 +15,7 @@ public sealed class PowerShellCompletionCommand(CliCompletionService completionS
         public string CommandName { get; init; } = "ado-worker";
     }
 
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken

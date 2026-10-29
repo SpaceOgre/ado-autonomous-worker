@@ -15,7 +15,7 @@ public sealed class ExecutionsCommand(IStateStore stateStore) : AsyncCommand<Exe
         public bool ActiveOnly { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(
+    public override async Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken

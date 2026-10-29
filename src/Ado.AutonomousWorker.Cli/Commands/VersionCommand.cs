@@ -6,7 +6,7 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 
 public sealed class VersionCommand : Command
 {
-    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
+    public override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         var assembly = Assembly.GetExecutingAssembly();
         var assemblyName = assembly.GetName();

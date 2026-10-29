@@ -30,7 +30,7 @@ public sealed class AgentTestCommand(IAgentRunnerFactory runnerFactory, IOptions
         public string? Role { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(
+    public override async Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken

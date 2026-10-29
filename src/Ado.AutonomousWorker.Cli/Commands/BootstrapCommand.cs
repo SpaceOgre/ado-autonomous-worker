@@ -46,7 +46,7 @@ public sealed class BootstrapCommand(IStateStore stateStore, IWorkspaceManager w
         }
         """;
 
-    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         await stateStore.InitializeAsync(cancellationToken);
         await workspaceManager.PrepareAsync(cancellationToken);

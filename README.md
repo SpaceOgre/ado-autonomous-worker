@@ -383,7 +383,7 @@ AdoWorker_Deploy__BackendPipelineId=42
 | `Ado.AutonomousWorker.Core`           | Domain abstractions, models, enums, `RulesEngine`                                     |
 | `Ado.AutonomousWorker.Dashboard`      | Blazor Server web dashboard (MudBlazor) for viewing executions, logs, and agent output |
 | `Ado.AutonomousWorker.Infrastructure` | All real implementations (agents, state, ADO client, workspaces)                      |
-| `Ado.AutonomousWorker.Tests`          | xUnit tests                                                                           |
+| `Ado.AutonomousWorker.Tests`          | TUnit tests                                                                           |
 
 ## Development
 

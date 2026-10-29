@@ -7,7 +7,7 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 
 public sealed class DoctorCommand(DoctorService doctorService) : AsyncCommand
 {
-    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var results = await AnsiConsole
             .Status()

@@ -9,7 +9,7 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 /// </summary>
 public sealed class InteractiveCommand(IServiceProvider services) : AsyncCommand
 {
-    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var session = new InteractiveSession(services);
         return await session.RunAsync(cancellationToken);

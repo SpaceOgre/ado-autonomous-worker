@@ -47,13 +47,13 @@ internal static class RepositoryWorkflowHelpers
                         : string.Join(" && ", re.Profile.ValidationCommands);
 
                 return $$"""
-                [{{re.RepoKind}}]
-                Child task: #{{re.ChildTask.WorkItemId}} {{re.ChildTask.Title}}
-                Branch: {{re.Workspace.BranchName}}
-                Relative path: {{relativePath}}
-                Full path: {{workspacePath}}
-                Validation: {{validation}}
-                """;
+                    [{{re.RepoKind}}]
+                    Child task: #{{re.ChildTask.WorkItemId}} {{re.ChildTask.Title}}
+                    Branch: {{re.Workspace.BranchName}}
+                    Relative path: {{relativePath}}
+                    Full path: {{workspacePath}}
+                    Validation: {{validation}}
+                    """;
             })
         );
     }

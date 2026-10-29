@@ -9,7 +9,7 @@ namespace Ado.AutonomousWorker.Cli.Commands;
 public sealed class UiRunPreviewCommand(QueueInspector queueInspector, IOptions<WorkerOptions> workerOptions)
     : AsyncCommand
 {
-    protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var eligibleQueue = await queueInspector.GetQueueAsync(cancellationToken);
         var selectedQueue = eligibleQueue.Take(workerOptions.Value.MaxItemsPerRun).ToArray();

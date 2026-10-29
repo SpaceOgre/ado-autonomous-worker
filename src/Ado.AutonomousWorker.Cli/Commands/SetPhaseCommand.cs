@@ -31,7 +31,7 @@ public sealed class SetPhaseCommand(IStateStore stateStore) : AsyncCommand<SetPh
         public string? Phase { get; init; }
     }
 
-    protected override async Task<int> ExecuteAsync(
+    public override async Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken
