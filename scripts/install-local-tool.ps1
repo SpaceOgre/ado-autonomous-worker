@@ -12,6 +12,8 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $packageOutputPath = Join-Path $repoRoot ".artifacts/tool"
 $manifestPath = Join-Path $repoRoot "dotnet-tools.json"
 
+$globalPackagesPath = ((dotnet nuget locals global-packages --list) -replace '^global-packages:\s*', '').Trim()
+
 $tools = @(
     @{ ProjectPath = "src/Ado.AutonomousWorker.Cli/Ado.AutonomousWorker.Cli.csproj";           PackageId = "ado-worker";           CommandName = "ado-worker"           }
     @{ ProjectPath = "src/Ado.AutonomousWorker.Dashboard/Ado.AutonomousWorker.Dashboard.csproj"; PackageId = "ado-worker-dashboard"; CommandName = "ado-worker-dashboard" }
@@ -63,6 +65,15 @@ try
                 Start-Sleep -Seconds 2
             }
             if (-not $uninstalled) { throw "Uninstall failed for $packageId after 5 attempts. Reopen a fresh terminal and retry." }
+        }
+
+        # The version is fixed (0.1.0-local by default), so NuGet would otherwise install the copy it cached
+        # the first time instead of the package that was just packed.
+        $cachedPackagePath = Join-Path $globalPackagesPath (Join-Path $packageId.ToLowerInvariant() $Version.ToLowerInvariant())
+        if (Test-Path $cachedPackagePath)
+        {
+            Write-Host "Clearing cached $packageId $Version from $globalPackagesPath..."
+            Remove-Item -Recurse -Force $cachedPackagePath
         }
 
         Write-Host "Installing $packageId ($Scope)..."
