@@ -161,10 +161,12 @@ internal sealed class TaskOrchestrator(
             // that phase is skipped, so we must rebuild it here.
             if (startPhase >= TaskPhase.Validating)
             {
-                prFixContext.RepositoryExecutions =
-                [
-                    await RebuildPrFixRepositoryExecutionAsync(workItem, prTarget, executionId, cancellationToken),
-                ];
+                prFixContext.RepositoryExecutions = await RebuildPrFixRepositoryExecutionsAsync(
+                    workItem,
+                    prTarget,
+                    executionId,
+                    cancellationToken
+                );
             }
 
             context = prFixContext;
@@ -282,81 +284,58 @@ internal sealed class TaskOrchestrator(
     {
         var slug = RepositoryWorkflowHelpers.ComputeSlug(workItem.Title);
         var executionArtifactRoot = storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId);
-        var result = new List<RepositoryExecution>();
 
-        foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
-        {
-            var childTask =
+        var childTasks = RepositoryWorkflowHelpers
+            .MapScopeToRepos(plan.Scope)
+            .Select(repoKind =>
                 workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
                     ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
                     : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
                         ?? throw new InvalidOperationException(
                             $"Cannot resume: no child task found for {repoKind} on work item #{workItem.WorkItemId}."
-                        );
+                        )
+            )
+            .ToArray();
 
-            var profile = repoKind switch
-            {
-                RepoKind.Backend => repositoryOptions.Value.Backend,
-                RepoKind.Frontend => repositoryOptions.Value.Frontend,
-                _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
-            };
+        var workspace = await workspaceManager.CreateWorkspaceAsync(
+            workItem.WorkItemId,
+            RepositoryWorkflowHelpers.GetBranchOwner(childTasks).WorkItemId,
+            slug,
+            preserveExistingWorkspace: true,
+            cancellationToken
+        );
 
-            var workspace = await workspaceManager.CreateRepoExecutionAsync(
-                workItem.WorkItemId,
-                childTask.WorkItemId,
-                repoKind,
-                slug,
-                preserveExistingWorkspace: true,
-                cancellationToken
-            );
-
-            result.Add(
-                new RepositoryExecution(
-                    childTask,
-                    profile,
-                    workspace,
-                    Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant())
-                )
-            );
-        }
+        var result = childTasks
+            .Select(childTask => new RepositoryExecution(
+                childTask,
+                repositoryOptions.Value.GetProfile(childTask.RepoKind),
+                workspace,
+                Path.Combine(executionArtifactRoot, childTask.RepoKind.ToString().ToLowerInvariant())
+            ))
+            .ToArray();
 
         logger.LogInformation(
             "Execution {ExecutionId}: rebuilt {Count} repository execution(s) for resume.",
             executionId,
-            result.Count
+            result.Length
         );
 
         return result;
     }
 
-    private async Task<RepositoryExecution> RebuildPrFixRepositoryExecutionAsync(
+    private async Task<IReadOnlyList<RepositoryExecution>> RebuildPrFixRepositoryExecutionsAsync(
         WorkItemDetails workItem,
         PrTarget prTarget,
         string executionId,
         CancellationToken cancellationToken
     )
     {
-        var repoKind = repositoryOptions.Value.GetRepoKindFromRepository(prTarget.RepositoryName);
-        var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
-
-        var childTask =
-            workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
-                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
-                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                    ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
-
         var workspace = await workspaceManager.CheckoutPrBranchAsync(
             workItem.WorkItemId,
-            childTask.WorkItemId,
-            repoKind,
+            workItem.WorkItemId,
             prTarget.BranchName,
             preserveExistingWorkspace: true,
             cancellationToken
-        );
-
-        var artifactDirectory = Path.Combine(
-            storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId),
-            repoKind.ToString().ToLowerInvariant()
         );
 
         logger.LogInformation(
@@ -365,7 +344,14 @@ internal sealed class TaskOrchestrator(
             workspace.WorkingDirectory
         );
 
-        return new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory);
+        return await RepositoryWorkflowHelpers.BuildPrFixRepositoryExecutionsAsync(
+            workspaceManager,
+            repositoryOptions.Value,
+            workItem,
+            workspace,
+            storageOptions.Value.GetExecutionArtifactRoot(workItem.WorkItemId, executionId),
+            cancellationToken
+        );
     }
 
     private static TaskPhase ResolveResumePhase(TaskExecutionRecord execution)

@@ -13,6 +13,7 @@ internal sealed class ReviewingHandler(
     IStateStore stateStore,
     ExecutionJournal executionJournal,
     IOptions<AgentOptions> agentOptions,
+    IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
     IOptions<WorkerOptions> workerOptions,
     ILogger<ReviewingHandler> logger
@@ -61,7 +62,13 @@ internal sealed class ReviewingHandler(
                 config,
                 await PromptTemplateLoader.ApplyAsync(
                     config,
-                    BuildReviewPrompt(workItem, repositoryExecutions, agentWorkingDirectory, commentsBlock),
+                    BuildReviewPrompt(
+                        workItem,
+                        repositoryExecutions,
+                        agentWorkingDirectory,
+                        commentsBlock,
+                        repositoryOptions.Value.MainBranch
+                    ),
                     cancellationToken
                 ),
                 agentWorkingDirectory,
@@ -115,17 +122,15 @@ internal sealed class ReviewingHandler(
         WorkItemDetails parent,
         IReadOnlyList<RepositoryExecution> repositoryExecutions,
         string agentWorkingDirectory,
-        string commentsBlock
+        string commentsBlock,
+        string mainBranch
     )
     {
         var repositorySummary = RepositoryWorkflowHelpers.BuildRepositorySummary(
             repositoryExecutions,
             agentWorkingDirectory
         );
-        var repoPaths = string.Join(
-            Environment.NewLine,
-            repositoryExecutions.Select(re => $"- {re.Workspace.WorkingDirectory}")
-        );
+        var workspace = RepositoryWorkflowHelpers.GetSharedWorkspace(repositoryExecutions);
 
         return $$"""
             You are performing a focused code review of a completed implementation. Your job is to find real problems, not speculate.
@@ -147,15 +152,12 @@ internal sealed class ReviewingHandler(
             </recent-comments>
             </work-item>
 
-            Repositories:
+            Monorepo parts in scope (one worktree, one branch):
             {{repositorySummary}}
 
             ## Step 1: Inspect the diff
 
-            For each repository path listed below, run `git log --oneline -5` to understand the commit history, then run `git diff main..HEAD` (or `git diff master..HEAD` if `main` does not exist) to see exactly what was changed on this branch. Base all findings on evidence visible in the diff or in files the diff touches.
-
-            Repository paths:
-            {{repoPaths}}
+            In the worktree `{{workspace.WorkingDirectory}}`, run `git status` and `git diff origin/{{mainBranch}}` to see exactly what was changed on this branch, including uncommitted and untracked files (the implementation has not been committed yet). Base all findings on evidence visible in the diff or in files the diff touches.
 
             ## Step 2: Review using four focused lenses
 

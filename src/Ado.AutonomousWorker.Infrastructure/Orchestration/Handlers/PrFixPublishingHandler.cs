@@ -12,6 +12,7 @@ internal sealed class PrFixPublishingHandler(
     IWorkspaceManager workspaceManager,
     IRulesEngine rulesEngine,
     ProcessCommandRunner commandRunner,
+    IOptions<StorageOptions> storageOptions,
     IOptions<WorkerOptions> workerOptions,
     ILogger<PrFixPublishingHandler> logger
 ) : PrFixHandler
@@ -24,10 +25,11 @@ internal sealed class PrFixPublishingHandler(
     )
     {
         var prTarget = context.PrTarget;
-        var repoExecution = context.RepositoryExecutions.First();
-        var childTask = repoExecution.ChildTask;
-        var workspace = repoExecution.Workspace;
-        var artifactDirectory = repoExecution.ArtifactDirectory;
+        var workspace = RepositoryWorkflowHelpers.GetSharedWorkspace(context.RepositoryExecutions);
+        var artifactDirectory = Path.Combine(
+            storageOptions.Value.GetExecutionArtifactRoot(context.WorkItem.WorkItemId, context.ExecutionId),
+            "publish"
+        );
 
         await context.Journal.AppendEventAsync(
             context.ExecutionId,
@@ -36,7 +38,7 @@ internal sealed class PrFixPublishingHandler(
             cancellationToken
         );
 
-        var commitMessage = context.CommitMessage ?? $"#{childTask.WorkItemId}: Address PR review comments";
+        var commitMessage = context.CommitMessage ?? $"#{workspace.BranchOwnerId}: Address PR review comments";
 
         await GitPublishHelper.RunGitAsync(
             commandRunner,

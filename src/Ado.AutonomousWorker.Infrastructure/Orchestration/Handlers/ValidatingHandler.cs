@@ -95,7 +95,7 @@ internal sealed partial class ValidatingHandler(
                             result.StandardError
                         )
                     );
-                    break; // one failure per repo is enough to surface; move on to the next repo
+                    break; // one failure per half is enough to surface; move on to the next half
                 }
 
                 logger.LogInformation(

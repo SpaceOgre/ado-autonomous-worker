@@ -9,6 +9,8 @@ using Microsoft.Extensions.Options;
 
 namespace Ado.AutonomousWorker.Infrastructure.Workspaces;
 
+// The base clone may be the developer's own checkout, so it is only ever fetched from and used to
+// register worktrees: no pull, checkout or other change to its working tree.
 public sealed partial class WorkspaceManager(
     IOptions<RepositoryOptions> repositoryOptions,
     IOptions<StorageOptions> storageOptions,
@@ -16,74 +18,54 @@ public sealed partial class WorkspaceManager(
     ILogger<WorkspaceManager> logger
 ) : IWorkspaceManager
 {
+    private RepositoryOptions Repository => repositoryOptions.Value;
+
     public Task PrepareAsync(CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(repositoryOptions.Value.Backend.WorktreeRoot);
-        Directory.CreateDirectory(repositoryOptions.Value.Frontend.WorktreeRoot);
+        Directory.CreateDirectory(Repository.WorktreeRoot);
         Directory.CreateDirectory(storageOptions.Value.ArtifactRoot);
         return Task.CompletedTask;
     }
 
-    public async Task<RepoExecutionContext> CreateRepoExecutionAsync(
+    public async Task<RepoExecutionContext> CreateWorkspaceAsync(
         int parentWorkItemId,
-        int childTaskId,
-        RepoKind repoKind,
+        int branchOwnerId,
         string slug,
         bool preserveExistingWorkspace,
         CancellationToken cancellationToken
     )
     {
-        var profile = GetProfile(repoKind);
         var safeSlug = UnsafeCharactersRegex().Replace(slug.ToLowerInvariant(), "-").Trim('-');
-        var branchName = $"feature/{childTaskId}_{safeSlug}";
-        var worktreePath = Path.Combine(
-            profile.WorktreeRoot,
-            $"{childTaskId}-{repoKind.ToString().ToLowerInvariant()}"
-        );
-        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(parentWorkItemId, childTaskId);
+        var branchName = $"feature/{branchOwnerId}_{safeSlug}";
+        var worktreePath = GetWorktreePath(branchName);
+        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(parentWorkItemId, branchOwnerId);
         Directory.CreateDirectory(artifactFolder);
-
-        if (!Directory.Exists(profile.BaseClonePath))
-            throw new DirectoryNotFoundException(
-                $"Base clone path '{profile.BaseClonePath}' was not found for {repoKind}."
-            );
+        EnsureBaseCloneExists();
 
         if (Directory.Exists(worktreePath) && preserveExistingWorkspace)
         {
-            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, repoKind, cancellationToken);
+            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, cancellationToken);
             logger.LogInformation(
-                "Reusing existing {RepoKind} worktree at {Path} on branch {BranchName}.",
-                repoKind,
+                "Reusing existing worktree at {Path} on branch {BranchName}.",
                 worktreePath,
                 branchName
             );
-            return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
+            return new RepoExecutionContext(parentWorkItemId, branchOwnerId, branchName, worktreePath);
         }
 
-        var pullResult = await RunGitAsync(
-            profile.BaseClonePath,
-            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-pull.log"),
-            ["pull", "origin", profile.MainBranch],
-            cancellationToken
-        );
-
-        if (!pullResult.Success)
-            throw new InvalidOperationException(
-                $"Failed to pull branch '{profile.MainBranch}' for {repoKind}: {pullResult.StandardError}"
-            );
+        await FetchAsync(Repository.MainBranch, artifactFolder, cancellationToken);
 
         await PrepareWorktreeAsync(
-            profile.BaseClonePath,
             worktreePath,
-            $"origin/{profile.MainBranch}",
-            repoKind,
+            $"origin/{Repository.MainBranch}",
             artifactFolder,
+            refuseIfDirty: true,
             cancellationToken
         );
 
         var checkoutResult = await RunGitAsync(
             worktreePath,
-            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log"),
+            Path.Combine(artifactFolder, "git-checkout.log"),
             ["checkout", "-B", branchName],
             cancellationToken
         );
@@ -93,73 +75,74 @@ public sealed partial class WorkspaceManager(
                 $"Failed to create branch '{branchName}': {checkoutResult.StandardError}"
             );
 
-        logger.LogInformation(
-            "Prepared {RepoKind} worktree at {Path} on branch {BranchName}.",
-            repoKind,
-            worktreePath,
-            branchName
-        );
-        return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
+        logger.LogInformation("Prepared worktree at {Path} on branch {BranchName}.", worktreePath, branchName);
+        return new RepoExecutionContext(parentWorkItemId, branchOwnerId, branchName, worktreePath);
     }
 
     public async Task<RepoExecutionContext> CheckoutPrBranchAsync(
         int parentWorkItemId,
-        int childTaskId,
-        RepoKind repoKind,
+        int branchOwnerId,
         string branchName,
         bool preserveExistingWorkspace,
         CancellationToken cancellationToken
     )
     {
-        var profile = GetProfile(repoKind);
-        var worktreePath = Path.Combine(
-            profile.WorktreeRoot,
-            $"{childTaskId}-{repoKind.ToString().ToLowerInvariant()}"
-        );
-        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(parentWorkItemId, childTaskId);
+        var worktreePath = GetWorktreePath(branchName);
+        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(parentWorkItemId, branchOwnerId);
         Directory.CreateDirectory(artifactFolder);
-
-        if (!Directory.Exists(profile.BaseClonePath))
-            throw new DirectoryNotFoundException(
-                $"Base clone path '{profile.BaseClonePath}' was not found for {repoKind}."
-            );
+        EnsureBaseCloneExists();
 
         if (Directory.Exists(worktreePath) && preserveExistingWorkspace)
         {
-            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, repoKind, cancellationToken);
+            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, cancellationToken);
             logger.LogInformation(
-                "Reusing existing {RepoKind} PR worktree at {Path} on branch {BranchName}.",
-                repoKind,
+                "Reusing existing PR worktree at {Path} on branch {BranchName}.",
                 worktreePath,
                 branchName
             );
-            return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
+            return new RepoExecutionContext(parentWorkItemId, branchOwnerId, branchName, worktreePath);
         }
 
-        var fetchResult = await RunGitAsync(
-            profile.BaseClonePath,
-            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-fetch.log"),
-            ["fetch", "origin", branchName],
-            cancellationToken
-        );
+        await FetchAsync(branchName, artifactFolder, cancellationToken);
 
-        if (!fetchResult.Success)
-            throw new InvalidOperationException(
-                $"Failed to fetch branch '{branchName}' for {repoKind}: {fetchResult.StandardError}"
+        // The worktree may be one an earlier run or an interactive session left for this branch.
+        // Fast-forward it rather than recreating it, so local work is never thrown away.
+        if (Directory.Exists(worktreePath))
+        {
+            await EnsureCleanAsync(worktreePath, artifactFolder, cancellationToken);
+            await EnsureExpectedBranchAsync(worktreePath, branchName, artifactFolder, cancellationToken);
+
+            var mergeResult = await RunGitAsync(
+                worktreePath,
+                Path.Combine(artifactFolder, "git-merge-ff.log"),
+                ["merge", "--ff-only", $"origin/{branchName}"],
+                cancellationToken
             );
 
+            if (!mergeResult.Success)
+                throw new InvalidOperationException(
+                    $"Existing worktree '{worktreePath}' could not be fast-forwarded to origin/{branchName}: {mergeResult.StandardError}"
+                );
+
+            logger.LogInformation(
+                "Reusing existing PR worktree at {Path} on branch {BranchName}.",
+                worktreePath,
+                branchName
+            );
+            return new RepoExecutionContext(parentWorkItemId, branchOwnerId, branchName, worktreePath);
+        }
+
         await PrepareWorktreeAsync(
-            profile.BaseClonePath,
             worktreePath,
             $"origin/{branchName}",
-            repoKind,
             artifactFolder,
+            refuseIfDirty: true,
             cancellationToken
         );
 
         var checkoutResult = await RunGitAsync(
             worktreePath,
-            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout.log"),
+            Path.Combine(artifactFolder, "git-checkout.log"),
             ["checkout", "-B", branchName, $"origin/{branchName}"],
             cancellationToken
         );
@@ -169,95 +152,161 @@ public sealed partial class WorkspaceManager(
                 $"Failed to create local tracking branch '{branchName}': {checkoutResult.StandardError}"
             );
 
-        logger.LogInformation(
-            "Prepared {RepoKind} PR worktree at {Path} on branch {BranchName}.",
-            repoKind,
-            worktreePath,
-            branchName
-        );
-        return new RepoExecutionContext(parentWorkItemId, childTaskId, repoKind, branchName, worktreePath);
+        logger.LogInformation("Prepared PR worktree at {Path} on branch {BranchName}.", worktreePath, branchName);
+        return new RepoExecutionContext(parentWorkItemId, branchOwnerId, branchName, worktreePath);
     }
 
-    public async Task PullAllBaseClonesAsync(string artifactDirectory, CancellationToken cancellationToken)
+    public async Task<string> PreparePlanningSnapshotAsync(
+        string artifactDirectory,
+        CancellationToken cancellationToken
+    )
     {
         Directory.CreateDirectory(artifactDirectory);
-        foreach (var profile in new[] { repositoryOptions.Value.Backend, repositoryOptions.Value.Frontend })
-        {
-            if (!Directory.Exists(profile.BaseClonePath))
-            {
-                logger.LogWarning(
-                    "Skipping pull for {RepoKind}: base clone path '{Path}' not found.",
-                    profile.Kind,
-                    profile.BaseClonePath
-                );
-                continue;
-            }
+        EnsureBaseCloneExists();
 
-            var pullResult = await RunGitAsync(
-                profile.BaseClonePath,
-                Path.Combine(artifactDirectory, $"{profile.Kind.ToString().ToLowerInvariant()}-pull.log"),
-                ["pull", "origin", profile.MainBranch],
-                cancellationToken
+        var snapshotPath = Path.Combine(storageOptions.Value.DataRoot, "plan-snapshot");
+        await FetchAsync(Repository.MainBranch, artifactDirectory, cancellationToken);
+        await PrepareWorktreeAsync(
+            snapshotPath,
+            $"origin/{Repository.MainBranch}",
+            artifactDirectory,
+            refuseIfDirty: false,
+            cancellationToken
+        );
+
+        logger.LogInformation(
+            "Prepared planning snapshot of origin/{MainBranch} at {Path}.",
+            Repository.MainBranch,
+            snapshotPath
+        );
+        return snapshotPath;
+    }
+
+    public async Task<IReadOnlyList<RepoKind>> GetChangedRepoKindsAsync(
+        RepoExecutionContext context,
+        string artifactDirectory,
+        CancellationToken cancellationToken
+    )
+    {
+        Directory.CreateDirectory(artifactDirectory);
+
+        var mergeBaseResult = await RunGitAsync(
+            context.WorkingDirectory,
+            Path.Combine(artifactDirectory, "git-merge-base.log"),
+            ["merge-base", $"origin/{Repository.MainBranch}", "HEAD"],
+            cancellationToken
+        );
+
+        if (!mergeBaseResult.Success)
+            throw new InvalidOperationException(
+                $"Failed to find the merge base with origin/{Repository.MainBranch}: {mergeBaseResult.StandardError}"
             );
 
-            if (!pullResult.Success)
-                throw new InvalidOperationException(
-                    $"Failed to pull '{profile.MainBranch}' for {profile.Kind}: {pullResult.StandardError}"
-                );
+        // Diffing the working tree (not HEAD) against the merge base covers committed and uncommitted changes.
+        var diffResult = await RunGitAsync(
+            context.WorkingDirectory,
+            Path.Combine(artifactDirectory, "git-diff-name-only.log"),
+            ["diff", "--name-only", mergeBaseResult.StandardOutput.Trim()],
+            cancellationToken
+        );
+        var untrackedResult = await RunGitAsync(
+            context.WorkingDirectory,
+            Path.Combine(artifactDirectory, "git-ls-untracked.log"),
+            ["ls-files", "--others", "--exclude-standard"],
+            cancellationToken
+        );
 
-            logger.LogInformation("Pulled {MainBranch} for {RepoKind}.", profile.MainBranch, profile.Kind);
-        }
+        if (!diffResult.Success || !untrackedResult.Success)
+            throw new InvalidOperationException(
+                $"Failed to list changed files in '{context.WorkingDirectory}': {diffResult.StandardError}{untrackedResult.StandardError}"
+            );
+
+        var changedPaths = $"{diffResult.StandardOutput}\n{untrackedResult.StandardOutput}".Split(
+            '\n',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        );
+
+        return new[] { Repository.Backend, Repository.Frontend }
+            .Where(profile =>
+                !string.IsNullOrWhiteSpace(profile.Folder)
+                && changedPaths.Any(path =>
+                    path.StartsWith($"{profile.Folder.Trim('/', '\\')}/", StringComparison.OrdinalIgnoreCase)
+                )
+            )
+            .Select(profile => profile.Kind)
+            .ToArray();
     }
 
     public async Task CleanupAsync(RepoExecutionContext context, CancellationToken cancellationToken)
     {
-        var profile = GetProfile(context.RepoKind);
         if (!Directory.Exists(context.WorkingDirectory))
             return;
 
-        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(context.ParentWorkItemId, context.ChildTaskId);
-        await commandRunner.RunAsync(
-            "git",
-            ["-C", profile.BaseClonePath, "worktree", "remove", "--force", context.WorkingDirectory],
-            profile.BaseClonePath,
-            Path.Combine(artifactFolder, $"{context.RepoKind.ToString().ToLowerInvariant()}-cleanup.log"),
-            environmentVariables: null,
-            activityName: null,
-            outputCallback: null,
+        var artifactFolder = storageOptions.Value.GetTaskArtifactRoot(context.ParentWorkItemId, context.BranchOwnerId);
+        await RunGitAsync(
+            Repository.BaseClonePath,
+            Path.Combine(artifactFolder, "git-worktree-cleanup.log"),
+            ["worktree", "remove", "--force", context.WorkingDirectory],
             cancellationToken
         );
+    }
+
+    private string GetWorktreePath(string branchName)
+    {
+        // feature/31011_slug → {WorktreeRoot}\31011_slug, the layout the interactive ADO skills use too.
+        var separator = branchName.IndexOf('/');
+        var folderName = (separator >= 0 ? branchName[(separator + 1)..] : branchName).Replace('/', '-');
+        return Path.Combine(Repository.WorktreeRoot, folderName);
+    }
+
+    private void EnsureBaseCloneExists()
+    {
+        if (!Directory.Exists(Repository.BaseClonePath))
+            throw new DirectoryNotFoundException($"Base clone path '{Repository.BaseClonePath}' was not found.");
+    }
+
+    private async Task FetchAsync(string branchName, string artifactFolder, CancellationToken cancellationToken)
+    {
+        var fetchResult = await RunGitAsync(
+            Repository.BaseClonePath,
+            Path.Combine(artifactFolder, "git-fetch.log"),
+            ["fetch", "origin", branchName],
+            cancellationToken
+        );
+
+        if (!fetchResult.Success)
+            throw new InvalidOperationException($"Failed to fetch branch '{branchName}': {fetchResult.StandardError}");
     }
 
     // Prune stale registrations, force-remove the directory if it exists, then force-add.
     // Using -f means git won't reject the add if the branch is already checked out elsewhere.
     private async Task PrepareWorktreeAsync(
-        string baseClonePath,
         string worktreePath,
         string remoteRef,
-        RepoKind repoKind,
         string artifactFolder,
+        bool refuseIfDirty,
         CancellationToken cancellationToken
     )
     {
-        var logPrefix = repoKind.ToString().ToLowerInvariant();
+        var baseClonePath = Repository.BaseClonePath;
 
         await RunGitAsync(
             baseClonePath,
-            Path.Combine(artifactFolder, $"{logPrefix}-worktree-prune.log"),
+            Path.Combine(artifactFolder, "git-worktree-prune.log"),
             ["worktree", "prune"],
             cancellationToken
         );
 
         if (Directory.Exists(worktreePath))
         {
-            logger.LogWarning(
-                "Removing existing {RepoKind} worktree at '{Path}' before recreating.",
-                repoKind,
-                worktreePath
-            );
+            // The worktree root is shared with interactive sessions; never discard someone's uncommitted work.
+            if (refuseIfDirty)
+                await EnsureCleanAsync(worktreePath, artifactFolder, cancellationToken);
+
+            logger.LogWarning("Removing existing worktree at '{Path}' before recreating.", worktreePath);
             await RunGitAsync(
                 baseClonePath,
-                Path.Combine(artifactFolder, $"{logPrefix}-worktree-remove.log"),
+                Path.Combine(artifactFolder, "git-worktree-remove.log"),
                 ["worktree", "remove", "--force", worktreePath],
                 cancellationToken
             );
@@ -265,14 +314,30 @@ public sealed partial class WorkspaceManager(
 
         var addResult = await RunGitAsync(
             baseClonePath,
-            Path.Combine(artifactFolder, $"{logPrefix}-worktree-add.log"),
-            ["worktree", "add", "-f", worktreePath, remoteRef],
+            Path.Combine(artifactFolder, "git-worktree-add.log"),
+            ["worktree", "add", "-f", "--detach", worktreePath, remoteRef],
             cancellationToken
         );
 
         if (!addResult.Success)
             throw new InvalidOperationException(
-                $"Failed to create worktree for {repoKind} at '{worktreePath}': {addResult.StandardError}"
+                $"Failed to create worktree at '{worktreePath}': {addResult.StandardError}"
+            );
+    }
+
+    private async Task EnsureCleanAsync(string worktreePath, string artifactFolder, CancellationToken cancellationToken)
+    {
+        var statusResult = await RunGitAsync(
+            worktreePath,
+            Path.Combine(artifactFolder, "git-status-existing.log"),
+            ["status", "--porcelain"],
+            cancellationToken
+        );
+
+        // A folder git cannot read is not a worktree with someone's changes in it; let the caller replace it.
+        if (statusResult.Success && !string.IsNullOrWhiteSpace(statusResult.StandardOutput))
+            throw new InvalidOperationException(
+                $"Existing worktree '{worktreePath}' has uncommitted changes. Commit or discard them, or resume the earlier execution, before running again."
             );
     }
 
@@ -299,20 +364,19 @@ public sealed partial class WorkspaceManager(
         string worktreePath,
         string branchName,
         string artifactFolder,
-        RepoKind repoKind,
         CancellationToken cancellationToken
     )
     {
         var showCurrentBranch = await RunGitAsync(
             worktreePath,
-            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-branch-current.log"),
+            Path.Combine(artifactFolder, "git-branch-current.log"),
             ["branch", "--show-current"],
             cancellationToken
         );
 
         if (!showCurrentBranch.Success)
             throw new InvalidOperationException(
-                $"Failed to inspect current branch for {repoKind}: {showCurrentBranch.StandardError}"
+                $"Failed to inspect current branch of '{worktreePath}': {showCurrentBranch.StandardError}"
             );
 
         var currentBranch = showCurrentBranch.StandardOutput.Trim();
@@ -321,24 +385,16 @@ public sealed partial class WorkspaceManager(
 
         var checkoutResult = await RunGitAsync(
             worktreePath,
-            Path.Combine(artifactFolder, $"{repoKind.ToString().ToLowerInvariant()}-checkout-existing.log"),
+            Path.Combine(artifactFolder, "git-checkout-existing.log"),
             ["checkout", branchName],
             cancellationToken
         );
 
         if (!checkoutResult.Success)
             throw new InvalidOperationException(
-                $"Existing worktree for {repoKind} is on '{currentBranch}' and could not switch to '{branchName}': {checkoutResult.StandardError}"
+                $"Existing worktree '{worktreePath}' is on '{currentBranch}' and could not switch to '{branchName}': {checkoutResult.StandardError}"
             );
     }
-
-    private RepositoryProfile GetProfile(RepoKind kind) =>
-        kind switch
-        {
-            RepoKind.Backend => repositoryOptions.Value.Backend,
-            RepoKind.Frontend => repositoryOptions.Value.Frontend,
-            _ => throw new InvalidOperationException($"Unknown repo kind '{kind}'."),
-        };
 
     [GeneratedRegex("[^a-z0-9-]+", RegexOptions.IgnoreCase)]
     private static partial Regex UnsafeCharactersRegex();

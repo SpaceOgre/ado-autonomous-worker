@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
+using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
+using Ado.AutonomousWorker.Core.Models;
 
 namespace Ado.AutonomousWorker.Infrastructure.Orchestration.Handlers;
 
@@ -39,24 +41,40 @@ internal static class RepositoryWorkflowHelpers
             $"{Environment.NewLine}{Environment.NewLine}",
             repositoryExecutions.Select(re =>
             {
-                var workspacePath = re.Workspace.WorkingDirectory;
-                var relativePath = Path.GetRelativePath(agentWorkingDirectory, workspacePath);
+                var folderPath = re.FolderPath;
+                var relativePath = Path.GetRelativePath(agentWorkingDirectory, folderPath);
                 var validation =
                     re.Profile.ValidationCommands.Count == 0
                         ? "None"
                         : string.Join(" && ", re.Profile.ValidationCommands);
+                var validationDirectory = string.IsNullOrWhiteSpace(re.Profile.ValidationWorkingDirectory)
+                    ? "."
+                    : re.Profile.ValidationWorkingDirectory;
 
                 return $$"""
                     [{{re.RepoKind}}]
                     Child task: #{{re.ChildTask.WorkItemId}} {{re.ChildTask.Title}}
                     Branch: {{re.Workspace.BranchName}}
                     Relative path: {{relativePath}}
-                    Full path: {{workspacePath}}
-                    Validation: {{validation}}
+                    Full path: {{folderPath}}
+                    Validation (run from {{validationDirectory}}): {{validation}}
                     """;
             })
         );
     }
+
+    /// <summary>The single worktree shared by every half of an execution.</summary>
+    public static RepoExecutionContext GetSharedWorkspace(IReadOnlyList<RepositoryExecution> repositoryExecutions) =>
+        repositoryExecutions.Count > 0
+            ? repositoryExecutions[0].Workspace
+            : throw new InvalidOperationException("At least one repository execution is required.");
+
+    /// <summary>
+    /// The work item the branch is named after: the work item itself for a Bug or Task, otherwise the child
+    /// task of the first half in scope (backend before frontend).
+    /// </summary>
+    public static ChildTaskRecord GetBranchOwner(IEnumerable<ChildTaskRecord> childTasks) =>
+        childTasks.OrderBy(t => t.RepoKind).First();
 
     public static string FormatRepoKinds(IEnumerable<RepoKind> repoKinds) =>
         string.Join(" + ", repoKinds.Distinct().Select(k => k.ToString()));
@@ -92,13 +110,42 @@ internal static class RepositoryWorkflowHelpers
             _ => throw new InvalidOperationException($"Unknown repo kind '{repoKind}'."),
         };
 
-    internal static RepoKind GetRepoKindFromRepository(this RepositoryOptions options, string repositoryName)
+    /// <summary>
+    /// Builds the halves in scope for a PR fix from the files the PR branch changes, including uncommitted
+    /// work in the worktree. Falls back to both halves when the branch only touches files outside them.
+    /// </summary>
+    internal static async Task<IReadOnlyList<RepositoryExecution>> BuildPrFixRepositoryExecutionsAsync(
+        IWorkspaceManager workspaceManager,
+        RepositoryOptions options,
+        WorkItemDetails workItem,
+        RepoExecutionContext workspace,
+        string executionArtifactRoot,
+        CancellationToken cancellationToken
+    )
     {
-        if (string.Equals(repositoryName, options.Backend.AzureDevOpsRepository, StringComparison.OrdinalIgnoreCase))
-            return RepoKind.Backend;
-        if (string.Equals(repositoryName, options.Frontend.AzureDevOpsRepository, StringComparison.OrdinalIgnoreCase))
-            return RepoKind.Frontend;
-        throw new InvalidOperationException($"Repository '{repositoryName}' does not match any configured repository.");
+        var changedKinds = await workspaceManager.GetChangedRepoKindsAsync(
+            workspace,
+            Path.Combine(executionArtifactRoot, "changed-files"),
+            cancellationToken
+        );
+        IReadOnlyList<RepoKind> repoKinds =
+            changedKinds.Count > 0 ? changedKinds : [RepoKind.Backend, RepoKind.Frontend];
+
+        return repoKinds
+            .Select(repoKind =>
+            {
+                var childTask = workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
+                    ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+                    : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                        ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
+                return new RepositoryExecution(
+                    childTask,
+                    options.GetProfile(repoKind),
+                    workspace,
+                    Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant())
+                );
+            })
+            .ToArray();
     }
 
     public static string FormatWorkItemLabel(WorkItemType workItemType) =>

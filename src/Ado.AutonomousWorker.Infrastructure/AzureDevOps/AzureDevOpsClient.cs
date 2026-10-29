@@ -6,6 +6,7 @@ using Ado.AutonomousWorker.Core.Abstractions;
 using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
+using Ado.AutonomousWorker.Core.Rules;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -14,7 +15,6 @@ namespace Ado.AutonomousWorker.Infrastructure.AzureDevOps;
 public sealed class AzureDevOpsClient(
     HttpClient httpClient,
     IOptions<AzureDevOpsOptions> options,
-    IOptions<RepositoryOptions> repositoryOptions,
     ILogger<AzureDevOpsClient> logger
 ) : IAzureDevOpsClient
 {
@@ -24,7 +24,6 @@ public sealed class AzureDevOpsClient(
 
     private readonly HttpClient _httpClient = httpClient;
     private readonly AzureDevOpsOptions _options = options.Value;
-    private readonly RepositoryOptions _repositoryOptions = repositoryOptions.Value;
     private readonly ILogger<AzureDevOpsClient> _logger = logger;
 
     public async Task<string?> GetCurrentSprintPathAsync(CancellationToken cancellationToken)
@@ -393,7 +392,6 @@ public sealed class AzureDevOpsClient(
         var branchName = sourceBranch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
             ? sourceBranch["refs/heads/".Length..]
             : sourceBranch;
-        var scope = DeriveScope(repositoryName);
 
         var workItemIds = await GetPrWorkItemIdsAsync(repositoryName, prId, cancellationToken);
         _logger.LogDebug("PR !{PrId}: work items resolved to ids=[{Ids}]", prId, string.Join(", ", workItemIds));
@@ -415,7 +413,8 @@ public sealed class AzureDevOpsClient(
                 s.Priority,
                 s.State,
                 s.AssignedTo,
-                scope,
+                // Every PR is in the monorepo, so the linked work item's tags are the only hint of its scope.
+                RulesEngine.ClassifyScopeFromTags(s.Tags),
                 prId,
                 repositoryName,
                 branchName
@@ -537,27 +536,6 @@ public sealed class AzureDevOpsClient(
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .ToArray();
-    }
-
-    private WorkItemScope DeriveScope(string repositoryName)
-    {
-        if (
-            string.Equals(
-                _repositoryOptions.Backend.AzureDevOpsRepository,
-                repositoryName,
-                StringComparison.OrdinalIgnoreCase
-            )
-        )
-            return WorkItemScope.Backend;
-        if (
-            string.Equals(
-                _repositoryOptions.Frontend.AzureDevOpsRepository,
-                repositoryName,
-                StringComparison.OrdinalIgnoreCase
-            )
-        )
-            return WorkItemScope.Frontend;
-        return WorkItemScope.Fullstack;
     }
 
     private async Task<IReadOnlyList<WorkItemSummary>> QueryByWiqlAsync(
@@ -854,11 +832,16 @@ public sealed class AzureDevOpsClient(
         }
     }
 
-    public async Task<int> TriggerPipelineAsync(int pipelineId, string refName, CancellationToken cancellationToken)
+    public async Task<int> TriggerPipelineAsync(
+        int pipelineId,
+        string refName,
+        IReadOnlyDictionary<string, string> templateParameters,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _httpClient.PostAsJsonAsync(
             $"{_options.Project}/_apis/pipelines/{pipelineId}/runs?api-version={ApiVersion}",
-            new { resources = new { repositories = new { self = new { refName } } } },
+            new { resources = new { repositories = new { self = new { refName } } }, templateParameters },
             cancellationToken
         );
 

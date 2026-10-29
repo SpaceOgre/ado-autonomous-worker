@@ -2,21 +2,13 @@ using Ado.AutonomousWorker.Core.Enums;
 
 namespace Ado.AutonomousWorker.Core.Configuration;
 
+/// <summary>One half (backend or frontend) of the monorepo described by <see cref="RepositoryOptions"/>.</summary>
 public sealed class RepositoryProfile
 {
     public RepoKind Kind { get; set; }
 
-    public string Name { get; set; } = string.Empty;
-
-    public string AzureDevOpsRepository { get; set; } = string.Empty;
-
-    public string BaseClonePath { get; set; } = string.Empty;
-
-    public string RemoteUrl { get; set; } = string.Empty;
-
-    public string MainBranch { get; set; } = "main";
-
-    public string WorktreeRoot { get; set; } = string.Empty;
+    /// <summary>Folder of this half relative to the repository root, e.g. <c>backend</c>.</summary>
+    public string Folder { get; set; } = string.Empty;
 
     /// <summary>
     /// Subdirectory relative to the worktree root where validation commands should run.

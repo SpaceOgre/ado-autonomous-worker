@@ -53,8 +53,8 @@ public sealed class SlashCommandRegistry
         [
             new("--dry-run", "Preview without running pipelines"),
             new("--tag", "Trigger from a specific git tag", TakesValue: true),
-            new("--backend", "Only trigger the backend pipeline"),
-            new("--frontend", "Only trigger the frontend pipeline"),
+            new("--backend", "Only deploy the backend"),
+            new("--frontend", "Only deploy the frontend"),
         ],
         ["/task run"] =
         [

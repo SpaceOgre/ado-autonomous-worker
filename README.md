@@ -29,8 +29,8 @@ flowchart TD
     PR["PR with AI-Rework label"]
     Queue["Queue inspection<br/>PR Fix → Rework → Work<br/>then stack rank → priority<br/>Cap at MaxItemsPerRun"]
     TooLarge["Tag: AI-TooLarge<br/>Skip item"]
-    Plan["Planning<br/>AI decomposes scope,<br/>target repos, risks → PlanResult"]
-    Worktree["Per-repo git worktree<br/>created from main branch"]
+    Plan["Planning<br/>AI decomposes scope,<br/>backend/frontend, risks → PlanResult"]
+    Worktree["One git worktree per run<br/>created from origin/main"]
     Code["Coding<br/>AI implements in worktree"]
     Review["Review<br/>AI critiques code → ReviewResult"]
     ApplyReview["Apply review findings<br/>AI re-implements"]
@@ -205,11 +205,11 @@ ado-worker queue                                              # List eligible AI
 ado-worker run                                                # Preview queue, then process all items (fail-fast)
 ado-worker run --iteration "MyProject\Sprint 5"               # Override iteration path for the run
 ado-worker run --pr-fix-only                                  # Only process PR-fix items, skipping backlog items
-ado-worker deploy                                             # Trigger pipelines and promote work items
-ado-worker deploy --dry-run                                   # Preview changes without triggering pipelines
+ado-worker deploy                                             # Run the deploy pipeline and promote work items
+ado-worker deploy --dry-run                                   # Preview changes without triggering the pipeline
 ado-worker deploy --tag v1.2.3                                # Trigger from a git tag instead of branch
-ado-worker deploy --backend                                   # Trigger only backend pipeline
-ado-worker deploy --frontend                                  # Trigger only frontend pipeline
+ado-worker deploy --backend                                   # Deploy only the backend
+ado-worker deploy --frontend                                  # Deploy only the frontend
 ado-worker executions                                         # List local task executions
 ado-worker executions --active                                # Show only in-progress executions
 ado-worker execution show --id <execution-id>                 # Show one execution with events and agent sessions
@@ -242,7 +242,7 @@ ado-worker ui run-preview                                     # Preview queue sl
 | `doctor` | Runs diagnostics: checks storage, agent CLI availability, repository paths, remote branches, ADO connectivity, and pipeline IDs. Exit code 1 if any check fails. |
 | `queue` | Queries Azure DevOps for eligible `AI-Work` and `AI-Rework` items and displays them in queue order. |
 | `run` | Previews the queue slice (capped at `MaxItemsPerRun`), asks for confirmation, then processes each item. **Fail-fast:** stops immediately on the first failure. Pass `--iteration` to override the iteration path for all items in the run. Pass `--pr-fix-only` to restrict the run to PR-fix items only, skipping AI-Work and AI-Rework backlog items. |
-| `deploy` | Triggers backend and/or frontend Azure Pipelines, polls until they succeed (or timeout), then promotes resolved sprint items to **Ready for test** and assigns them to the configured tester. User stories whose every child is now **Ready for test** or **Closed** are also promoted. |
+| `deploy` | Triggers one run of the monorepo deploy pipeline (backend and/or frontend, to `Deploy:Environment`), polls until it succeeds (or times out), then promotes resolved sprint items to **Ready for test** and assigns them to the configured tester. User stories whose every child is now **Ready for test** or **Closed** are also promoted. |
 | `task run` | Runs a single work item (`--id`) or PR fix (`--pr`) immediately. `--id` and `--pr` are mutually exclusive. Pass `--iteration` to override the iteration path. |
 | `task resume` | Resumes a prior execution from its last phase. When a plan already exists it is reused. Existing worktrees are preserved so you can fix issues manually and retry. |
 | `task set-phase` | Rewinds a completed or failed execution to `Reviewing`, `ApplyingReview`, `Validating`, or `Publishing`, then sets its status to `Failed` so `task resume` can continue from there. |
@@ -327,29 +327,37 @@ Default role assignments:
 
 ### Repositories
 
-Each repository is configured under `Repositories:Backend` and `Repositories:Frontend`:
+Backend and frontend live in one monorepo (`GR.PRIIS`, folders `backend/` and `frontend/`). Every run gets one worktree, one branch and one draft PR, whichever halves it touches; the PR is linked to every child task in scope.
+
+The repository is configured under `Repositories`:
 
 | Key                       | Default  | Description                                                      |
 | ------------------------- | -------- | ---------------------------------------------------------------- |
-| `Kind`                    | —        | `Backend` or `Frontend`.                                         |
-| `Name`                    | —        | Display name.                                                    |
 | `AzureDevOpsRepository`   | —        | Repository name in Azure DevOps.                                 |
-| `BaseClonePath`           | —        | Local path to the main clone of the repository.                  |
-| `RemoteUrl`               | `""`     | Git remote URL (used for worktree creation).                     |
-| `MainBranch`              | `"main"` | Branch to create worktrees from.                                 |
-| `WorktreeRoot`            | —        | Directory where worktrees are created.                           |
-| `ValidationWorkingDirectory` | `""`  | Subdirectory to run validation commands in (relative to worktree). |
-| `ValidationCommands`      | `[]`     | Shell commands to run during the Validating phase (e.g. `dotnet build`, `npm run build`). |
+| `BaseClonePath`           | —        | Local clone worktrees are created from. The worker only runs `git fetch` and `git worktree` here, so it can be your own checkout. |
+| `MainBranch`              | `"main"` | Branch to create worktrees from (`origin/<MainBranch>`).         |
+| `WorktreeRoot`            | —        | Directory where worktrees are created, one per branch, named after the branch without its prefix (`feature/123_slug` → `<WorktreeRoot>\123_slug`). An existing worktree with uncommitted changes is never replaced. |
+
+Each half is configured under `Repositories:Backend` and `Repositories:Frontend`:
+
+| Key                          | Default | Description                                                      |
+| ---------------------------- | ------- | ---------------------------------------------------------------- |
+| `Kind`                       | —       | `Backend` or `Frontend`.                                         |
+| `Folder`                     | —       | Folder of the half relative to the repository root (`backend`, `frontend`). |
+| `ValidationWorkingDirectory` | `""`    | Directory to run validation commands in, relative to the worktree root. |
+| `ValidationCommands`         | `[]`    | Shell commands to run during the Validating phase (e.g. `dotnet build`, `npm run build`). |
+
+Planning runs against a detached snapshot of `origin/<MainBranch>` under `{DataRoot}\plan-snapshot`. A PR Fix validates the halves its branch changes.
 
 ### Deploy
 
 | Key                           | Default  | Description                                                                      |
 | ----------------------------- | -------- | -------------------------------------------------------------------------------- |
-| `Deploy:BackendPipelineId`    | `0`      | Azure DevOps pipeline definition ID for the backend pipeline.                    |
-| `Deploy:FrontendPipelineId`   | `0`      | Azure DevOps pipeline definition ID for the frontend pipeline.                   |
-| `Deploy:Branch`               | `"main"` | Branch to trigger both pipelines from.                                           |
+| `Deploy:PipelineId`           | `265`    | Azure DevOps pipeline definition ID of the monorepo deploy pipeline (`GR.PRIIS - Deploy`). `--backend`/`--frontend` set its `deployBackend`/`deployFrontend` parameters. |
+| `Deploy:Environment`          | `"Test"` | Value for the pipeline's `environment` parameter.                                |
+| `Deploy:Branch`               | `"main"` | Branch to trigger the pipeline from.                                             |
 | `Deploy:PollIntervalSeconds`  | `30`     | How often to poll pipeline run status.                                           |
-| `Deploy:TimeoutMinutes`       | `60`     | Maximum total time to wait for both pipelines combined before aborting.          |
+| `Deploy:TimeoutMinutes`       | `60`     | Maximum total time to wait for the pipeline run before aborting.                 |
 | `Deploy:ReadyForTestAssignee` | `""`     | Email of the user to assign when transitioning work items to **Ready for test**. |
 
 Pipeline definition IDs can be found in Azure DevOps under **Pipelines** → select the pipeline → the ID is in the URL (`?definitionId=<id>`).
@@ -372,7 +380,7 @@ Any configuration key can be set via environment variables using the `AdoWorker_
 ```
 AdoWorker_AzureDevOps__PersonalAccessToken=my-pat
 AdoWorker_Worker__MaxItemsPerRun=10
-AdoWorker_Deploy__BackendPipelineId=42
+AdoWorker_Deploy__PipelineId=42
 ```
 
 ## Project Structure

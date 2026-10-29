@@ -14,16 +14,24 @@ internal static class WorkItemCommentFormatter
         var shortId = executionId.Length > 8 ? executionId[..8] : executionId;
         var builder = new StringBuilder().AppendLine($"Execution `{shortId}` completed successfully.").AppendLine();
 
+        // Every half is published in the same commit and PR of the monorepo.
+        var published = repositories.FirstOrDefault();
+        if (published is not null)
+        {
+            var shortSha = published.CommitSha.Length > 8 ? published.CommitSha[..8] : published.CommitSha;
+            builder
+                .AppendLine($"Branch: `{published.BranchName}`")
+                .AppendLine($"Commit: `{shortSha}`")
+                .AppendLine($"PR: !{published.PullRequest.PullRequestId}")
+                .AppendLine();
+        }
+
         foreach (var repository in repositories.OrderBy(item => item.RepoKind))
         {
-            var shortSha = repository.CommitSha.Length > 8 ? repository.CommitSha[..8] : repository.CommitSha;
             builder
                 .AppendLine($"### {repository.RepoKind}")
                 .AppendLine()
-                .AppendLine($"Task: #{repository.ChildTask.WorkItemId}")
-                .AppendLine($"Branch: `{repository.BranchName}`")
-                .AppendLine($"Commit: `{shortSha}`")
-                .AppendLine($"PR: !{repository.PullRequest.PullRequestId}");
+                .AppendLine($"Task: #{repository.ChildTask.WorkItemId}");
 
             if (repository.ValidationCommands.Count > 0)
                 builder.AppendLine($"Validation: `{string.Join(" | ", repository.ValidationCommands)}`");

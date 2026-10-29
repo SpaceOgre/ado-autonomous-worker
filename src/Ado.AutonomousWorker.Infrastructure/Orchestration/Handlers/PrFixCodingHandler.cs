@@ -36,30 +36,28 @@ internal sealed class PrFixCodingHandler(
             context.ExecutionId
         );
 
-        var repoKind = repositoryOptions.Value.GetRepoKindFromRepository(prTarget.RepositoryName);
-        var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
-
-        var childTask =
-            workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
-                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
-                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                    ?? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State);
-
         var workspace = await workspaceManager.CheckoutPrBranchAsync(
             workItem.WorkItemId,
-            childTask.WorkItemId,
-            repoKind,
+            workItem.WorkItemId,
             prTarget.BranchName,
             context.IsExplicitResume,
             cancellationToken
         );
 
-        var artifactDirectory = Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant());
-        var repoExecution = new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory);
-        context.RepositoryExecutions = [repoExecution];
+        // The halves the PR already touches give the agent its context; validation is scoped again after
+        // coding, since a fix may reach into the other half.
+        var repositoryExecutions = await RepositoryWorkflowHelpers.BuildPrFixRepositoryExecutionsAsync(
+            workspaceManager,
+            repositoryOptions.Value,
+            workItem,
+            workspace,
+            executionArtifactRoot,
+            cancellationToken
+        );
+        var scopeLabel = RepositoryWorkflowHelpers.FormatRepoKinds(repositoryExecutions.Select(r => r.RepoKind));
 
         var workspaceMessage =
-            $"Using {repoKind} PR worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}' for PR fix.";
+            $"Using PR worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}' for PR fix.";
         logger.LogInformation("Execution {ExecutionId}: {Message}", context.ExecutionId, workspaceMessage);
         await executionJournal.AppendEventAsync(
             context.ExecutionId,
@@ -71,7 +69,7 @@ internal sealed class PrFixCodingHandler(
         await context.Journal.AppendEventAsync(
             context.ExecutionId,
             TaskPhase.Coding,
-            $"Running PR fix coding agent for {repoKind} (PR !{prTarget.PullRequestId}, {context.PrThreads.Count} thread(s)).",
+            $"Running PR fix coding agent for {scopeLabel} (PR !{prTarget.PullRequestId}, {context.PrThreads.Count} thread(s)).",
             cancellationToken
         );
 
@@ -83,7 +81,7 @@ internal sealed class PrFixCodingHandler(
                 config,
                 await PromptTemplateLoader.ApplyAsync(
                     config,
-                    BuildPrFixPrompt(workItem, repoExecution, prTarget, context.PrThreads),
+                    BuildPrFixPrompt(workItem, repositoryExecutions, prTarget, context.PrThreads),
                     cancellationToken
                 ),
                 workspace.WorkingDirectory,
@@ -104,6 +102,15 @@ internal sealed class PrFixCodingHandler(
                 cancellationToken
             );
         context.CodeSession = codeStart.Session;
+
+        context.RepositoryExecutions = await RepositoryWorkflowHelpers.BuildPrFixRepositoryExecutionsAsync(
+            workspaceManager,
+            repositoryOptions.Value,
+            workItem,
+            workspace,
+            executionArtifactRoot,
+            cancellationToken
+        );
 
         if (codeStart.Result.Success && !string.IsNullOrWhiteSpace(codeStart.Result.StructuredPayload))
         {
@@ -127,22 +134,23 @@ internal sealed class PrFixCodingHandler(
 
     private static string BuildPrFixPrompt(
         WorkItemDetails workItem,
-        RepositoryExecution repoExecution,
+        IReadOnlyList<RepositoryExecution> repositoryExecutions,
         PrTarget prTarget,
         IReadOnlyList<PrReviewThread> threads
     )
     {
+        var workingDirectory = RepositoryWorkflowHelpers.GetSharedWorkspace(repositoryExecutions).WorkingDirectory;
         var repositorySummary = RepositoryWorkflowHelpers.BuildRepositorySummary(
-            [repoExecution],
-            repoExecution.Workspace.WorkingDirectory
+            repositoryExecutions,
+            workingDirectory
         );
         var formattedThreads = FormatPrThreads(threads);
         return $$"""
             Address the pull request review comments below for work item #{{workItem.WorkItemId}}.
 
             PR: !{{prTarget.PullRequestId}} on branch `{{prTarget.BranchName}}`
-            Repository: {{prTarget.RepositoryName}}
-            Agent working directory: {{repoExecution.Workspace.WorkingDirectory}}
+            Repository: {{prTarget.RepositoryName}} (monorepo with `backend/` and `frontend/` halves)
+            Agent working directory: {{workingDirectory}}
             Original work: #{{workItem.WorkItemId}} {{RepositoryWorkflowHelpers.FormatWorkItemLabel(
                 workItem.WorkItemType
             )}} "{{workItem.Title}}"
@@ -150,14 +158,14 @@ internal sealed class PrFixCodingHandler(
             Active review threads:
             {{formattedThreads}}
 
-            Repositories:
+            Monorepo parts this PR touches:
             {{repositorySummary}}
 
             Requirements:
             - Address all issues raised in the active review threads above.
-            - Only modify files under the listed repository paths.
+            - Only modify files under the agent working directory; review comments may point into either half.
             - Do not create commits, push branches, or open pull requests.
-            - Leave the repository in a reviewable state.
+            - Leave the worktree in a reviewable state.
             - When done, output JSON: { "commitMessage": "<concise one-line summary of the fixes>" }
             """;
     }

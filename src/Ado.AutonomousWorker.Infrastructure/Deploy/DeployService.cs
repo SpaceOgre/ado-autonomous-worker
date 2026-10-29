@@ -19,16 +19,16 @@ public sealed class DeployService(
     private const string ReadyForTestState = "Ready for test";
 
     /// <summary>
-    /// Triggers the selected pipelines on the configured branch or the given <paramref name="tag"/>.
-    /// Pass <paramref name="triggerBackend"/> and/or <paramref name="triggerFrontend"/> to control which pipelines run.
-    /// Returns the run IDs for triggered pipelines, or <c>null</c> for pipelines that were skipped.
+    /// Triggers one run of the deploy pipeline on the configured branch or the given <paramref name="tag"/>,
+    /// deploying the halves selected by <paramref name="deployBackend"/> and <paramref name="deployFrontend"/>
+    /// to the configured environment. Returns the run ID.
     /// </summary>
-    public async Task<(int? BackendRunId, int? FrontendRunId)> TriggerPipelinesAsync(
+    public async Task<int> TriggerPipelineAsync(
         IProgress<string> progress,
         CancellationToken cancellationToken,
         string? tag = null,
-        bool triggerBackend = true,
-        bool triggerFrontend = true
+        bool deployBackend = true,
+        bool deployFrontend = true
     )
     {
         if (tag is not null && string.IsNullOrWhiteSpace(tag))
@@ -43,50 +43,42 @@ public sealed class DeployService(
             );
         }
 
+        if (!deployBackend && !deployFrontend)
+        {
+            throw new ArgumentException("At least one of the backend and frontend must be deployed.");
+        }
+
         var normalizedTag = tag?.Trim();
         var normalizedBranch = _options.Branch.Trim();
 
         var refName = normalizedTag is not null ? $"refs/tags/{normalizedTag}" : $"refs/heads/{normalizedBranch}";
         var refLabel = normalizedTag is not null ? $"tag '{normalizedTag}'" : $"branch '{normalizedBranch}'";
-        int? backendRunId = null;
-        int? frontendRunId = null;
-
-        if (triggerBackend)
+        var templateParameters = new Dictionary<string, string>
         {
-            progress.Report($"Triggering backend pipeline (id={_options.BackendPipelineId}) on {refLabel}…");
-            backendRunId = await _adoClient.TriggerPipelineAsync(
-                _options.BackendPipelineId,
-                refName,
-                cancellationToken
-            );
-            progress.Report($"Backend run #{backendRunId} started.");
-        }
+            ["environment"] = _options.Environment,
+            ["deployBackend"] = deployBackend ? "true" : "false",
+            ["deployFrontend"] = deployFrontend ? "true" : "false",
+        };
 
-        if (triggerFrontend)
-        {
-            progress.Report($"Triggering frontend pipeline (id={_options.FrontendPipelineId}) on {refLabel}…");
-            frontendRunId = await _adoClient.TriggerPipelineAsync(
-                _options.FrontendPipelineId,
-                refName,
-                cancellationToken
-            );
-            progress.Report($"Frontend run #{frontendRunId} started.");
-        }
+        progress.Report(
+            $"Triggering deploy pipeline (id={_options.PipelineId}) for {DescribeTargets(deployBackend, deployFrontend)} to {_options.Environment} on {refLabel}…"
+        );
+        var runId = await _adoClient.TriggerPipelineAsync(
+            _options.PipelineId,
+            refName,
+            templateParameters,
+            cancellationToken
+        );
+        progress.Report($"Deploy run #{runId} started.");
 
-        return (backendRunId, frontendRunId);
+        return runId;
     }
 
     /// <summary>
-    /// Polls the triggered pipeline runs until they finish or time out.
-    /// Pass <c>null</c> for a run ID to skip polling for that pipeline.
-    /// Throws <see cref="InvalidOperationException"/> if any triggered run fails or times out.
+    /// Polls the deploy pipeline run until it finishes or times out.
+    /// Throws <see cref="InvalidOperationException"/> if the run fails or times out.
     /// </summary>
-    public async Task WaitForPipelinesAsync(
-        int? backendRunId,
-        int? frontendRunId,
-        IProgress<string> progress,
-        CancellationToken cancellationToken
-    )
+    public async Task WaitForPipelineAsync(int runId, IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (_options.TimeoutMinutes <= 0)
             throw new InvalidOperationException(
@@ -101,67 +93,41 @@ public sealed class DeployService(
         var pollInterval = TimeSpan.FromSeconds(_options.PollIntervalSeconds);
         var deadline = DateTimeOffset.UtcNow + timeout;
 
-        var backendDone = backendRunId is null;
-        var frontendDone = frontendRunId is null;
-
-        while ((!backendDone || !frontendDone) && DateTimeOffset.UtcNow < deadline)
+        while (DateTimeOffset.UtcNow < deadline)
         {
             await Task.Delay(pollInterval, cancellationToken);
 
-            if (!backendDone)
-            {
-                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(
-                    _options.BackendPipelineId,
-                    backendRunId!.Value,
-                    cancellationToken
-                );
-                _logger.LogDebug("Backend run #{RunId}: state={State} result={Result}", backendRunId, state, result);
+            var (state, result) = await _adoClient.GetPipelineRunStatusAsync(
+                _options.PipelineId,
+                runId,
+                cancellationToken
+            );
+            _logger.LogDebug("Deploy run #{RunId}: state={State} result={Result}", runId, state, result);
 
-                if (IsFinished(state))
-                {
-                    backendDone = true;
-                    if (!IsSuccessful(result))
-                        throw new InvalidOperationException(
-                            $"Backend pipeline run #{backendRunId} finished with result '{result}'. Deploy aborted."
-                        );
-                    progress.Report($"Backend pipeline run #{backendRunId} completed successfully.");
-                }
-                else
-                {
-                    progress.Report($"Backend run #{backendRunId}: {state}…");
-                }
+            if (IsFinished(state))
+            {
+                if (!IsSuccessful(result))
+                    throw new InvalidOperationException(
+                        $"Deploy pipeline run #{runId} finished with result '{result}'. Deploy aborted."
+                    );
+                progress.Report($"Deploy pipeline run #{runId} completed successfully.");
+                return;
             }
 
-            if (!frontendDone)
-            {
-                var (state, result) = await _adoClient.GetPipelineRunStatusAsync(
-                    _options.FrontendPipelineId,
-                    frontendRunId!.Value,
-                    cancellationToken
-                );
-                _logger.LogDebug("Frontend run #{RunId}: state={State} result={Result}", frontendRunId, state, result);
-
-                if (IsFinished(state))
-                {
-                    frontendDone = true;
-                    if (!IsSuccessful(result))
-                        throw new InvalidOperationException(
-                            $"Frontend pipeline run #{frontendRunId} finished with result '{result}'. Deploy aborted."
-                        );
-                    progress.Report($"Frontend pipeline run #{frontendRunId} completed successfully.");
-                }
-                else
-                {
-                    progress.Report($"Frontend run #{frontendRunId}: {state}…");
-                }
-            }
+            progress.Report($"Deploy run #{runId}: {state}…");
         }
 
-        if (!backendDone || !frontendDone)
-            throw new InvalidOperationException(
-                $"Pipeline runs did not complete within {_options.TimeoutMinutes} minutes."
-            );
+        throw new InvalidOperationException($"Pipeline run did not complete within {_options.TimeoutMinutes} minutes.");
     }
+
+    public static string DescribeTargets(bool deployBackend, bool deployFrontend) =>
+        (deployBackend, deployFrontend) switch
+        {
+            (true, true) => "backend + frontend",
+            (true, false) => "backend only",
+            (false, true) => "frontend only",
+            _ => "nothing",
+        };
 
     /// <summary>
     /// Computes the work item changes that would be applied (for dry-run or actual execution).

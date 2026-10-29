@@ -86,8 +86,13 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
             new ChildTaskRecord(28883, RepoKind.Backend, "Backend - Story", "Active"),
-            new RepositoryProfile { Kind = RepoKind.Backend, ValidationCommands = ["dotnet build --no-restore"] },
-            new RepoExecutionContext(28639, 28883, RepoKind.Backend, "feature/28883_story", @"D:\worktrees\backend"),
+            new RepositoryProfile
+            {
+                Kind = RepoKind.Backend,
+                Folder = "backend",
+                ValidationCommands = ["dotnet build --no-restore"],
+            },
+            new RepoExecutionContext(28639, 28883, "feature/28883_story", @"D:\worktrees\28883_story"),
             @"D:\artifacts"
         );
 
@@ -151,8 +156,13 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
             new ChildTaskRecord(28883, RepoKind.Backend, "Backend - Story", "Active"),
-            new RepositoryProfile { Kind = RepoKind.Backend, ValidationCommands = ["dotnet build --no-restore"] },
-            new RepoExecutionContext(28639, 28883, RepoKind.Backend, "feature/28883_story", @"D:\worktrees\backend"),
+            new RepositoryProfile
+            {
+                Kind = RepoKind.Backend,
+                Folder = "backend",
+                ValidationCommands = ["dotnet build --no-restore"],
+            },
+            new RepoExecutionContext(28639, 28883, "feature/28883_story", @"D:\worktrees\28883_story"),
             @"D:\artifacts"
         );
 
@@ -217,8 +227,13 @@ public sealed class PromptTemplateLoaderTests : IDisposable
         var repositoryExecution = Activator.CreateInstance(
             repositoryExecutionType!,
             new ChildTaskRecord(28883, RepoKind.Backend, "Backend - Story", "Active"),
-            new RepositoryProfile { Kind = RepoKind.Backend, ValidationCommands = ["dotnet build --no-restore"] },
-            new RepoExecutionContext(28639, 28883, RepoKind.Backend, "feature/28883_story", @"D:\worktrees\backend"),
+            new RepositoryProfile
+            {
+                Kind = RepoKind.Backend,
+                Folder = "backend",
+                ValidationCommands = ["dotnet build --no-restore"],
+            },
+            new RepoExecutionContext(28639, 28883, "feature/28883_story", @"D:\worktrees\28883_story"),
             @"D:\artifacts"
         );
 

@@ -44,36 +44,15 @@ internal sealed class WorkItemCodingHandler(
         );
 
         var slug = RepositoryWorkflowHelpers.ComputeSlug(workItem.Title);
-        var repositoryExecutions = new List<RepositoryExecution>();
+        var childTasks = new List<ChildTaskRecord>();
 
         foreach (var repoKind in RepositoryWorkflowHelpers.MapScopeToRepos(plan.Scope))
         {
-            var childTask =
-                workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
-                    ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
-                    : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
-                        ?? await CreateChildTaskAsync(workItem, context.CurrentSprintPath, repoKind, cancellationToken);
-            var repoProfile = repositoryOptions.Value.GetProfile(repoKind);
-            var workspace = await workspaceManager.CreateRepoExecutionAsync(
-                workItem.WorkItemId,
-                childTask.WorkItemId,
-                repoKind,
-                slug,
-                context.IsExplicitResume,
-                cancellationToken
-            );
-            var artifactDirectory = Path.Combine(executionArtifactRoot, repoKind.ToString().ToLowerInvariant());
-
-            var workspaceMessage =
-                $"Using {repoKind} worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}' for child task #{childTask.WorkItemId}.";
-            logger.LogInformation("Execution {ExecutionId}: {Message}", context.ExecutionId, workspaceMessage);
-            await executionJournal.AppendEventAsync(
-                context.ExecutionId,
-                TaskPhase.Coding,
-                workspaceMessage,
-                cancellationToken
-            );
-            repositoryExecutions.Add(new RepositoryExecution(childTask, repoProfile, workspace, artifactDirectory));
+            var childTask = workItem.WorkItemType is WorkItemType.Bug or WorkItemType.Task
+                ? new ChildTaskRecord(workItem.WorkItemId, repoKind, workItem.Title, workItem.State)
+                : workItem.ChildTasks.FirstOrDefault(t => t.RepoKind == repoKind)
+                    ?? await CreateChildTaskAsync(workItem, context.CurrentSprintPath, repoKind, cancellationToken);
+            childTasks.Add(childTask);
 
             // Link user-story child tasks (not bugs, which reuse the parent work item ID).
             if (childTask.WorkItemId != workItem.WorkItemId)
@@ -87,6 +66,34 @@ internal sealed class WorkItemCodingHandler(
                 );
             }
         }
+
+        // Backend and frontend are halves of one repository: one worktree and branch covers every child task.
+        var branchOwner = RepositoryWorkflowHelpers.GetBranchOwner(childTasks);
+        var workspace = await workspaceManager.CreateWorkspaceAsync(
+            workItem.WorkItemId,
+            branchOwner.WorkItemId,
+            slug,
+            context.IsExplicitResume,
+            cancellationToken
+        );
+        var repositoryExecutions = childTasks
+            .Select(t => new RepositoryExecution(
+                t,
+                repositoryOptions.Value.GetProfile(t.RepoKind),
+                workspace,
+                Path.Combine(executionArtifactRoot, t.RepoKind.ToString().ToLowerInvariant())
+            ))
+            .ToArray();
+
+        var workspaceMessage =
+            $"Using worktree '{workspace.WorkingDirectory}' on branch '{workspace.BranchName}' for {string.Join(", ", childTasks.Select(t => $"{t.RepoKind} #{t.WorkItemId}"))}.";
+        logger.LogInformation("Execution {ExecutionId}: {Message}", context.ExecutionId, workspaceMessage);
+        await executionJournal.AppendEventAsync(
+            context.ExecutionId,
+            TaskPhase.Coding,
+            workspaceMessage,
+            cancellationToken
+        );
 
         context.RepositoryExecutions = repositoryExecutions;
 
@@ -191,7 +198,7 @@ internal sealed class WorkItemCodingHandler(
 
         var hasFrontend = repositoryExecutions.Any(r => r.RepoKind == RepoKind.Frontend);
         if (hasFrontend)
-            testIntentBlock += "\nDo not write any tests for the frontend repository.";
+            testIntentBlock += "\nDo not write any tests for the frontend.";
 
         var risksBlock =
             plan.Risks.Count > 0
@@ -199,7 +206,7 @@ internal sealed class WorkItemCodingHandler(
                 : string.Empty;
 
         return $$"""
-            Implement this Azure DevOps work item across the listed repositories as one coordinated change.
+            Implement this Azure DevOps work item in the listed parts of the monorepo as one coordinated change.
 
             Agent working directory: {{agentWorkingDirectory}}
             Plan summary: {{plan.Summary}}{{risksBlock}}
@@ -219,7 +226,7 @@ internal sealed class WorkItemCodingHandler(
             </recent-comments>
             </work-item>
 
-            Repositories:
+            Monorepo parts in scope (one worktree, one branch):
             {{repositorySummary}}
 
             ## Step 1: Explore before implementing
@@ -231,9 +238,9 @@ internal sealed class WorkItemCodingHandler(
 
             ## Step 2: Implement
 
-            Make all changes needed to satisfy the acceptance criteria. Follow the conventions you observed. When more than one repository is in scope, coordinate backend and frontend changes as a single unit — changes that belong together must be consistent across both.
+            Make all changes needed to satisfy the acceptance criteria. Follow the conventions you observed. When both backend and frontend are in scope, coordinate their changes as a single unit — changes that belong together must be consistent across both.
 
-            Only modify files under the listed repository paths. Keep each repository on its prepared branch.
+            Only modify files under the listed folders. Stay on the prepared branch.
 
             ## Step 3: Tests
 
@@ -241,15 +248,15 @@ internal sealed class WorkItemCodingHandler(
 
             ## Step 4: Validate
 
-            After implementing, run the validation commands listed for each repository above to confirm the change compiles and tests pass. Fix any failures before finishing.
+            After implementing, run the validation commands listed for each part above to confirm the change compiles and tests pass. Fix any failures before finishing.
 
             Requirements:
-            - Treat the listed repositories as one implementation scope.
-            - Only modify files under the listed repository paths.
-            - Coordinate backend and frontend changes together when more than one repository is listed.
-            - Keep each repository on its prepared branch.
+            - Treat the listed parts as one implementation scope.
+            - Only modify files under the listed folders.
+            - Coordinate backend and frontend changes together when both are listed.
+            - Stay on the prepared branch.
             - Do not create commits, push branches, open pull requests, link work items, or publish changes to Azure DevOps or Git hosting systems.
-            - Leave every listed repository in a reviewable state for validation and PR creation.
+            - Leave the worktree in a reviewable state for validation and PR creation.
             """;
     }
 }

@@ -42,7 +42,11 @@ internal sealed class PlanningHandler(
             workerOptions.Value.MaxPromptCommentCharacters
         );
 
-        await workspaceManager.PullAllBaseClonesAsync(artifactDirectory, cancellationToken);
+        // Plan against a snapshot of origin/main rather than the base clone, which may be a developer's checkout
+        // on another branch.
+        var repositoryRoot = await workspaceManager.PreparePlanningSnapshotAsync(artifactDirectory, cancellationToken);
+        var backendPath = Path.Combine(repositoryRoot, repositoryOptions.Value.Backend.Folder);
+        var frontendPath = Path.Combine(repositoryRoot, repositoryOptions.Value.Frontend.Folder);
 
         await context.Journal.AppendEventAsync(
             context.ExecutionId,
@@ -50,18 +54,6 @@ internal sealed class PlanningHandler(
             "Running planning agent.",
             cancellationToken
         );
-
-        var backendPath = repositoryOptions.Value.Backend.BaseClonePath;
-        var frontendPath = repositoryOptions.Value.Frontend.BaseClonePath;
-
-        if (string.IsNullOrWhiteSpace(backendPath))
-            throw new InvalidOperationException(
-                "RepositoryOptions.Backend.BaseClonePath is not configured. Check appsettings.json."
-            );
-        if (string.IsNullOrWhiteSpace(frontendPath))
-            throw new InvalidOperationException(
-                "RepositoryOptions.Frontend.BaseClonePath is not configured. Check appsettings.json."
-            );
 
         logger.LogDebug(
             "Execution {ExecutionId}: planning with backend '{BackendPath}', frontend '{FrontendPath}'.",
@@ -92,20 +84,19 @@ internal sealed class PlanningHandler(
             </recent-comments>
             </work-item>
 
-            ## Step 1: Explore the repositories
+            ## Step 1: Explore the repository
 
-            Before deciding scope, read the repository structure to understand the tech stack, existing conventions, and where the relevant code lives. Look at directory layout, key entry points, and test file locations.
+            The code lives in one monorepo at {{repositoryRoot}} with two halves. Before deciding scope, read its structure to understand the tech stack, existing conventions, and where the relevant code lives. Look at directory layout, key entry points, and test file locations. Start with the AGENTS.md of each half.
 
-            Repository paths:
-            - {{backendPath}}
-            - {{frontendPath}}
+            - Backend: {{backendPath}}
+            - Frontend: {{frontendPath}}
 
             ## Step 2: Determine scope
 
             Choose exactly one value:
             - `Backend` — all changes are server-side only (API, domain logic, database, background jobs).
             - `Frontend` — all changes are client-side only (UI components, styles, browser logic).
-            - `Fullstack` — changes span both repositories (e.g. new API endpoint consumed by new UI, schema change visible to the frontend).
+            - `Fullstack` — changes span both halves (e.g. new API endpoint consumed by new UI, schema change visible to the frontend).
 
             Prefer a narrower scope over `Fullstack` when in doubt.
 
@@ -113,8 +104,8 @@ internal sealed class PlanningHandler(
 
             Return JSON matching the supplied schema exactly. Field guidance:
             - `scope`: one of `Backend`, `Frontend`, `Fullstack`.
-            - `repositories`: absolute paths of the repositories that must be modified (only those in scope).
-            - `validationTargets`: shell commands that verify the change is correct (build + test commands for each in-scope repository). Use commands you observed in the repository (e.g. `dotnet build`, `dotnet test`, `npm run test`).
+            - `repositories`: absolute paths of the halves that must be modified (only those in scope).
+            - `validationTargets`: shell commands that verify the change is correct (build + test commands for each in-scope half). Use commands you observed in the repository (e.g. `dotnet build`, `dotnet test`, `npm run test`).
             - `testIntent`: specific descriptions of tests to add or update. Name the component or function and the behavior to test. Omit entries for trivial getters or pure configuration — only include non-trivial logic.
             - `risks`: open questions or implementation risks that could affect delivery (breaking changes, missing requirements, migration concerns). Empty array if none.
             - `summary`: one or two sentences — what will be built and why. This is shown in the execution log.
@@ -122,17 +113,12 @@ internal sealed class PlanningHandler(
             Do not speculate beyond what the acceptance criteria describe.
             """;
 
-        var agentWorkingDirectory = RepositoryWorkflowHelpers.DetermineAgentWorkingDirectory([
-            backendPath,
-            frontendPath,
-        ]);
-
         var prompt = await PromptTemplateLoader.ApplyAsync(config, rawPrompt, cancellationToken);
         var startResult = await runner.StartSessionAsync(
             AgentRole.Plan,
             config,
             prompt,
-            agentWorkingDirectory,
+            repositoryRoot,
             artifactDirectory,
             AgentOutputSchemas.Plan,
             executionJournal.CreateOutputObserver(context.ExecutionId),
@@ -154,7 +140,7 @@ internal sealed class PlanningHandler(
             ParsePlan(startResult.Result.StructuredPayload, logger)
             ?? throw new InvalidOperationException("Planning agent returned invalid or empty structured output.");
 
-        ValidatePlanRepositories(plan, backendPath, frontendPath);
+        ValidatePlanRepositories(plan, repositoryRoot);
 
         var safeSummary = plan.Summary.ReplaceLineEndings(" ");
         await stateStore.SavePlanAsync(context.ExecutionId, plan, cancellationToken);
@@ -199,14 +185,11 @@ internal sealed class PlanningHandler(
         }
     }
 
-    private static void ValidatePlanRepositories(PlanResult plan, string backendPath, string frontendPath)
+    private static void ValidatePlanRepositories(PlanResult plan, string repositoryRoot)
     {
         foreach (var repo in plan.Repositories)
         {
-            if (
-                !repo.StartsWith(backendPath, StringComparison.OrdinalIgnoreCase)
-                && !repo.StartsWith(frontendPath, StringComparison.OrdinalIgnoreCase)
-            )
+            if (!repo.StartsWith(repositoryRoot, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     $"Planning agent returned a repository path outside configured roots: '{repo}'."

@@ -62,7 +62,7 @@ public sealed partial class RulesEngine : IRulesEngine
         return ordered;
     }
 
-    private static WorkItemScope ClassifyScopeFromTags(IReadOnlyList<string>? tags)
+    public static WorkItemScope ClassifyScopeFromTags(IReadOnlyList<string>? tags)
     {
         if (tags is null || tags.Count == 0)
             return WorkItemScope.Fullstack;

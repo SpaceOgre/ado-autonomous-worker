@@ -32,14 +32,8 @@ public sealed class BootstrapCommand(IStateStore stateStore, IWorkspaceManager w
             // },
             //
             // "Repositories": {
-            //     "Backend": {
-            //         "BaseClonePath": "C:\\Workspace\\YourBackend",
-            //         "WorktreeRoot": "C:\\Workspace\\worktrees\\backend"
-            //     },
-            //     "Frontend": {
-            //         "BaseClonePath": "C:\\Workspace\\YourFrontend",
-            //         "WorktreeRoot": "C:\\Workspace\\worktrees\\frontend"
-            //     }
+            //     "BaseClonePath": "C:\\Workspace\\YourRepo",
+            //     "WorktreeRoot": "C:\\Workspace\\YourRepo.wt"
             // },
             //
             // "Worker": { "MaxItemsPerRun": 3, "DryRun": true }

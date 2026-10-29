@@ -35,23 +35,16 @@ public sealed class DoctorService(
         checks.Add(CheckAgentCommand("Code Agent", agentOptions.Value.Code));
         checks.Add(CheckAgentCommand("Review Agent", agentOptions.Value.Review));
 
+        var repository = repositoryOptions.Value;
         checks.Add(
-            new DoctorCheckResult(
-                "Backend Repo",
-                Directory.Exists(repositoryOptions.Value.Backend.BaseClonePath),
-                repositoryOptions.Value.Backend.BaseClonePath
-            )
+            new DoctorCheckResult("Repository", Directory.Exists(repository.BaseClonePath), repository.BaseClonePath)
         );
-        checks.Add(await CheckRepoBranchAsync("Backend Branch", repositoryOptions.Value.Backend, cancellationToken));
-
+        checks.Add(CheckRepoFolder("Backend Folder", repository, repository.Backend));
+        checks.Add(CheckRepoFolder("Frontend Folder", repository, repository.Frontend));
+        checks.Add(await CheckRepoBranchAsync("Main Branch", repository, cancellationToken));
         checks.Add(
-            new DoctorCheckResult(
-                "Frontend Repo",
-                Directory.Exists(repositoryOptions.Value.Frontend.BaseClonePath),
-                repositoryOptions.Value.Frontend.BaseClonePath
-            )
+            new DoctorCheckResult("Worktree Root", Directory.Exists(repository.WorktreeRoot), repository.WorktreeRoot)
         );
-        checks.Add(await CheckRepoBranchAsync("Frontend Branch", repositoryOptions.Value.Frontend, cancellationToken));
 
         var adoConnected = false;
         if (string.IsNullOrWhiteSpace(azureDevOpsOptions.Value.PersonalAccessToken))
@@ -79,16 +72,16 @@ public sealed class DoctorService(
             }
         }
 
-        // Pipeline checks: only run when IDs are configured and ADO connectivity has been confirmed.
-        // If ADO auth failed, pipeline API calls would also fail — skip them to avoid misleading errors.
+        // Pipeline check: only run when the ID is configured and ADO connectivity has been confirmed.
+        // If ADO auth failed, pipeline API calls would also fail — skip it to avoid misleading errors.
         var deploy = deployOptions.Value;
-        if (deploy.BackendPipelineId > 0)
+        if (deploy.PipelineId > 0)
         {
             checks.Add(
                 adoConnected
-                    ? await CheckPipelineAsync("Backend Pipeline", deploy.BackendPipelineId, cancellationToken)
+                    ? await CheckPipelineAsync("Deploy Pipeline", deploy.PipelineId, cancellationToken)
                     : new DoctorCheckResult(
-                        "Backend Pipeline",
+                        "Deploy Pipeline",
                         false,
                         "Skipped — Azure DevOps connectivity check did not pass."
                     )
@@ -96,48 +89,38 @@ public sealed class DoctorService(
         }
         else
         {
-            checks.Add(new DoctorCheckResult("Backend Pipeline", true, "Not configured — skipped."));
-        }
-
-        if (deploy.FrontendPipelineId > 0)
-        {
-            checks.Add(
-                adoConnected
-                    ? await CheckPipelineAsync("Frontend Pipeline", deploy.FrontendPipelineId, cancellationToken)
-                    : new DoctorCheckResult(
-                        "Frontend Pipeline",
-                        false,
-                        "Skipped — Azure DevOps connectivity check did not pass."
-                    )
-            );
-        }
-        else
-        {
-            checks.Add(new DoctorCheckResult("Frontend Pipeline", true, "Not configured — skipped."));
+            checks.Add(new DoctorCheckResult("Deploy Pipeline", true, "Not configured — skipped."));
         }
 
         return checks;
     }
 
+    private static DoctorCheckResult CheckRepoFolder(
+        string name,
+        RepositoryOptions repository,
+        RepositoryProfile profile
+    )
+    {
+        var folderPath = Path.Combine(repository.BaseClonePath, profile.Folder);
+        return new DoctorCheckResult(name, Directory.Exists(folderPath), folderPath);
+    }
+
     private async Task<DoctorCheckResult> CheckRepoBranchAsync(
         string name,
-        RepositoryProfile profile,
+        RepositoryOptions repository,
         CancellationToken cancellationToken
     )
     {
-        if (!Directory.Exists(profile.BaseClonePath))
+        if (!Directory.Exists(repository.BaseClonePath))
         {
-            return new DoctorCheckResult(name, false, $"Base clone path not found: {profile.BaseClonePath}");
+            return new DoctorCheckResult(name, false, $"Base clone path not found: {repository.BaseClonePath}");
         }
 
         var fetchResult = await commandRunner.RunAsync(
             "git",
-            ["-C", profile.BaseClonePath, "fetch", "origin", profile.MainBranch],
-            profile.BaseClonePath,
-            Path.Combine(
-                storageOptions.Value.ArtifactRoot,
-                $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-fetch.log"
-            ),
+            ["-C", repository.BaseClonePath, "fetch", "origin", repository.MainBranch],
+            repository.BaseClonePath,
+            Path.Combine(storageOptions.Value.ArtifactRoot, "doctor-fetch.log"),
             environmentVariables: null,
             activityName: null,
             outputCallback: null,
@@ -149,7 +132,7 @@ public sealed class DoctorService(
             return new DoctorCheckResult(
                 name,
                 false,
-                $"Fetch failed for origin/{profile.MainBranch}: {fetchResult.StandardError.Trim()}"
+                $"Fetch failed for origin/{repository.MainBranch}: {fetchResult.StandardError.Trim()}"
             );
         }
 
@@ -157,17 +140,14 @@ public sealed class DoctorService(
             "git",
             [
                 "-C",
-                profile.BaseClonePath,
+                repository.BaseClonePath,
                 "show-ref",
                 "--verify",
                 "--quiet",
-                $"refs/remotes/origin/{profile.MainBranch}",
+                $"refs/remotes/origin/{repository.MainBranch}",
             ],
-            profile.BaseClonePath,
-            Path.Combine(
-                storageOptions.Value.ArtifactRoot,
-                $"doctor-{profile.Kind.ToString().ToLowerInvariant()}-branch.log"
-            ),
+            repository.BaseClonePath,
+            Path.Combine(storageOptions.Value.ArtifactRoot, "doctor-branch.log"),
             environmentVariables: null,
             activityName: null,
             outputCallback: null,
@@ -175,8 +155,8 @@ public sealed class DoctorService(
         );
 
         return verifyResult.Success
-            ? new DoctorCheckResult(name, true, $"origin/{profile.MainBranch}")
-            : new DoctorCheckResult(name, false, $"Missing remote branch origin/{profile.MainBranch}");
+            ? new DoctorCheckResult(name, true, $"origin/{repository.MainBranch}")
+            : new DoctorCheckResult(name, false, $"Missing remote branch origin/{repository.MainBranch}");
     }
 
     private static DoctorCheckResult CheckAgentCommand(string name, AgentRoleConfig config)

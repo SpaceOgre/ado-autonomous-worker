@@ -133,7 +133,11 @@ Each role is independently configured in `appsettings.json` under `Agents.Plan`,
 
 ### Repository Isolation
 
-Each work item execution creates a **git worktree** under the configured `WorktreeRoot` (one per repo). Branch names are derived from the work item title (slugified). On successful completion the worktree is optionally cleaned up (`CleanupWorktreesAfterSuccess`).
+Backend and frontend are the `backend/` and `frontend/` halves of one monorepo (`Repositories` in `appsettings.json`; `RepoKind` names a half). Each work item execution creates **one git worktree** under the configured `WorktreeRoot`, shared by every half in scope, on one branch named after the branch-owning work item (the Bug/Task itself, or the backend child task of a fullstack story) and the slugified title. Publishing makes one commit and one draft PR and links it to every child task. A PR Fix validates the halves its branch changes (`IWorkspaceManager.GetChangedRepoKindsAsync`).
+
+The base clone (`BaseClonePath`) may be the developer's own checkout: the worker only fetches there and registers worktrees, never pulls or checks out. Planning reads a detached snapshot of `origin/main` (`PreparePlanningSnapshotAsync`). An existing worktree with uncommitted changes is never replaced. On successful completion the worktree is optionally cleaned up (`CleanupWorktreesAfterSuccess`).
+
+`deploy` triggers one run of the monorepo deploy pipeline (`Deploy:PipelineId`) with its `environment`, `deployBackend` and `deployFrontend` parameters.
 
 ### Eligibility & Queue Ordering (`RulesEngine`)
 

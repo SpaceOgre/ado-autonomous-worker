@@ -27,7 +27,7 @@ public static class CliAppConfiguration
         config
             .AddCommand<DeployCommand>("deploy")
             .WithDescription(
-                "Trigger frontend and backend pipelines, wait for success, then move sprint items to Ready for test."
+                "Trigger the deploy pipeline for backend and frontend, wait for success, then move sprint items to Ready for test."
             );
         config
             .AddCommand<VersionCommand>("version")

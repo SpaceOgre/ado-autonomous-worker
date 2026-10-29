@@ -1,3 +1,4 @@
+using Ado.AutonomousWorker.Core.Configuration;
 using Ado.AutonomousWorker.Core.Enums;
 using Ado.AutonomousWorker.Core.Models;
 
@@ -7,23 +8,26 @@ public interface IWorkspaceManager
 {
     Task PrepareAsync(CancellationToken cancellationToken);
 
-    Task<RepoExecutionContext> CreateRepoExecutionAsync(
+    /// <summary>
+    /// Creates the execution's worktree on a new branch off <c>origin/{MainBranch}</c>. The branch is named after
+    /// <paramref name="branchOwnerId"/>; backend and frontend changes share this one worktree.
+    /// </summary>
+    Task<RepoExecutionContext> CreateWorkspaceAsync(
         int parentWorkItemId,
-        int childTaskId,
-        RepoKind repoKind,
+        int branchOwnerId,
         string slug,
         bool preserveExistingWorkspace,
         CancellationToken cancellationToken
     );
 
     /// <summary>
-    /// Checks out an existing remote PR branch into a worktree. Unlike <see cref="CreateRepoExecutionAsync"/>,
-    /// this does not create a new branch — it tracks the remote branch as-is.
+    /// Checks out an existing remote PR branch into a worktree. Unlike <see cref="CreateWorkspaceAsync"/>,
+    /// this does not create a new branch — it tracks the remote branch as-is. A clean worktree that already
+    /// has the branch checked out is reused and fast-forwarded.
     /// </summary>
     Task<RepoExecutionContext> CheckoutPrBranchAsync(
         int parentWorkItemId,
-        int childTaskId,
-        RepoKind repoKind,
+        int branchOwnerId,
         string branchName,
         bool preserveExistingWorkspace,
         CancellationToken cancellationToken
@@ -32,8 +36,18 @@ public interface IWorkspaceManager
     Task CleanupAsync(RepoExecutionContext context, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Pulls the main branch of every configured repository so that planning agents see up-to-date code.
-    /// Repositories whose <see cref="RepositoryProfile.BaseClonePath"/> does not exist are skipped.
+    /// Fetches <c>origin/{MainBranch}</c> and checks it out into a detached snapshot worktree so planning agents
+    /// see up-to-date code without touching <see cref="RepositoryOptions.BaseClonePath"/>. Returns the snapshot path.
     /// </summary>
-    Task PullAllBaseClonesAsync(string artifactDirectory, CancellationToken cancellationToken);
+    Task<string> PreparePlanningSnapshotAsync(string artifactDirectory, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns the halves whose folders contain changes on the workspace branch compared to
+    /// <c>origin/{MainBranch}</c>, including uncommitted and untracked files.
+    /// </summary>
+    Task<IReadOnlyList<RepoKind>> GetChangedRepoKindsAsync(
+        RepoExecutionContext context,
+        string artifactDirectory,
+        CancellationToken cancellationToken
+    );
 }

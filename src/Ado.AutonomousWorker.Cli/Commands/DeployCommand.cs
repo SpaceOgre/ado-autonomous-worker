@@ -31,18 +31,18 @@ public sealed class DeployCommand(
         [CommandOption("--dry-run")]
         public bool DryRun { get; init; }
 
-        [Description("Trigger the pipelines from this git tag instead of the default branch. Example: --tag v1.2.3")]
+        [Description("Trigger the pipeline from this git tag instead of the default branch. Example: --tag v1.2.3")]
         [CommandOption("--tag <TAG>")]
         public string? Tag { get; init; }
 
         [Description(
-            "Only trigger the backend pipeline. Cannot be combined with --frontend unless both are specified (which is the default)."
+            "Only deploy the backend. Cannot be combined with --frontend unless both are specified (which is the default)."
         )]
         [CommandOption("--backend")]
         public bool BackendOnly { get; init; }
 
         [Description(
-            "Only trigger the frontend pipeline. Cannot be combined with --backend unless both are specified (which is the default)."
+            "Only deploy the frontend. Cannot be combined with --backend unless both are specified (which is the default)."
         )]
         [CommandOption("--frontend")]
         public bool FrontendOnly { get; init; }
@@ -59,11 +59,11 @@ public sealed class DeployCommand(
             return await RunDryRunAsync(cancellationToken);
         }
 
-        // If neither flag is set, trigger both (default). If one or both flags are set, trigger only those.
-        var triggerBackend = !settings.BackendOnly && !settings.FrontendOnly || settings.BackendOnly;
-        var triggerFrontend = !settings.BackendOnly && !settings.FrontendOnly || settings.FrontendOnly;
+        // If neither flag is set, deploy both (default). If one or both flags are set, deploy only those.
+        var deployBackend = !settings.BackendOnly && !settings.FrontendOnly || settings.BackendOnly;
+        var deployFrontend = !settings.BackendOnly && !settings.FrontendOnly || settings.FrontendOnly;
 
-        return await RunDeployAsync(settings.Tag, triggerBackend, triggerFrontend, cancellationToken);
+        return await RunDeployAsync(settings.Tag, deployBackend, deployFrontend, cancellationToken);
     }
 
     private async Task<int> RunDryRunAsync(CancellationToken cancellationToken)
@@ -103,30 +103,26 @@ public sealed class DeployCommand(
 
     private async Task<int> RunDeployAsync(
         string? tag,
-        bool triggerBackend,
-        bool triggerFrontend,
+        bool deployBackend,
+        bool deployFrontend,
         CancellationToken cancellationToken
     )
     {
-        if (!ValidateConfig(triggerBackend, triggerFrontend))
+        if (!ValidateConfig())
             return 1;
 
         var refValue = tag ?? _options.Branch;
-        var pipelineLabel = (triggerBackend, triggerFrontend) switch
-        {
-            (true, true) => "both pipelines",
-            (true, false) => "backend pipeline only",
-            (false, true) => "frontend pipeline only",
-            _ => "no pipelines",
-        };
+        var targetLabel = DeployService.DescribeTargets(deployBackend, deployFrontend);
 
         AnsiConsole.Write(CliStyle.SectionRule("Pipeline Configuration", "deepskyblue1"));
         var configTable = new Table().Border(TableBorder.Rounded).AddColumns("Setting", "Value");
-        if (triggerBackend)
-            configTable.AddRow("Backend Pipeline ID", _options.BackendPipelineId.ToString());
-        if (triggerFrontend)
-            configTable.AddRow("Frontend Pipeline ID", _options.FrontendPipelineId.ToString());
-        configTable.AddRow("Trigger Ref", Markup.Escape(tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}"));
+        configTable.AddRow("Deploy Pipeline ID", _options.PipelineId.ToString());
+        configTable.AddRow("Environment", Markup.Escape(_options.Environment));
+        configTable.AddRow("Deploys", targetLabel);
+        configTable.AddRow(
+            "Trigger Ref",
+            Markup.Escape(tag is not null ? $"tag: {tag}" : $"branch: {_options.Branch}")
+        );
         configTable.AddRow("Ready-for-Test Assignee", Markup.Escape(_options.ReadyForTestAssignee));
         configTable.AddRow("Poll Interval", $"{_options.PollIntervalSeconds}s");
         configTable.AddRow("Timeout", $"{_options.TimeoutMinutes}m");
@@ -135,7 +131,7 @@ public sealed class DeployCommand(
 
         if (
             AnsiConsole.Profile.Capabilities.Interactive
-            && !AnsiConsole.Confirm($"Trigger {pipelineLabel} and wait for completion?")
+            && !AnsiConsole.Confirm($"Deploy {targetLabel} to {_options.Environment} and wait for completion?")
         )
         {
             return 0;
@@ -148,8 +144,9 @@ public sealed class DeployCommand(
             Phase: DeployPhase.TriggeringPipelines,
             Ref: refValue,
             IsTag: tag is not null,
-            BackendPipelineId: triggerBackend ? (int?)_options.BackendPipelineId : null,
-            FrontendPipelineId: triggerFrontend ? (int?)_options.FrontendPipelineId : null,
+            // One run of the deploy pipeline covers both halves; each deployed half records that pipeline and run.
+            BackendPipelineId: deployBackend ? _options.PipelineId : null,
+            FrontendPipelineId: deployFrontend ? _options.PipelineId : null,
             BackendRunId: null,
             FrontendRunId: null,
             CreatedAt: DateTimeOffset.UtcNow,
@@ -166,15 +163,24 @@ public sealed class DeployCommand(
                 deployId,
                 async (progress, ct) =>
                 {
-                    // Step 1: Trigger pipelines
-                    var (backendRunId, frontendRunId) = await _deployService.TriggerPipelinesAsync(
-                        progress, ct, tag, triggerBackend, triggerFrontend
+                    // Step 1: Trigger the deploy pipeline
+                    var runId = await _deployService.TriggerPipelineAsync(
+                        progress,
+                        ct,
+                        tag,
+                        deployBackend,
+                        deployFrontend
                     );
-                    await _stateStore.UpdateDeployRunIdsAsync(deployId, backendRunId, frontendRunId, ct);
+                    await _stateStore.UpdateDeployRunIdsAsync(
+                        deployId,
+                        deployBackend ? runId : null,
+                        deployFrontend ? runId : null,
+                        ct
+                    );
                     await _stateStore.UpdateDeployPhaseAsync(deployId, DeployPhase.WaitingForPipelines, ct);
 
-                    // Step 2: Wait for pipelines
-                    await _deployService.WaitForPipelinesAsync(backendRunId, frontendRunId, progress, ct);
+                    // Step 2: Wait for the run
+                    await _deployService.WaitForPipelineAsync(runId, progress, ct);
                     await _stateStore.UpdateDeployPhaseAsync(deployId, DeployPhase.ComputingChanges, ct);
 
                     // Step 3: Compute work item changes
@@ -195,12 +201,22 @@ public sealed class DeployCommand(
         }
         catch (OperationCanceledException)
         {
-            await _stateStore.UpdateDeployStatusAsync(deployId, DeployStatus.Failed, "Cancelled.", CancellationToken.None);
+            await _stateStore.UpdateDeployStatusAsync(
+                deployId,
+                DeployStatus.Failed,
+                "Cancelled.",
+                CancellationToken.None
+            );
             throw;
         }
         catch (Exception ex)
         {
-            await _stateStore.UpdateDeployStatusAsync(deployId, DeployStatus.Failed, ex.Message, CancellationToken.None);
+            await _stateStore.UpdateDeployStatusAsync(
+                deployId,
+                DeployStatus.Failed,
+                ex.Message,
+                CancellationToken.None
+            );
             AnsiConsole.MarkupLine($"[red]Deploy failed: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
@@ -251,13 +267,13 @@ public sealed class DeployCommand(
         AnsiConsole.WriteLine();
     }
 
-    private bool ValidateConfig(bool triggerBackend, bool triggerFrontend)
+    private bool ValidateConfig()
     {
         var errors = new List<string>();
-        if (triggerBackend && _options.BackendPipelineId <= 0)
-            errors.Add("Deploy:BackendPipelineId is not configured.");
-        if (triggerFrontend && _options.FrontendPipelineId <= 0)
-            errors.Add("Deploy:FrontendPipelineId is not configured.");
+        if (_options.PipelineId <= 0)
+            errors.Add("Deploy:PipelineId is not configured.");
+        if (string.IsNullOrWhiteSpace(_options.Environment))
+            errors.Add("Deploy:Environment is not configured.");
         if (string.IsNullOrWhiteSpace(_options.ReadyForTestAssignee))
             errors.Add("Deploy:ReadyForTestAssignee is not configured.");
 
